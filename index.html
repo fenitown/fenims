@@ -732,6 +732,11 @@
       </fieldset>
       </div>
       <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('customers')">🖨 প্রিন্ট</button></div>
+      <div class="no-print" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;">
+        <input id="cusSearch" type="search" placeholder="🔍 নাম / মোবাইল নং / NID নং দিয়ে খুঁজুন" oninput="onCusSearch()" autocomplete="off"
+               style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #cfd8d3;">
+        <span id="cusSearchInfo" style="font-size:0.85rem;color:var(--muted);"></span>
+      </div>
       <div class="table-wrap"><table id="customersTable"><thead></thead><tbody></tbody></table></div>
     </section>
 
@@ -969,8 +974,10 @@ async function apiCallRaw(action, data){
   for(let attempt = 1; attempt <= maxTries; attempt++){
     // ৪৫ সেকেন্ডে সাড়া না এলে কলটি থামিয়ে আবার চেষ্টা (একই requestId — তাই দুইবার সংরক্ষণ হয় না);
     // এতে পেজ অনির্দিষ্টকাল "লোড হচ্ছে" অবস্থায় আটকে থাকে না
+    // প্রথম চেষ্টা ঝুলে গেলে ৪৫ সেকেন্ড বসে না থেকে দ্রুত আবার পাঠানো হয়; পরের চেষ্টাগুলোয় সময় ধাপে ধাপে বাড়ে
+    const _tmo = [12000, 15000, 20000, 30000, 45000];
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 45000);
+    const timer = setTimeout(() => ctrl.abort(), _tmo[Math.min(attempt - 1, _tmo.length - 1)]);
     try{
       const res = await fetch(API_URL, { method:"POST", body: JSON.stringify({ action, data }), signal: ctrl.signal });
       const text = await res.text();
@@ -981,9 +988,9 @@ async function apiCallRaw(action, data){
       }
       catch(parseErr){ lastErr = "সার্ভার থেকে সঠিক উত্তর আসেনি (অস্থায়ী সমস্যা)"; }
     }catch(err){
-      lastErr = (err && err.name === "AbortError") ? "সার্ভার ৪৫ সেকেন্ডেও সাড়া দেয়নি" : "নেটওয়ার্ক সমস্যা: " + err.toString();
+      lastErr = (err && err.name === "AbortError") ? "সার্ভার সময়মতো সাড়া দেয়নি" : "নেটওয়ার্ক সমস্যা: " + err.toString();
     } finally { clearTimeout(timer); }
-    if(attempt < maxTries) await new Promise(r => setTimeout(r, 1200 * attempt));
+    if(attempt < maxTries) await new Promise(r => setTimeout(r, 400 * attempt));
   }
   return { success:false, message: lastErr + " — আবার চেষ্টা করুন (দুইবার সংরক্ষণ হবে না)" };
 }
@@ -4700,6 +4707,28 @@ async function submitCustomer(){
   }
 }
 
+/* এডিট পেছনে সংরক্ষণ — ব্যর্থ হলে তালিকা আগের অবস্থায় ফেরে ও ফরমে আপনার দেওয়া তথ্য আবার খুলে যায় */
+async function saveCustomerEditBg(id, fields, oldRow, msgBox){
+  let res;
+  try{ res = await apiCall("updateCustomer", { customerId: id, fields: fields }); }
+  catch(e){ res = { success:false, message: String(e) }; }
+  if(res && res.success){
+    if(!editingCustomerId && msgBox){ msgBox.className = "msg ok"; msgBox.textContent = "✓ " + (res.message || "আপডেট হয়েছে"); }
+    return;
+  }
+  const why = (res && res.message) || "সংরক্ষণ হয়নি";
+  if(Array.isArray(window.__customersCache) && oldRow){
+    applyCustomersLocally(window.__customersCache.map(c => c["CustomerID"] === id ? oldRow : c));
+  } else { clearCache(); loadCustomers(); }
+  if(!editingCustomerId){
+    editCustomerRow(id);
+    const map = { "নাম":"cusNaam", "পিতার নাম":"cusPitarNaam", "মোবাইল নং":"cusMobile", "NID/জন্মসনদ নং":"cusNid", "বাড়ির নাম":"cusBariNaam",
+      "গ্রাম":"cusGram", "ওয়ার্ড নং":"cusWard", "ইউনিয়ন/পৌরসভা":"cusUnion", "প্রাপ্তির স্থান":"cusPraptirSthan", "কার্ড ফি":"cusCardFee", "রেফারেন্স":"cusReference" };
+    Object.keys(map).forEach(k => { if(fields.hasOwnProperty(k)) document.getElementById(map[k]).value = fields[k]; });
+    if(msgBox){ msgBox.className = "msg err"; msgBox.textContent = "আপডেট সংরক্ষণ হয়নি: " + why + " — তথ্য ফরমে ফেরানো হয়েছে, \"আপডেট করুন\" চেপে আবার চেষ্টা করুন"; }
+  } else { alert("একটি গ্রাহকের আপডেট সংরক্ষণ হয়নি (" + why + ") — তালিকা আগের অবস্থায় ফেরানো হয়েছে, আবার এডিট করুন"); }
+}
+
 async function submitCustomerInner(data, msgBox){
   if(editingCustomerId){
     const fields = {
@@ -4709,15 +4738,14 @@ async function submitCustomerInner(data, msgBox){
       "কার্ড ফি": data["cardFee"], "রেফারেন্স": data["reference"]
     };
     const editedId = editingCustomerId;
-    const res = await apiCall("updateCustomer", { customerId: editedId, fields: fields });
-    msgBox.textContent = res.message;
-    msgBox.className = "msg " + (res.success?"ok":"err");
-    if(res.success){
-      cancelCusEdit();
-      if(Array.isArray(window.__customersCache)){
-        applyCustomersLocally(window.__customersCache.map(c => c["CustomerID"] === editedId ? Object.assign({}, c, fields) : c));
-      } else { clearCache(); loadCustomers(); }
+    const oldRow = (window.__customersCache || []).find(c => c["CustomerID"] === editedId);
+    // সাথে সাথে তালিকায় নতুন তথ্য বসিয়ে ফরম বন্ধ — সংরক্ষণ পেছনে চলে, অপেক্ষা করতে হয় না
+    cancelCusEdit();
+    if(Array.isArray(window.__customersCache)){
+      applyCustomersLocally(window.__customersCache.map(c => c["CustomerID"] === editedId ? Object.assign({}, c, fields) : c));
     }
+    msgBox.className = "msg"; msgBox.textContent = "✓ আপডেট জমা হয়েছে — পেছনে সংরক্ষণ হচ্ছে";
+    saveCustomerEditBg(editedId, fields, oldRow, msgBox);
     return;
   }
 
@@ -4764,8 +4792,8 @@ function enqueueNewCustomer(data, msgBox){
   runCusQueue();
 }
 
-function pendingCustomerRowsHtml(){
-  return _cusQueue.map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${escMsgHtml(q.data["নাম"])}</td><td>${escMsgHtml(q.data.mobile||"")}</td><td>${escMsgHtml(q.data.praptirsthan||"")}</td><td>${q.data.cardFee||0}</td><td>${escMsgHtml(q.data.reference||"")}</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+function pendingCustomerRowsHtml(searchQ){
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${escMsgHtml(q.data["নাম"])}</td><td class="cell-left">${escMsgHtml(q.data["পিতারনাম"]||"")}</td><td>${escMsgHtml(q.data.mobile||"")}</td><td>${escMsgHtml(q.data.praptirsthan||"")}</td><td>${q.data.cardFee||0}</td><td>${escMsgHtml(q.data.reference||"")}</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -5082,13 +5110,27 @@ async function loadCustomers(){
 }
 
 /* তালিকা আঁকা — এক স্ট্রিংয়ে পুরো HTML বানিয়ে একবারে বসানো (শত শত গ্রাহকেও দ্রুত) */
+/* গ্রাহক সার্চ: নাম / মোবাইল / NID — বাংলা বা ইংরেজি যেকোনো সংখ্যায় লিখলেই মিলবে */
+function cusNorm(v){ return String(v == null ? "" : v).replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d))).toLowerCase().trim(); }
+function cusSearchQuery(){ const el = document.getElementById("cusSearch"); return el ? cusNorm(el.value) : ""; }
+function cusMatches(name, mobile, nid, q){ return cusNorm(name).indexOf(q) !== -1 || cusNorm(mobile).indexOf(q) !== -1 || cusNorm(nid).indexOf(q) !== -1; }
+let _cusSearchTimer = null;
+function onCusSearch(){
+  clearTimeout(_cusSearchTimer);
+  _cusSearchTimer = setTimeout(() => { if(Array.isArray(window.__customersCache)) renderCustomersTable(window.__customersCache); }, 150);
+}
+
 function renderCustomersTable(customers){
-  window.__customersCache = customers;
+  window.__customersCache = customers;   // পুরো তালিকা (সার্চ শুধু দেখানোয় ফিল্টার করে — প্রিন্ট/মেসেজে পুরো তালিকাই থাকে)
+  const _q = cusSearchQuery();
+  const _list = _q ? customers.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], _q)) : customers;
+  const _info = document.getElementById("cusSearchInfo");
+  if(_info) _info.textContent = _q ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
   const table = document.getElementById("customersTable");
-  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th>মোবাইল</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
-  const pendHtml = pendingCustomerRowsHtml();
-  if(customers.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(9, "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
-  const rows = customers.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
+  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
+  const pendHtml = pendingCustomerRowsHtml(_q);
+  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(10, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td class="cell-left">${escMsgHtml(c["পিতার নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
       <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
         <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
