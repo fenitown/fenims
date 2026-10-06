@@ -374,7 +374,7 @@
 
 <div class="modal-overlay" id="newCusMsgModal">
   <div class="modal-box" style="max-width:440px;">
-    <h3>গ্রাহক সংরক্ষিত হয়েছে</h3>
+    <h3>কনফারমেশন মেসেজ</h3>
     <p style="font-size:0.9rem;margin:0 0 8px;"><b id="ncmName"></b> (<span id="ncmMobile"></span>) এর কাছে নিচের মেসেজটি পাঠাবেন?</p>
     <div id="ncmPreview" style="font-size:0.82rem;background:#f6f3ea;border:1px dashed #d8d2c2;border-radius:8px;padding:8px 10px;white-space:pre-wrap;"></div>
     <div style="margin-top:8px;">
@@ -898,7 +898,8 @@
   </main>
 
   <footer class="appfoot" id="appFooter">@AM Shahed: 01605721296</footer>
-  <div id="verInfo" style="text-align:center;font-size:10px;color:#9aa5a0;padding:0 8px 10px;"></div>
+  <div id="verInfo" style="text-align:center;font-size:10px;color:#9aa5a0;padding:0 8px 2px;"></div>
+  <div id="callInfo" style="text-align:center;font-size:10px;color:#9aa5a0;padding:0 8px 10px;"></div>
 </div>
 
 <script>
@@ -941,15 +942,24 @@ async function apiCallRaw(action, data){
   // আগের ফলই ফেরত দেয়, না হয়ে থাকলে এখন একবার করে। রিড-অনলি কলও নিরাপদে রিট্রাই হয়
   const maxTries = (mutating || /^(list|get|dashboard)/.test(action)) ? 3 : 1;
   let lastErr = "";
+  const tStart = performance.now();
   for(let attempt = 1; attempt <= maxTries; attempt++){
+    // ৪৫ সেকেন্ডে সাড়া না এলে কলটি থামিয়ে আবার চেষ্টা (একই requestId — তাই দুইবার সংরক্ষণ হয় না);
+    // এতে পেজ অনির্দিষ্টকাল "লোড হচ্ছে" অবস্থায় আটকে থাকে না
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
     try{
-      const res = await fetch(API_URL, { method:"POST", body: JSON.stringify({ action, data }) });
+      const res = await fetch(API_URL, { method:"POST", body: JSON.stringify({ action, data }), signal: ctrl.signal });
       const text = await res.text();
-      try{ return JSON.parse(text); }
+      try{
+        const json = JSON.parse(text);
+        if(mutating) showCallTiming(action, performance.now() - tStart, json && json._ms, attempt);
+        return json;
+      }
       catch(parseErr){ lastErr = "সার্ভার থেকে সঠিক উত্তর আসেনি (অস্থায়ী সমস্যা)"; }
     }catch(err){
-      lastErr = "নেটওয়ার্ক সমস্যা: " + err.toString();
-    }
+      lastErr = (err && err.name === "AbortError") ? "সার্ভার ৪৫ সেকেন্ডেও সাড়া দেয়নি" : "নেটওয়ার্ক সমস্যা: " + err.toString();
+    } finally { clearTimeout(timer); }
     if(attempt < maxTries) await new Promise(r => setTimeout(r, 1200 * attempt));
   }
   return { success:false, message: lastErr + " — আবার চেষ্টা করুন (দুইবার সংরক্ষণ হবে না)" };
@@ -1015,7 +1025,15 @@ function clearCache(){
  * ধীর হয়। তাই পেজ খোলার সাথে সাথে এবং প্রতি ৪ মিনিটে একটি হালকা
  * "ping" পাঠিয়ে সার্ভার জাগিয়ে রাখা হয় — ফলে লগইন ও সংরক্ষণ দ্রুত হয়
  *******************************************************/
-const FRONTEND_VERSION = "2026-10-06.3";
+const FRONTEND_VERSION = "2026-10-06.4";
+/* শেষ সংরক্ষণ/এডিট কলে কত সময় লাগল (মোট বনাম সার্ভারের ভেতরে) — ধীর হলে কারণ বোঝার জন্য */
+function showCallTiming(action, totalMs, serverMs, attempts){
+  const el = document.getElementById("callInfo");
+  if(!el) return;
+  el.textContent = "শেষ কাজ: " + action + " — মোট " + (totalMs/1000).toFixed(1) + " সেকেন্ড" +
+    (typeof serverMs === "number" ? " (সার্ভারে " + (serverMs/1000).toFixed(1) + " সেকেন্ড)" : "") +
+    (attempts > 1 ? " — " + attempts + " বার চেষ্টা" : "");
+}
 /* অ্যাপ ও সার্ভার কোডের সংস্করণ মিলছে কিনা দেখানো — নতুন ভার্সন ডিপ্লয় না হলে এখানে লাল সতর্কতা আসে */
 function showVersionInfo(serverVer){
   const el = document.getElementById("verInfo");
@@ -4628,9 +4646,17 @@ async function submitCustomer(){
   saveBtn.disabled = true;
   saveBtn.textContent = "সংরক্ষণ হচ্ছে...";
   markSaving("cusMsg");
+  const t0 = Date.now();
+  const ticker = setInterval(() => {
+    const sec = Math.round((Date.now() - t0) / 1000);
+    msgBox.className = "msg";
+    msgBox.textContent = "সংরক্ষণ হচ্ছে... " + sec + " সেকেন্ড" +
+      (sec >= 15 ? " (সার্ভার ধীর — নিজে থেকেই আবার চেষ্টা চলছে, পেজ বন্ধ করবেন না; দুইবার সংরক্ষণ হবে না)" : "");
+  }, 1000);
   try{
     await submitCustomerInner(data, msgBox);
   } finally {
+    clearInterval(ticker);
     saveBtn.disabled = false;
     saveBtn.textContent = editingCustomerId ? "আপডেট করুন" : "গ্রাহক সংরক্ষণ করুন";
   }
@@ -4645,8 +4671,6 @@ async function submitCustomerInner(data, msgBox){
       "কার্ড ফি": data["cardFee"], "রেফারেন্স": data["reference"]
     };
     const editedId = editingCustomerId;
-    const oldMobile = String(window.__editingOldMobile || "").trim();
-    const newMobile = String(data["mobile"] || "").trim();
     const res = await apiCall("updateCustomer", { customerId: editedId, fields: fields });
     msgBox.textContent = res.message;
     msgBox.className = "msg " + (res.success?"ok":"err");
@@ -4655,11 +4679,6 @@ async function submitCustomerInner(data, msgBox){
       if(Array.isArray(window.__customersCache)){
         applyCustomersLocally(window.__customersCache.map(c => c["CustomerID"] === editedId ? Object.assign({}, c, fields) : c));
       } else { clearCache(); loadCustomers(); }
-      // এডিটে মেসেজ অপশন শুধু তখনই — যখন মোবাইল নম্বর নতুন বসানো/বদলানো হয়েছে।
-      // অন্য কোনো ফিল্ড বদলালে কিছুই দেখাবে না
-      if(newMobile !== "" && newMobile !== oldMobile){
-        openNewCusMsgModal(editedId, data["নাম"], newMobile);
-      }
     }
     return;
   }
@@ -4668,7 +4687,6 @@ async function submitCustomerInner(data, msgBox){
   msgBox.textContent = res.message;
   msgBox.className = "msg " + (res.success?"ok":"err");
   if(res.success){
-    const savedName = data["নাম"], savedMobile = data["mobile"];
     ["cusNaam","cusPitarNaam","cusMobile","cusNid","cusBariNaam","cusGram","cusWard","cusUnion","cusPraptirSthan","cusCardFee","cusReference"]
       .forEach(id => document.getElementById(id).value = "");
     if(Array.isArray(window.__customersCache)){
@@ -4682,9 +4700,15 @@ async function submitCustomerInner(data, msgBox){
       };
       applyCustomersLocally(window.__customersCache.concat([newRow]));
     } else { clearCache(); loadCustomers(); }
-    // মোবাইল নম্বর থাকলেই মেসেজ অপশন; নম্বর না থাকলে কিছুই দেখাবে না
-    if(savedMobile !== ""){ openNewCusMsgModal(res.customerId, savedName, savedMobile); }
+    // সংরক্ষণের পর আর কোনো মেসেজ পপআপ আসে না — তালিকার প্রতিটি গ্রাহকের সারিতে "কনফারমেশন মেসেজ" বাটন আছে
   }
+}
+
+/* তালিকার সারি থেকে সেই গ্রাহকের কাছে কনফারমেশন মেসেজ পাঠানোর পপআপ খোলা */
+function sendConfirmMsgRow(id){
+  const c = (window.__customersCache || []).find(x => x["CustomerID"] === id);
+  if(!c) return;
+  openNewCusMsgModal(c["CustomerID"], c["নাম"], String(c["মোবাইল নং"] || "").trim());
 }
 
 let editingCustomerId = null;
@@ -4722,6 +4746,7 @@ function renderCustomersTable(customers){
   const rows = customers.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
       <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print">
+        ${String(c["মোবাইল নং"] || "").trim() ? `<button class="btn small secondary" onclick="sendConfirmMsgRow('${c['CustomerID']}')">কনফারমেশন মেসেজ</button>` : ""}
         <button class="btn small secondary" onclick="editCustomerRow('${c['CustomerID']}')">এডিট</button>
         <button class="btn small secondary" onclick="printCustomerRowById('${c['CustomerID']}')">প্রিন্ট</button>
         <button class="btn small danger" onclick="deleteCustomerRow('${c['CustomerID']}')">ডিলিট</button>

@@ -185,23 +185,31 @@ function addCustomer(data) {
 
   const ss = getDealerSpreadsheet(perm.payload.dealerId);
   const sheet = getSheet(ss, "Customers");
-  const customerId = generateId(sheet, "C");
 
-  genericAddRow(sheet, {
-    "CustomerID": customerId,
-    "তারিখ": new Date(),
-    "নাম": data.নাম,
-    "পিতার নাম": data.পিতারনাম,
-    "মোবাইল নং": data.mobile,
-    "NID/জন্মসনদ নং": data.nid,
-    "বাড়ির নাম": data.বাড়িরনাম,
-    "গ্রাম": data.গ্রাম,
-    "ওয়ার্ড নং": data.ward,
-    "ইউনিয়ন/পৌরসভা": data.union,
-    "প্রাপ্তির স্থান": data.praptirsthan,
-    "কার্ড ফি": data.cardFee || 0,
-    "রেফারেন্স": data.reference || ""
-  });
+  // লক শুধু আইডি তৈরি + সারি লেখার ছোট অংশে — দুজন একসাথে সংরক্ষণ করলেও একই আইডি/সারি হবে না
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  let customerId;
+  try {
+    customerId = generateId(sheet, "C");
+    genericAddRow(sheet, {
+      "CustomerID": customerId,
+      "তারিখ": new Date(),
+      "নাম": data.নাম,
+      "পিতার নাম": data.পিতারনাম,
+      "মোবাইল নং": data.mobile,
+      "NID/জন্মসনদ নং": data.nid,
+      "বাড়ির নাম": data.বাড়িরনাম,
+      "গ্রাম": data.গ্রাম,
+      "ওয়ার্ড নং": data.ward,
+      "ইউনিয়ন/পৌরসভা": data.union,
+      "প্রাপ্তির স্থান": data.praptirsthan,
+      "কার্ড ফি": data.cardFee || 0,
+      "রেফারেন্স": data.reference || ""
+    });
+  } finally {
+    lock.releaseLock();
+  }
   // (মোবাইল ঘর টেক্সট ফরম্যাট genericAddRow নিজেই করে — আলাদা করে আবার করার দরকার নেই)
 
   return { success: true, customerId: customerId, message: "গ্রাহক যোগ হয়েছে" };
@@ -243,11 +251,18 @@ function deleteCustomer(data) {
   if (!perm.ok) return { success: false, message: perm.message };
   const ss = getDealerSpreadsheet(perm.payload.dealerId);
   const sheet = getSheet(ss, "Customers");
-  const ok = genericDeleteRow(sheet, "CustomerID", data.customerId);
+  // ডিলিট + আইডি পুনর্বিন্যাস একসাথে (নতুন গ্রাহক যোগের সাথে জট এড়াতে লকের ভেতরে)
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  let ok;
+  try {
+    ok = genericDeleteRow(sheet, "CustomerID", data.customerId);
+    // বাকি গ্রাহকদের আইডি ১ থেকে ক্রমানুসারে নতুন করে সাজানো (বিক্রির রেকর্ডের আইডিও সাথে মিলিয়ে)
+    if (ok) renumberCustomerIds(ss, sheet);
+  } finally {
+    lock.releaseLock();
+  }
   if (!ok) return { success: false, message: "গ্রাহক পাওয়া যায়নি" };
-
-  // বাকি গ্রাহকদের আইডি ১ থেকে ক্রমানুসারে নতুন করে সাজানো (বিক্রির রেকর্ডের আইডিও সাথে মিলিয়ে)
-  renumberCustomerIds(ss, sheet);
   return {
     success: true,
     message: "ডিলিট হয়েছে — গ্রাহক আইডি ক্রমানুসারে সাজানো হয়েছে",

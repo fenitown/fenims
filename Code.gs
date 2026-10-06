@@ -561,7 +561,7 @@ const READ_CACHE_TTL = 300;
 const READ_CACHE_SALT = "r3";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-10-06.3";
+const BACKEND_VERSION = "2026-10-06.4";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {
@@ -628,12 +628,69 @@ function runActionCached(action, data) {
   return out;
 }
 
+/* গ্রাহকের কাজে পুরো অনুরোধ জুড়ে লক ধরে রাখা হয় না — শুধু আইডি তৈরি + সারি লেখার ছোট অংশে
+   (addCustomer/deleteCustomer এর ভেতরে) লক নেয়। ফলে একটি ধীর সংরক্ষণ বাকিদের আটকে রাখে না */
+const FINE_LOCK_ACTIONS = { addCustomer:1, updateCustomer:1, deleteCustomer:1 };
+
+/* উত্তরের JSON এ সার্ভারে কত মিলিসেকেন্ড লেগেছে (_ms) জুড়ে দেওয়া — ধীর হলে কারণ খোঁজার জন্য */
+function withTiming(out, t0) {
+  if (typeof out !== "string" || out.charAt(out.length - 1) !== "}") return out;
+  const ms = Date.now() - t0;
+  return out === "{}" ? '{"_ms":' + ms + "}" : out.slice(0, -1) + ',"_ms":' + ms + "}";
+}
+
+/* ডুপ্লিকেট-সুরক্ষিত কিন্তু পুরো সময় লক না ধরে চালানো: লক শুধু "এই requestId আগে এসেছে কিনা" চেক ও চিহ্ন বসাতে */
+function runIdempotentFine(action, data, reqKey, cache) {
+  const lock = LockService.getScriptLock();
+  let prev = null;
+  try {
+    lock.waitLock(15000);
+    try {
+      prev = cache.get(reqKey);
+      if (!prev) cache.put(reqKey, "P", 120);          // "P" = এই অনুরোধ এখন চলছে
+    } finally { lock.releaseLock(); }
+  } catch (lockErr) {
+    return JSON.stringify({ success: false, message: "সার্ভার ব্যস্ত, কিছুক্ষণ পরে আবার চেষ্টা করুন" });
+  }
+
+  if (prev && prev !== "P") return prev;               // আগেই হয়ে গেছে — আবার করা হবে না
+  if (prev === "P") {                                   // একই অনুরোধ এখনো চলছে — শেষ হওয়া পর্যন্ত অপেক্ষা
+    for (let i = 0; i < 40; i++) {
+      Utilities.sleep(600);
+      const v = cache.get(reqKey);
+      if (v && v !== "P") return v;
+      if (!v) break;
+    }
+    return JSON.stringify({ success: false, message: "আগের অনুরোধ এখনো চলছে — কিছুক্ষণ পরে আবার চেষ্টা করুন" });
+  }
+
+  const out = runAction(action, data);
+  const ok = out.slice(0, 40).indexOf('"success":true') !== -1;
+  if (ok) {
+    bumpDataVersion();                                  // ক্যাশ করা পুরনো তথ্য বাতিল
+    try { cache.put(reqKey, out, 600); }
+    catch (c) { try { cache.put(reqKey, JSON.stringify({ success: true, message: "সম্পন্ন হয়েছে" }), 600); } catch (x) { /* বাদ */ } }
+  } else {
+    try { cache.remove(reqKey); } catch (x) { /* বাদ */ }   // ব্যর্থ হলে আবার চেষ্টা করা যাবে
+  }
+  return out;
+}
+
+function respondJson(out, t0) {
+  return ContentService.createTextOutput(withTiming(out, t0)).setMimeType(ContentService.MimeType.JSON);
+}
+
 function doPost(e) {
+  const t0 = Date.now();
   const params = JSON.parse(e.postData.contents);
   const action = params.action;
   const data = params.data || {};
 
   // সংরক্ষণ-জাতীয় অনুরোধ হলে ডুপ্লিকেট চেক সহ চালানো হয়
+  if (IDEMPOTENT_ACTIONS[action] && data.requestId && FINE_LOCK_ACTIONS[action]) {
+    const reqKeyF = "req_" + String(data.requestId).slice(0, 80);
+    return respondJson(runIdempotentFine(action, data, reqKeyF, CacheService.getScriptCache()), t0);
+  }
   if (IDEMPOTENT_ACTIONS[action] && data.requestId) {
     const reqKey = "req_" + String(data.requestId).slice(0, 80);
     const cache = CacheService.getScriptCache();
@@ -654,7 +711,7 @@ function doPost(e) {
     } finally {
       try { lock.releaseLock(); } catch (x) { /* বাদ */ }
     }
-    return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JSON);
+    return respondJson(out, t0);
   }
 
   let output;
@@ -664,7 +721,7 @@ function doPost(e) {
     output = runAction(action, data);
     if (MUTATING_RE.test(action)) bumpDataVersion();
   }
-  return ContentService.createTextOutput(output).setMimeType(ContentService.MimeType.JSON);
+  return respondJson(output, t0);
 }
 
 /* action চালিয়ে JSON স্ট্রিং ফেরত দেয় */
