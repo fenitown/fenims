@@ -206,6 +206,7 @@
   .table-wrap td.no-print .btn:last-child{ margin-right:0; }
   .act-row{ display:flex; flex-direction:row; flex-wrap:nowrap; gap:5px; justify-content:center; }
   .table-wrap td.no-print .act-row .btn{ margin:0; }
+  .btn:disabled{ opacity:.35; cursor:not-allowed; }
   .btn.icon{ padding:7px 10px; line-height:0; display:inline-flex; align-items:center; justify-content:center; }
   .btn.icon svg{ width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
@@ -366,11 +367,12 @@
 <!-- ================= প্রিন্ট অপশন মডাল (গ্রাহক ও বিক্রি তালিকা) ================= -->
 <div class="modal-overlay" id="printOptModal">
   <div class="modal-box" style="max-width:420px;">
-    <h3>প্রিন্ট</h3>
+    <h3>প্রিন্ট / শেয়ার</h3>
     <div class="field"><label>প্রিন্টের ধরন</label><select id="poMode" onchange="refreshPrintOptValues()"></select></div>
     <div class="field" id="poValueWrap" style="display:none;"><label id="poValueLabel"></label><select id="poValue"></select></div>
     <div class="btn-row">
       <button class="btn" onclick="runPrintOpt()">🖨 প্রিন্ট</button>
+      <button class="btn secondary" id="poShareBtn" onclick="runPrintOpt(true)">শেয়ার (ছবি)</button>
       <button class="btn secondary" onclick="closePrintOpt()">বাতিল</button>
     </div>
   </div>
@@ -1220,8 +1222,14 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
     "<tr>" + r.map(v => `<td style="font-weight:700;">${v===undefined||v===null?'':v}</td>`).join("") + "</tr>"
   ).join("");
 
+  const shareScript = opts.shareSpecs
+    ? shareCardImage.toString() + "\nwindow.__specs=" + JSON.stringify(opts.shareSpecs).replace(/</g, "\\u003c") + ";\nfunction doShare(){ shareCardImage(window.__specs, \"" + (opts.shareName || "list") + ".png\"); }\n"
+    : "";
   win.document.write(`<html><head><meta charset="utf-8"><title>${title}</title>
     <style>
+      .share-bar{ text-align:right; padding:8px 0; }
+      .share-bar button{ font-family:inherit; font-size:14px; padding:8px 16px; border:0; border-radius:8px; background:#153f37; color:#fff; cursor:pointer; }
+      @media print{ .no-print{ display:none !important; } }
       @page{ size:${landscape ? 'A4 landscape' : 'A4'}; margin:0.5in; }
       html, body{ margin:0; padding:0; }
       body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; }
@@ -1237,6 +1245,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
       td{ text-align:left; }
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
+    ${opts.shareSpecs ? '<div class="share-bar no-print"><button onclick="doShare()">শেয়ার (ছবি)</button></div>' : ''}
     <div class="sheet">
     <div class="letterhead">
       <h1>ফেনী মানবিক সহায়তা</h1>
@@ -1247,7 +1256,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
     <table><thead>${theadHtml}</thead><tbody>${tbodyHtml}${tfootHtml}</tbody></table>
     ${footerNote ? `<div class="doc-footer">${footerNote}</div>` : ''}
     </div>
-    <script>window.onload=function(){
+    <script>${shareScript}window.onload=function(){
       ${landscape ? "var sh=document.querySelector('.sheet'),t=document.querySelector('table'),fs=11;while(t.scrollWidth>sh.clientWidth&&fs>5){fs-=0.5;t.style.fontSize=fs+'px';}" : ''}
       window.print();}<\/script>
     </body></html>`);
@@ -3624,6 +3633,7 @@ function renderSalesInvoiceTable(){
       <td class="no-print">
         <button class="btn icon small secondary" onclick="editSalesInvoiceByNo('${e['ইনভয়েস নং']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printSalesInvoiceById('${e['ইনভয়েস নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small secondary" onclick="shareSalesInvoiceById('${e['ইনভয়েস নং']}')" title="ছবি শেয়ার" aria-label="ছবি শেয়ার">${IC.share}</button>
         ${isAgency && status !== "ডেলিভারি সম্পন্ন" ? `<button class="btn icon small secondary" onclick="markSiDelivered('${e['ইনভয়েস নং']}')" title="ডেলিভারি সম্পন্ন" aria-label="ডেলিভারি সম্পন্ন">${IC.deliver}</button>` : ""}
         <button class="btn icon small danger" onclick="deleteSalesInvoiceByNo('${e['ইনভয়েস নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
@@ -4831,92 +4841,163 @@ window.addEventListener("beforeunload", function(e){
  * spec: { org, sub, sub2, title, blocks:[{t:"section",text} | {t:"kv",rows:[[l,v]]} |
  *         {t:"table",head,rows,foot,widths,align}], footer }
  *******************************************************/
-async function shareCardImage(spec, fileName){
-  const W = 900, PAD = 36, S = 2;
+async function shareCardImage(specs, fileName){
+  if(!Array.isArray(specs)) specs = [specs];
   const FONT = '"Hind Siliguri","Noto Sans Bengali","Kalpurush",Arial,sans-serif';
   try{ await document.fonts.load('16px "Hind Siliguri"'); await document.fonts.ready; }catch(e){}
-  const cv = document.createElement("canvas");
-  const ctx = cv.getContext("2d");
-  const IW = W - PAD * 2;
-  function setFont(sz, w){ ctx.font = (w || "400") + " " + sz + "px " + FONT; }
-  function wrap(text, maxW, sz, w){
-    setFont(sz, w);
-    const words = String(text == null ? "" : text).split(/\s+/);
-    const lines = []; let cur = "";
-    words.forEach(function(wd){
-      const t = cur ? cur + " " + wd : wd;
-      if(!cur || ctx.measureText(t).width <= maxW) cur = t; else { lines.push(cur); cur = wd; }
-    });
-    lines.push(cur);
-    return lines;
-  }
-  function run(draw){
-    let y = PAD;
-    function center(text, sz, w, color, gap){
+  async function render(spec){
+    const W = spec.width || 900, PAD = 36, K = W / 900;
+    const cv = document.createElement("canvas");
+    const ctx = cv.getContext("2d");
+    const IW = W - PAD * 2;
+    function setFont(sz, w){ ctx.font = (w || "400") + " " + sz + "px " + FONT; }
+    function wrap(text, maxW, sz, w){
       setFont(sz, w);
-      if(draw){ ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText(text, W / 2, y + sz); }
-      y += sz + (gap || 8);
+      const words = String(text == null ? "" : text).split(/\s+/);
+      const lines = []; let cur = "";
+      words.forEach(function(wd){
+        const t = cur ? cur + " " + wd : wd;
+        if(!cur || ctx.measureText(t).width <= maxW) cur = t; else { lines.push(cur); cur = wd; }
+      });
+      lines.push(cur);
+      return lines;
     }
-    function rowBox(cells, widths, align, bg, bold){
-      const sz = 16, lh = 24;
-      const xs = []; let x = PAD;
-      widths.forEach(function(wf){ xs.push(x); x += IW * wf; });
-      const wrapped = cells.map(function(c, i){ return wrap(c, IW * widths[i] - 20, sz, bold ? "700" : "400"); });
-      const h = Math.max.apply(null, wrapped.map(function(l){ return l.length; })) * lh + 14;
-      if(draw){
-        cells.forEach(function(c, i){
-          const cw = IW * widths[i];
-          if(bg){ ctx.fillStyle = bg; ctx.fillRect(xs[i], y, cw, h); }
-          ctx.strokeStyle = "#888"; ctx.lineWidth = 1; ctx.strokeRect(xs[i], y, cw, h);
-          setFont(sz, bold ? "700" : "400"); ctx.fillStyle = "#1c2b28"; ctx.textBaseline = "alphabetic";
-          const a = align && align[i] === "r" ? "right" : (align && align[i] === "c" ? "center" : "left");
-          ctx.textAlign = a;
-          const tx = a === "right" ? xs[i] + cw - 10 : (a === "center" ? xs[i] + cw / 2 : xs[i] + 10);
-          wrapped[i].forEach(function(line, li){ ctx.fillText(line, tx, y + 7 + lh * li + 18); });
-        });
+    function run(draw){
+      let y = PAD;
+      function center(text, sz, w, color, gap){
+        sz = sz * K; setFont(sz, w);
+        if(draw){ ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText(text, W / 2, y + sz); }
+        y += sz + (gap || 8) * K;
       }
-      y += h;
+      function rowBox(cells, widths, align, bg, bold){
+        const sz = 16 * K, lh = 24 * K;
+        const xs = []; let x = PAD;
+        widths.forEach(function(wf){ xs.push(x); x += IW * wf; });
+        const wrapped = cells.map(function(c, i){ return wrap(c, IW * widths[i] - 20 * K, sz, bold ? "700" : "400"); });
+        const h = Math.max.apply(null, wrapped.map(function(l){ return l.length; })) * lh + 14 * K;
+        if(draw){
+          cells.forEach(function(c, i){
+            const cw = IW * widths[i];
+            if(bg){ ctx.fillStyle = bg; ctx.fillRect(xs[i], y, cw, h); }
+            ctx.strokeStyle = "#888"; ctx.lineWidth = 1; ctx.strokeRect(xs[i], y, cw, h);
+            setFont(sz, bold ? "700" : "400"); ctx.fillStyle = "#1c2b28"; ctx.textBaseline = "alphabetic";
+            const a = align && align[i] === "r" ? "right" : (align && align[i] === "c" ? "center" : "left");
+            ctx.textAlign = a;
+            const tx = a === "right" ? xs[i] + cw - 10 * K : (a === "center" ? xs[i] + cw / 2 : xs[i] + 10 * K);
+            wrapped[i].forEach(function(line, li){ ctx.fillText(line, tx, y + 7 * K + lh * li + 18 * K); });
+          });
+        }
+        y += h;
+      }
+      if(spec.org) center(spec.org, 28, "700", "#153f37", 6);
+      if(spec.sub) center(spec.sub, 16, "600", "#b5502f", 4);
+      if(spec.sub2) center(spec.sub2, 14, "400", "#333", 6);
+      if(draw){ ctx.fillStyle = "#153f37"; ctx.fillRect(PAD, y + 2, IW, 3); }
+      y += 16 * K;
+      if(spec.title) center(spec.title, 22, "700", "#1c2b28", 14);
+      (spec.blocks || []).forEach(function(b){
+        if(b.t === "section"){
+          const sh = 32 * K;
+          if(draw){ ctx.fillStyle = "#153f37"; ctx.fillRect(PAD, y, IW, sh); setFont(16 * K, "700"); ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(b.text, PAD + 10 * K, y + 22 * K); }
+          y += sh;
+        } else if(b.t === "kv"){
+          b.rows.forEach(function(r){ rowBox([r[0], r[1]], [0.32, 0.68], ["l", "l"], null, false); });
+        } else if(b.t === "table"){
+          const wd = b.widths || b.head.map(function(){ return 1 / b.head.length; });
+          rowBox(b.head, wd, b.head.map(function(){ return "c"; }), "#eef0e9", true);
+          b.rows.forEach(function(r){ rowBox(r, wd, b.align, null, false); });
+          if(b.foot) rowBox(b.foot, wd, b.align, "#eef0e9", true);
+        }
+        y += 12 * K;
+      });
+      if(spec.footer) center(spec.footer, 12, "400", "#6b7570", 0);
+      y += PAD;
+      return y;
     }
-    if(spec.org) center(spec.org, 28, "700", "#153f37", 6);
-    if(spec.sub) center(spec.sub, 16, "600", "#b5502f", 4);
-    if(spec.sub2) center(spec.sub2, 14, "400", "#333", 6);
-    if(draw){ ctx.fillStyle = "#153f37"; ctx.fillRect(PAD, y + 2, IW, 3); }
-    y += 16;
-    if(spec.title) center(spec.title, 22, "700", "#1c2b28", 14);
-    (spec.blocks || []).forEach(function(b){
-      if(b.t === "section"){
-        if(draw){ ctx.fillStyle = "#153f37"; ctx.fillRect(PAD, y, IW, 32); setFont(16, "700"); ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(b.text, PAD + 10, y + 22); }
-        y += 32;
-      } else if(b.t === "kv"){
-        b.rows.forEach(function(r){ rowBox([r[0], r[1]], [0.32, 0.68], ["l", "l"], null, false); if(draw){ ctx.fillStyle = "rgba(238,240,233,0.9)"; } });
-      } else if(b.t === "table"){
-        const wd = b.widths || b.head.map(function(){ return 1 / b.head.length; });
-        rowBox(b.head, wd, b.head.map(function(){ return "c"; }), "#eef0e9", true);
-        b.rows.forEach(function(r){ rowBox(r, wd, b.align, null, false); });
-        if(b.foot) rowBox(b.foot, wd, b.align, "#eef0e9", true);
-      }
-      y += 12;
-    });
-    if(spec.footer) center(spec.footer, 12, "400", "#6b7570", 0);
-    y += PAD;
-    return y;
+    const H = Math.ceil(run(false));
+    const S = Math.min(2, 16000 / H);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S);
+    ctx.scale(S, S);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    run(true);
+    return await new Promise(function(r){ cv.toBlob(r, "image/png"); });
   }
-  const H = Math.ceil(run(false));
-  cv.width = W * S; cv.height = H * S;
-  ctx.scale(S, S);
-  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
-  run(true);
-  const blob = await new Promise(function(r){ cv.toBlob(r, "image/png"); });
-  if(!blob){ alert("ছবি তৈরি করা যায়নি"); return; }
-  const file = new File([blob], fileName || "share.png", { type: "image/png" });
-  if(navigator.canShare && navigator.canShare({ files: [file] })){
-    try{ await navigator.share({ files: [file], title: spec.title || "" }); return; }
+  const base = (fileName || "share.png").replace(/\.png$/, "");
+  const files = [];
+  for(let i = 0; i < specs.length; i++){
+    const blob = await render(specs[i]);
+    if(!blob){ alert("ছবি তৈরি করা যায়নি"); return; }
+    files.push(new File([blob], specs.length > 1 ? base + "-" + (i + 1) + ".png" : base + ".png", { type: "image/png" }));
+  }
+  if(navigator.canShare && navigator.canShare({ files: files })){
+    try{ await navigator.share({ files: files, title: specs[0].title || "" }); return; }
     catch(e){ if(e && e.name === "AbortError") return; }
   }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = file.name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+  files.forEach(function(f, i){
+    setTimeout(function(){
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+    }, i * 500);
+  });
+}
+
+
+function shareSalesInvoiceById(invoiceNo){
+  const lines = salesInvoicesCache.filter(e => e["ইনভয়েস নং"] === invoiceNo);
+  if(lines.length === 0){ alert("ইনভয়েস পাওয়া যায়নি"); return; }
+  const first = lines[0];
+  const dateStr = first["তারিখ"] ? new Date(first["তারিখ"]).toLocaleDateString("bn-BD") : "";
+  const net = lines.reduce((s, e) => s + (Number(e["পরিশোধযোগ্য মূল্য"]) || 0), 0) - (Number(first["ডিসকাউন্ট"]) || 0);
+  shareCardImage({
+    width: 1000,
+    org: "ফেনী মানবিক সহায়তা",
+    sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
+    title: "অর্ডার ইনভয়েস",
+    blocks: [
+      { t: "kv", rows: [["ইনভয়েস নং", invoiceNo], ["তারিখ", dateStr], ["ডিলার", first["ডিলার নাম"] || ""], ["মোবাইল", first["মোবাইল"] || ""], ["ঠিকানা", first["ঠিকানা"] || ""]] },
+      { t: "table",
+        head: ["ক্রম", "প্যাকেজ", "একক মূল্য", "সংখ্যা", "মোট মূল্য", "কমিশন %", "কমিশন মূল্য", "পরিশোধযোগ্য মূল্য"],
+        rows: lines.map((e, i) => [i + 1, e["প্যাকেজ"] || "", e["একক মূল্য"] || 0, e["সংখ্যা"] || 0, e["মোট মূল্য"] || 0, e["কমিশন %"] || 0, e["কমিশন মূল্য"] || 0, e["পরিশোধযোগ্য মূল্য"] || 0]),
+        widths: [0.07, 0.24, 0.11, 0.08, 0.12, 0.1, 0.12, 0.16],
+        align: ["c", "l", "r", "r", "r", "r", "r", "r"] },
+      { t: "kv", rows: [["সাবটোটাল", first["সাবটোটাল"] || 0], ["ডিসকাউন্ট", first["ডিসকাউন্ট"] || 0], ["পরিশোধযোগ্য মূল্য (নীট)", net], ["পরিশোধ", first["পরিশোধ"] || 0], ["বকেয়া", first["বকেয়া"] || 0]] }
+    ],
+    footer: "@Powered by: AM Shahed: 01605721296"
+  }, "invoice-" + invoiceNo + ".png");
+}
+
+/* গ্রাহক তালিকা — ছবির পাতা (প্রতি ছবিতে ২৫ জন; বেশি হলে একাধিক ছবি একসাথে শেয়ার হয়) */
+function customerListShareSpecs(grouped, total){
+  const head = ["ক্রম", "নাম", "পিতার নাম", "মোবাইল নং", "NID/জন্মসনদ নং", "ঠিকানা", "প্রাপ্তির স্থান", "কার্ড ফি", "রেফারেন্স"];
+  const widths = [0.05, 0.14, 0.13, 0.11, 0.12, 0.17, 0.11, 0.07, 0.10];
+  const align = ["c", "l", "l", "c", "c", "l", "l", "c", "l"];
+  const items = [];
+  grouped.groups.forEach(g => g.items.forEach((c, i) => items.push({ label: g.label, row: [
+    i + 1, c["নাম"] || "", c["পিতার নাম"] || "", c["মোবাইল নং"] || "", c["NID/জন্মসনদ নং"] || "",
+    [c["বাড়ির নাম"] || "", c["গ্রাম"] || "", c["ইউনিয়ন/পৌরসভা"] || "", c["ওয়ার্ড নং"] ? ("ওয়ার্ড-" + c["ওয়ার্ড নং"]) : ""].filter(Boolean).join(", "),
+    c["প্রাপ্তির স্থান"] || "", c["কার্ড ফি"] || 0, c["রেফারেন্স"] || ""
+  ] })));
+  const PER = 25, pages = [];
+  for(let s = 0; s < items.length; s += PER) pages.push(items.slice(s, s + PER));
+  return pages.map((pg, pi) => {
+    const blocks = []; let curLabel = null, cur = null;
+    pg.forEach(it => {
+      if(cur === null || it.label !== curLabel){
+        if(it.label) blocks.push({ t: "section", text: it.label });
+        cur = { t: "table", head: head, rows: [], widths: widths, align: align };
+        blocks.push(cur); curLabel = it.label;
+      }
+      cur.rows.push(it.row);
+    });
+    return {
+      width: 1300, org: "ফেনী মানবিক সহায়তা",
+      sub: "ডিলার: " + (state.dealerName || "") + " — " + grouped.desc + " — মোট গ্রাহক: " + total,
+      title: "গ্রাহক তালিকা" + (pages.length > 1 ? " (পাতা " + (pi + 1) + "/" + pages.length + ")" : ""),
+      blocks: blocks, footer: "@Powered by: AM Shahed: 01605721296"
+    };
+  });
 }
 
 function packageShareSpec(p, sub){
@@ -5011,7 +5092,7 @@ function renderCustomersTable(customers){
         <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printCustomerRowById('${c['CustomerID']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
         <button class="btn icon small danger" onclick="deleteCustomerRow('${c['CustomerID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
-        ${String(c["মোবাইল নং"] || "").trim() ? `<button class="btn icon small secondary" onclick="sendConfirmMsgRow('${c['CustomerID']}')" title="মেসেজ" aria-label="মেসেজ">${IC.msg}</button>` : ""}
+        <button class="btn icon small secondary" ${String(c["মোবাইল নং"] || "").trim() ? "" : "disabled"} onclick="sendConfirmMsgRow('${c['CustomerID']}')" title="${String(c["মোবাইল নং"] || "").trim() ? "মেসেজ" : "মোবাইল নম্বর নেই"}" aria-label="মেসেজ">${IC.msg}</button>
       </div></td></tr>`);
   table.innerHTML = head + "<tbody>" + rows.join("") + pendHtml + "</tbody>";
 }
@@ -5040,6 +5121,7 @@ function poKey(c, mode){ const v = c[PO_FIELD[mode]]; return String(v == null ? 
 function openPrintOpt(ctx){
   if(ctx === "sales" && !document.getElementById("saleFilterPackage").value){ alert("আগে প্যাকেজ সিলেক্ট করুন"); return; }
   printOptCtx = ctx;
+  document.getElementById("poShareBtn").style.display = ctx === "sales" ? "none" : "";
   if(poCustomers().length === 0){ alert("প্রিন্ট করার জন্য কোনো গ্রাহক নেই"); return; }
   const modes = [["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]];
   if(ctx === "sales") modes.push(["loc","প্রাপ্তির স্থান ভিত্তিক"]);
@@ -5085,13 +5167,14 @@ function groupCustomersForPrint(customers, mode, value){
   return { groups: keys.map(k => ({ label: fmt(k), items: map[k] })), desc: PO_KEY_LABELS[mode] + " ভিত্তিক" };
 }
 
-function runPrintOpt(){
+function runPrintOpt(share){
   const mode = document.getElementById("poMode").value;
   const value = mode === "all" ? "" : document.getElementById("poValue").value;
   const grouped = groupCustomersForPrint(poCustomers(), mode, value);
   const total = grouped.groups.reduce((n, g) => n + g.items.length, 0);
   if(total === 0){ alert("প্রিন্ট করার জন্য কোনো গ্রাহক নেই"); return; }
   closePrintOpt();
+  if(share === true && printOptCtx !== "sales"){ shareCardImage(customerListShareSpecs(grouped, total), "grahok-talika.png"); return; }
   if(printOptCtx === "sales") printSalesOfficial(grouped, total);
   else printCustomersOfficial(grouped, total);
 }
@@ -5114,7 +5197,7 @@ function printCustomersOfficial(grouped, total){
     headers, rows, null,
     "@Powered by: AM Shahed: 01605721296",
     [1,2,5,6,8],
-    { landscape:true }
+    { landscape:true, shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
   );
 }
 
