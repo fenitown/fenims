@@ -11,7 +11,7 @@
 // এই স্ক্রিপ্ট Master Spreadsheet-এর সাথে বাউন্ড থাকলে নিচের লাইন পরিবর্তনের দরকার নেই।
 // যদি স্ট্যান্ডঅ্যালোন স্ক্রিপ্ট হিসেবে রাখেন, তাহলে MASTER_SS_ID বসিয়ে দিন।
 const MASTER_SS_ID = ""; // খালি রাখলে বাউন্ড স্প্রেডশিট ব্যবহার হবে
-const TEMPLATE_SS_ID = "এখানে DealerTemplate স্প্রেডশিটের ID বসান"; // DealerTemplate বানানোর পর তার ID এখানে বসান
+const TEMPLATE_SS_ID = "1NSy3NzQeqYUoo-ov7sKBlNww7-PfOJIXsLo8r5H_c4c"; // DealerTemplate বানানোর পর তার ID এখানে বসান
 
 // Web App এর নিজের Deployment URL — একবার Deploy করার পর এখানে বসিয়ে রাখলে
 // বারবার আলাদা করে সংরক্ষণ/শেয়ার করার দরকার নেই, কোডেই থেকে যাবে।

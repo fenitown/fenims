@@ -315,7 +315,7 @@
     <div class="field">
       <label>ইউজার</label>
       <select id="loginUserType">
-        <option value="agency">সংস্থা (মূল ডিপু)</option>
+        <option value="agency">হেড অফিস (ফেনী)</option>
         <option value="dealer">ডিলার</option>
       </select>
     </div>
@@ -963,7 +963,7 @@ async function apiCallRaw(action, data){
   // সার্ভার কখনো কখনো JSON এর বদলে HTML এরর পেজ দেয় ("Unexpected token '<'") — তখন
   // কাজটা হয়েছে কিনা অজানা। requestId থাকায় নিরাপদে আবার পাঠানো যায়: হয়ে থাকলে সার্ভার
   // আগের ফলই ফেরত দেয়, না হয়ে থাকলে এখন একবার করে। রিড-অনলি কলও নিরাপদে রিট্রাই হয়
-  const maxTries = mutating ? 5 : (/^(list|get|dashboard)/.test(action) ? 3 : 1);
+  const maxTries = mutating ? 5 : ((/^(list|get|dashboard)/.test(action) || action === "login") ? 3 : 1);
   let lastErr = "";
   const tStart = performance.now();
   for(let attempt = 1; attempt <= maxTries; attempt++){
@@ -1297,16 +1297,18 @@ async function doLogin(){
   errBox.textContent = "লগইন হচ্ছে...";
   errBox.style.color = "var(--muted)";
 
+  const slowTimer = setTimeout(() => { errBox.textContent = "লগইন হচ্ছে... সার্ভার ধীর, নিজে থেকেই আবার চেষ্টা চলছে — অপেক্ষা করুন"; }, 12000);
   const res = await apiCall("login", { username, password });
+  clearTimeout(slowTimer);
   errBox.style.color = ""; // ডিফল্ট এরর রঙে ফেরত
   if(!res.success){ errBox.textContent = res.message; return; }
 
   if(userType === "agency" && res.dealerId !== "AGENCY"){
-    errBox.textContent = "এই লগইন সংস্থার নয় — 'ডিলার' সিলেক্ট করে চেষ্টা করুন";
+    errBox.textContent = "এই লগইন হেড অফিসের নয় — 'ডিলার' সিলেক্ট করে চেষ্টা করুন";
     return;
   }
   if(userType === "dealer" && res.dealerId === "AGENCY"){
-    errBox.textContent = "এই লগইন ডিলারের নয় — 'সংস্থা' সিলেক্ট করে চেষ্টা করুন";
+    errBox.textContent = "এই লগইন ডিলারের নয় — 'হেড অফিস (ফেনী)' সিলেক্ট করে চেষ্টা করুন";
     return;
   }
 
