@@ -215,6 +215,68 @@ function addCustomer(data) {
   return { success: true, customerId: customerId, message: "গ্রাহক যোগ হয়েছে" };
 }
 
+/*******************************************************
+ * একসাথে অনেক গ্রাহক সংরক্ষণ (ব্যাকগ্রাউন্ড কিউ থেকে আসে)
+ * শীট একবার খোলা, লক একবার, লেখা একবার — তাই ২০ জন গ্রাহকও
+ * একজনের সমান সময়েই সংরক্ষিত হয়
+ * data: { token, customers: [ {নাম, পিতারনাম, mobile, nid, ...}, ... ] }
+ * ফেরত: ids — customers এর ক্রম অনুযায়ী নতুন আইডি
+ *******************************************************/
+function addCustomers(data) {
+  const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
+  if (!perm.ok) return { success: false, message: perm.message };
+
+  const list = (data.customers || []).slice(0, 50);
+  if (list.length === 0) return { success: false, message: "সংরক্ষণের মতো কোনো গ্রাহক নেই" };
+
+  const ss = getDealerSpreadsheet(perm.payload.dealerId);
+  const sheet = getSheet(ss, "Customers");
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  const ids = [];
+  try {
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const lastRow = sheet.getLastRow();
+    let max = 0;
+    if (lastRow >= 2) {
+      sheet.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function (r) {
+        const m = /^C(\d+)$/.exec(String(r[0]));
+        if (m) max = Math.max(max, Number(m[1]));
+      });
+    }
+    const now = new Date();
+    const rows = list.map(function (d, i) {
+      const id = "C" + Utilities.formatString("%04d", max + 1 + i);
+      ids.push(id);
+      const obj = {
+        "CustomerID": id, "তারিখ": now,
+        "নাম": d.নাম, "পিতার নাম": d.পিতারনাম, "মোবাইল নং": d.mobile,
+        "NID/জন্মসনদ নং": d.nid, "বাড়ির নাম": d.বাড়িরনাম, "গ্রাম": d.গ্রাম,
+        "ওয়ার্ড নং": d.ward, "ইউনিয়ন/পৌরসভা": d.union, "প্রাপ্তির স্থান": d.praptirsthan,
+        "কার্ড ফি": d.cardFee || 0, "রেফারেন্স": d.reference || ""
+      };
+      return headers.map(function (h) {
+        let v = obj.hasOwnProperty(h) ? obj[h] : "";
+        if (isTextColumnHeader(h) && v !== "" && v !== null && v !== undefined) v = String(v);
+        return v;
+      });
+    });
+
+    const start = lastRow + 1;
+    const textCols = [];
+    headers.forEach(function (h, i) {
+      if (isTextColumnHeader(h)) textCols.push(sheet.getRange(start, i + 1, rows.length, 1).getA1Notation());
+    });
+    if (textCols.length > 0) sheet.getRangeList(textCols).setNumberFormat("@");
+    sheet.getRange(start, 1, rows.length, headers.length).setValues(rows);
+  } finally {
+    lock.releaseLock();
+  }
+
+  return { success: true, ids: ids, message: list.length + " জন গ্রাহক যোগ হয়েছে" };
+}
+
 function listCustomers(data) {
   const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
   if (!perm.ok) return { success: false, message: perm.message };

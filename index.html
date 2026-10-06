@@ -204,6 +204,8 @@
   .table-wrap td.no-print{ white-space:nowrap; }
   .table-wrap td.no-print .btn{ display:inline-block; margin-right:5px; }
   .table-wrap td.no-print .btn:last-child{ margin-right:0; }
+  .act-stack{ display:flex; flex-direction:column; gap:5px; min-width:92px; }
+  .table-wrap td.no-print .act-stack .btn{ display:block; width:100%; margin:0; text-align:center; white-space:nowrap; }
 
   .form-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; max-width:100%; }
   fieldset{ border:1px solid var(--line); border-radius:10px; margin:14px 0; padding:12px; max-width:100%; box-sizing:border-box; }
@@ -940,7 +942,7 @@ async function apiCallRaw(action, data){
   // সার্ভার কখনো কখনো JSON এর বদলে HTML এরর পেজ দেয় ("Unexpected token '<'") — তখন
   // কাজটা হয়েছে কিনা অজানা। requestId থাকায় নিরাপদে আবার পাঠানো যায়: হয়ে থাকলে সার্ভার
   // আগের ফলই ফেরত দেয়, না হয়ে থাকলে এখন একবার করে। রিড-অনলি কলও নিরাপদে রিট্রাই হয়
-  const maxTries = (mutating || /^(list|get|dashboard)/.test(action)) ? 3 : 1;
+  const maxTries = mutating ? 5 : (/^(list|get|dashboard)/.test(action) ? 3 : 1);
   let lastErr = "";
   const tStart = performance.now();
   for(let attempt = 1; attempt <= maxTries; attempt++){
@@ -1025,7 +1027,7 @@ function clearCache(){
  * ধীর হয়। তাই পেজ খোলার সাথে সাথে এবং প্রতি ৪ মিনিটে একটি হালকা
  * "ping" পাঠিয়ে সার্ভার জাগিয়ে রাখা হয় — ফলে লগইন ও সংরক্ষণ দ্রুত হয়
  *******************************************************/
-const FRONTEND_VERSION = "2026-10-06.4";
+const FRONTEND_VERSION = "2026-10-06.5";
 /* শেষ সংরক্ষণ/এডিট কলে কত সময় লাগল (মোট বনাম সার্ভারের ভেতরে) — ধীর হলে কারণ বোঝার জন্য */
 function showCallTiming(action, totalMs, serverMs, attempts){
   const el = document.getElementById("callInfo");
@@ -1349,6 +1351,8 @@ async function loadFooterInfo(){
 }
 
 function doLogout(){
+  if(_cusQueue.length && !confirm("কিছু গ্রাহক এখনো সংরক্ষণ হয়নি — লগআউট করলে সেগুলো হারিয়ে যাবে। তবুও লগআউট করবেন?")) return;
+  _cusQueue.length = 0;
   clearCache();
   closeAllSubMenus();
   state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null };
@@ -4642,6 +4646,7 @@ async function submitCustomer(){
   };
   const msgBox = document.getElementById("cusMsg");
   const saveBtn = document.getElementById("cusSubmitBtn");
+  if(!editingCustomerId){ enqueueNewCustomer(data, msgBox); return; }   // নতুন গ্রাহক: ফরম সাথে সাথে খালি, সংরক্ষণ পেছনে চলে
   if(saveBtn.disabled) return;                       // সংরক্ষণ চলাকালে আবার ক্লিক করলে কিছু হবে না
   saveBtn.disabled = true;
   saveBtn.textContent = "সংরক্ষণ হচ্ছে...";
@@ -4704,6 +4709,99 @@ async function submitCustomerInner(data, msgBox){
   }
 }
 
+
+/*******************************************************
+ * নতুন গ্রাহক — ব্যাকগ্রাউন্ড সংরক্ষণ কিউ
+ * "সংরক্ষণ করুন" চাপলেই ফরম খালি হয়ে যায়, আপনি পরের গ্রাহক লিখতে থাকেন।
+ * কিউ থেকে একসাথে সর্বোচ্চ ২০ জন করে একটিমাত্র অনুরোধে সার্ভারে যায় (addCustomers)।
+ * নেটওয়ার্ক সমস্যায় একই requestId দিয়ে আবার চেষ্টা হয় — দুইবার সংরক্ষণ হয় না
+ *******************************************************/
+const _cusQueue = [];
+let _cusWorking = false, _cusNeedReload = false, _cusSavedCount = 0, _cusLastErr = "";
+const CUS_FORM_IDS = ["cusNaam","cusPitarNaam","cusMobile","cusNid","cusBariNaam","cusGram","cusWard","cusUnion","cusPraptirSthan","cusCardFee","cusReference"];
+
+function enqueueNewCustomer(data, msgBox){
+  if(!data["নাম"]){ msgBox.className = "msg err"; msgBox.textContent = "গ্রাহকের নাম দিন"; return; }
+  const sig = JSON.stringify(data);
+  if(_cusQueue.some(q => q.sig === sig)){ msgBox.className = "msg err"; msgBox.textContent = "এই গ্রাহক ইতিমধ্যে সংরক্ষণের অপেক্ষায় আছে"; return; }
+  _cusQueue.push({ data: data, sig: sig, status: "pending", fails: 0, batchId: "" });
+  CUS_FORM_IDS.forEach(id => document.getElementById(id).value = "");
+  refreshCusQueueUI();
+  document.getElementById("cusNaam").focus();
+  runCusQueue();
+}
+
+function pendingCustomerRowsHtml(){
+  return _cusQueue.map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${escMsgHtml(q.data["নাম"])}</td><td>${escMsgHtml(q.data.mobile||"")}</td><td>${escMsgHtml(q.data.praptirsthan||"")}</td><td>${q.data.cardFee||0}</td><td>${escMsgHtml(q.data.reference||"")}</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+}
+
+function refreshCusQueueUI(){
+  const box = document.getElementById("cusMsg");
+  const pend = _cusQueue.filter(q => q.status === "pending").length;
+  const failed = _cusQueue.filter(q => q.status === "failed").length;
+  if(box && !editingCustomerId){
+    if(failed){
+      box.className = "msg err";
+      box.innerHTML = failed + " টি গ্রাহক সংরক্ষণ হয়নি" + (_cusLastErr ? " (" + escMsgHtml(_cusLastErr) + ")" : "") + " <button class=\"btn small\" onclick=\"retryFailedCustomers()\">আবার চেষ্টা করুন</button>";
+    } else if(pend){
+      box.className = "msg"; box.textContent = "✓ জমা হয়েছে — পেছনে সংরক্ষণ হচ্ছে (বাকি " + pend + " টি)। পরের গ্রাহক লিখতে থাকুন";
+    } else if(_cusSavedCount){
+      box.className = "msg ok"; box.textContent = "✓ " + _cusSavedCount + " টি গ্রাহক সংরক্ষিত হয়েছে";
+    }
+  }
+  if(Array.isArray(window.__customersCache)) renderCustomersTable(window.__customersCache);
+}
+
+function retryFailedCustomers(){
+  _cusQueue.forEach(q => { if(q.status === "failed"){ q.status = "pending"; q.fails = 0; } });
+  refreshCusQueueUI();
+  runCusQueue();
+}
+
+async function runCusQueue(){
+  if(_cusWorking) return;
+  _cusWorking = true;
+  try{
+    while(state.token){
+      const first = _cusQueue.find(q => q.status === "pending");
+      if(!first) break;
+      let batch;
+      if(first.batchId){ batch = _cusQueue.filter(q => q.batchId === first.batchId && q.status === "pending"); }   // আগের ব্যর্থ ব্যাচ হুবহু আবার
+      else {
+        batch = _cusQueue.filter(q => q.status === "pending" && !q.batchId).slice(0, 20);
+        const bid = newRequestId(); batch.forEach(q => q.batchId = bid);
+      }
+      const res = await apiCall("addCustomers", { customers: batch.map(q => q.data), requestId: first.batchId });
+      if(res && res.success && Array.isArray(res.ids) && res.ids.length === batch.length){
+        const rows = batch.map((q, i) => ({
+          "CustomerID": res.ids[i], "তারিখ": new Date().toISOString(),
+          "নাম": q.data["নাম"], "পিতার নাম": q.data["পিতারনাম"], "মোবাইল নং": q.data["mobile"],
+          "NID/জন্মসনদ নং": q.data["nid"], "বাড়ির নাম": q.data["বাড়িরনাম"], "গ্রাম": q.data["গ্রাম"],
+          "ওয়ার্ড নং": q.data["ward"], "ইউনিয়ন/পৌরসভা": q.data["union"], "প্রাপ্তির স্থান": q.data["praptirsthan"],
+          "কার্ড ফি": q.data["cardFee"] || 0, "রেফারেন্স": q.data["reference"] || "",
+          "WhatsApp": "", "SMS": "", "মেসেজ আইডি": ""
+        }));
+        batch.forEach(q => { const k = _cusQueue.indexOf(q); if(k >= 0) _cusQueue.splice(k, 1); });
+        _cusSavedCount += batch.length; _cusLastErr = "";
+        if(Array.isArray(window.__customersCache)) applyCustomersLocally(window.__customersCache.concat(rows));
+        else _cusNeedReload = true;
+      } else {
+        _cusLastErr = (res && res.message) ? res.message : "সার্ভার থেকে সঠিক উত্তর আসেনি";
+        batch.forEach(q => q.fails++);
+        if(batch[0].fails >= 3) batch.forEach(q => q.status = "failed");
+        else await new Promise(r => setTimeout(r, 3000 * batch[0].fails));
+      }
+      refreshCusQueueUI();
+    }
+  } finally {
+    _cusWorking = false;
+    if(_cusNeedReload && _cusQueue.length === 0){ _cusNeedReload = false; clearCache(); loadCustomers(); }
+  }
+}
+window.addEventListener("beforeunload", function(e){
+  if(_cusQueue.length){ e.preventDefault(); e.returnValue = ""; }
+});
+
 /* তালিকার সারি থেকে সেই গ্রাহকের কাছে কনফারমেশন মেসেজ পাঠানোর পপআপ খোলা */
 function sendConfirmMsgRow(id){
   const c = (window.__customersCache || []).find(x => x["CustomerID"] === id);
@@ -4742,16 +4840,17 @@ function renderCustomersTable(customers){
   window.__customersCache = customers;
   const table = document.getElementById("customersTable");
   const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th>মোবাইল</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
-  if(customers.length === 0){ table.innerHTML = head + "<tbody>" + emptyRowHtml(9, "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  const pendHtml = pendingCustomerRowsHtml();
+  if(customers.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(9, "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
   const rows = customers.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
       <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
-      <td class="no-print">
-        ${String(c["মোবাইল নং"] || "").trim() ? `<button class="btn small secondary" onclick="sendConfirmMsgRow('${c['CustomerID']}')">কনফারমেশন মেসেজ</button>` : ""}
+      <td class="no-print"><div class="act-stack">
         <button class="btn small secondary" onclick="editCustomerRow('${c['CustomerID']}')">এডিট</button>
         <button class="btn small secondary" onclick="printCustomerRowById('${c['CustomerID']}')">প্রিন্ট</button>
         <button class="btn small danger" onclick="deleteCustomerRow('${c['CustomerID']}')">ডিলিট</button>
-      </td></tr>`);
-  table.innerHTML = head + "<tbody>" + rows.join("") + "</tbody>";
+        ${String(c["মোবাইল নং"] || "").trim() ? `<button class="btn small secondary" onclick="sendConfirmMsgRow('${c['CustomerID']}')">মেসেজ</button>` : ""}
+      </div></td></tr>`);
+  table.innerHTML = head + "<tbody>" + rows.join("") + pendHtml + "</tbody>";
 }
 
 /* সংরক্ষণ/এডিট/ডিলিটের পর সার্ভার থেকে পুরো তালিকা আবার না এনে হাতের তালিকাই আপডেট করা */

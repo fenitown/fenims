@@ -528,7 +528,7 @@ function handOverExistingDealerSheets() {
  * হওয়াও আটকানো হয়।
  *******************************************************/
 const IDEMPOTENT_ACTIONS = {
-  addCustomer:1, updateCustomer:1, deleteCustomer:1,
+  addCustomer:1, addCustomers:1, updateCustomer:1, deleteCustomer:1,
   addPackage:1, updatePackage:1, deletePackage:1,
   addSale:1, updateSalePrice:1, cancelSale:1,
   addCommission:1, updateCommission:1, deleteCommission:1,
@@ -561,7 +561,7 @@ const READ_CACHE_TTL = 300;
 const READ_CACHE_SALT = "r3";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-10-06.4";
+const BACKEND_VERSION = "2026-10-06.5";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {
@@ -630,7 +630,7 @@ function runActionCached(action, data) {
 
 /* গ্রাহকের কাজে পুরো অনুরোধ জুড়ে লক ধরে রাখা হয় না — শুধু আইডি তৈরি + সারি লেখার ছোট অংশে
    (addCustomer/deleteCustomer এর ভেতরে) লক নেয়। ফলে একটি ধীর সংরক্ষণ বাকিদের আটকে রাখে না */
-const FINE_LOCK_ACTIONS = { addCustomer:1, updateCustomer:1, deleteCustomer:1 };
+const FINE_LOCK_ACTIONS = { addCustomer:1, addCustomers:1, updateCustomer:1, deleteCustomer:1 };
 
 /* উত্তরের JSON এ সার্ভারে কত মিলিসেকেন্ড লেগেছে (_ms) জুড়ে দেওয়া — ধীর হলে কারণ খোঁজার জন্য */
 function withTiming(out, t0) {
@@ -753,6 +753,9 @@ function runAction(action, data) {
       // ---- গ্রাহক ----
       case "addCustomer":
         result = addCustomer(data);
+        break;
+      case "addCustomers":
+        result = addCustomers(data);
         break;
       case "listCustomers":
         result = listCustomers(data);
