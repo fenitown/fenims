@@ -204,8 +204,10 @@
   .table-wrap td.no-print{ white-space:nowrap; }
   .table-wrap td.no-print .btn{ display:inline-block; margin-right:5px; }
   .table-wrap td.no-print .btn:last-child{ margin-right:0; }
-  .act-stack{ display:flex; flex-direction:column; gap:5px; min-width:92px; }
-  .table-wrap td.no-print .act-stack .btn{ display:block; width:100%; margin:0; text-align:center; white-space:nowrap; }
+  .act-row{ display:flex; flex-direction:row; flex-wrap:nowrap; gap:5px; justify-content:center; }
+  .table-wrap td.no-print .act-row .btn{ margin:0; }
+  .btn.icon{ padding:7px 10px; line-height:0; display:inline-flex; align-items:center; justify-content:center; }
+  .btn.icon svg{ width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
   .form-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; max-width:100%; }
   fieldset{ border:1px solid var(--line); border-radius:10px; margin:14px 0; padding:12px; max-width:100%; box-sizing:border-box; }
@@ -910,6 +912,23 @@
    ============================================================ */
 const API_URL = "https://script.google.com/macros/s/AKfycbxmseU_Vj8xwWzq9rxK6b8NN5ZPvb3GNlc-LNN-hgwa2kr3kS6lAe11ZWseK7qd9PuB-g/exec";
 
+
+/* বাটনের আইকন (SVG) — তালিকার সব একশন বাটনে লেখার বদলে এগুলো বসে */
+const _icp = {
+  edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>',
+  print:'<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  del:'<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
+  msg:'<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>',
+  share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>',
+  check:'<path d="M20 6L9 17l-5-5"/>',
+  x:'<path d="M18 6L6 18M6 6l12 12"/>',
+  deliver:'<rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+  sale:'<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>',
+  power:'<path d="M18.4 6.6a9 9 0 11-12.8 0"/><path d="M12 2v10"/>'
+};
+const IC = {};
+Object.keys(_icp).forEach(k => { IC[k] = '<svg viewBox="0 0 24 24" aria-hidden="true">' + _icp[k] + '</svg>'; });
+
 let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null };
 
 /* যেসব অনুরোধ ডাটা বদলায় (সংরক্ষণ/এডিট/ডিলিট) — এগুলোতে ইউনিক requestId যায়,
@@ -1550,7 +1569,7 @@ async function loadMessagesList(){
     tr.title = "ক্লিক করে পুরো মেসেজ দেখুন";
     tr.onclick = () => openMsgView(i);
     tr.innerHTML = `<td>${i+1}</td><td class="msg-text-cell">${escMsgHtml(preview)}</td><td class="nowrap">${escMsgHtml(msgDateTime(m))}</td><td>${escMsgHtml(m["স্ট্যাটাস"])}</td>
-      <td class="no-print"><button class="btn small danger" onclick="event.stopPropagation(); deleteMessageRow('${escMsgHtml(m["MessageID"])}')">ডিলেট</button></td>`;
+      <td class="no-print"><button class="btn icon small danger" onclick="event.stopPropagation(); deleteMessageRow('${escMsgHtml(m["MessageID"])}')" title="ডিলেট" aria-label="ডিলেট">${IC.del}</button></td>`;
     tbody.appendChild(tr);
   });
   refreshPrevMsgSelect();
@@ -2222,9 +2241,9 @@ async function renderDealersList(box){
       <td>${d["DealerID"]}</td><td class="cell-left">${d["নাম"]}</td><td>${d["মোবাইল"]}</td>
       <td>${d["এরিয়া"]||""}</td><td class="cell-left">${d["ঠিকানা"]||""}</td><td>${d["স্ট্যাটাস"]}</td>
       <td class="no-print">
-        <button class="btn small" onclick="toggleDealerStatus('${d["DealerID"]}','${d["স্ট্যাটাস"]}')">${d["স্ট্যাটাস"]==="সক্রিয়" ? "নিষ্ক্রিয়" : "সক্রিয়"}</button>
-        <button class="btn small secondary" onclick="editDealerRow('${d["DealerID"]}')">এডিট</button>
-        <button class="btn small secondary" onclick='printDealerRow(${dJson})'>প্রিন্ট</button>
+        <button class="btn icon small" onclick="toggleDealerStatus('${d["DealerID"]}','${d["স্ট্যাটাস"]}')" title="${d["স্ট্যাটাস"]==="সক্রিয়" ? "নিষ্ক্রিয় করুন" : "সক্রিয় করুন"}" aria-label="স্ট্যাটাস বদলান">${IC.power}</button>
+        <button class="btn icon small secondary" onclick="editDealerRow('${d["DealerID"]}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick='printDealerRow(${dJson})' title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
       </td></tr>`;
   });
   }
@@ -2674,9 +2693,10 @@ async function loadAgencyPackages(){
       <td class="cell-left">${p["নাম"]}</td><td>${dt}</td><td>${p.itemCount}</td>
       <td>${p["সর্বমোট বাজার মূল্য"]||0}</td><td>${p["সর্বমোট মূল্য"]||0}</td><td>${p["সর্বমোট সাশ্রয়"]||0}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick="editAgencyPackage('${p['PackageID']}')">এডিট</button>
-        <button class="btn small secondary" onclick="printAgencyPackageById('${p['PackageID']}')">প্রিন্ট</button>
-        <button class="btn small danger" onclick="deletePkg('${p['PackageID']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick="editAgencyPackage('${p['PackageID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick="printAgencyPackageById('${p['PackageID']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small secondary" onclick="sharePackageById('${p['PackageID']}')" title="ছবি শেয়ার" aria-label="ছবি শেয়ার">${IC.share}</button>
+        <button class="btn icon small danger" onclick="deletePkg('${p['PackageID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -2776,9 +2796,9 @@ async function loadCommissionList(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="cell-left">${c["ডিলারের নাম"]}</td><td>${c["মোবাইল নং"]}</td><td class="cell-left">${c["ঠিকানা"]||""}</td><td>${c["টাকার পরিমাণ"]}</td><td>${dt}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick='editCommissionRow(${cJson})'>এডিট</button>
-        <button class="btn small secondary" onclick='printCommissionRow(${cJson})'>প্রিন্ট</button>
-        <button class="btn small danger" onclick="deleteCommissionRow('${c['CommissionID']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick='editCommissionRow(${cJson})' title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick='printCommissionRow(${cJson})' title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small danger" onclick="deleteCommissionRow('${c['CommissionID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -2878,9 +2898,9 @@ function renderAgencyExpenseTable(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${dt}</td><td>${e["ক্রম"]}</td><td class="cell-left">${e["বিবরণ"]}</td><td>${e["টাকা"]}</td><td>${e["সর্বমোট"]}</td><td>${e["পরিশোধ"]}</td><td>${e["বকেয়া"]}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick="editAgencyExpenseEntry('${e['EntryID']}')">এডিট</button>
-        <button class="btn small secondary" onclick="printAgencyExpenseVoucher('${e['ভাউচার নং']}')">প্রিন্ট</button>
-        <button class="btn small danger" onclick="deleteAgencyExpenseVoucher('${e['ভাউচার নং']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick="editAgencyExpenseEntry('${e['EntryID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick="printAgencyExpenseVoucher('${e['ভাউচার নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small danger" onclick="deleteAgencyExpenseVoucher('${e['ভাউচার নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -3028,9 +3048,9 @@ function renderIncomeTable(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${e["রশিদ নং"]}</td><td>${dt}</td><td>${e["ক্রম"]}</td><td class="cell-left">${escMsgHtml(e["বিবরণ"])}</td><td>${e["টাকা"]}</td><td>${e["সর্বমোট"]}</td>
       <td class="no-print">
-        ${isAdmin ? `<button class="btn small secondary" onclick="editIncomeEntry('${e['EntryID']}')">এডিট</button>` : ""}
-        <button class="btn small secondary" onclick="printIncomeReceipt('${e['রশিদ নং']}')">প্রিন্ট</button>
-        ${isAdmin ? `<button class="btn small danger" onclick="deleteIncomeReceiptNo('${e['রশিদ নং']}')">ডিলিট</button>` : ""}
+        ${isAdmin ? `<button class="btn icon small secondary" onclick="editIncomeEntry('${e['EntryID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>` : ""}
+        <button class="btn icon small secondary" onclick="printIncomeReceipt('${e['রশিদ নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        ${isAdmin ? `<button class="btn icon small danger" onclick="deleteIncomeReceiptNo('${e['রশিদ নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>` : ""}
       </td>`;
     tbody.appendChild(tr);
   });
@@ -3147,8 +3167,8 @@ function renderProductsTable(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["বাজার মূল্য"]||0}</td><td>${p["কম্বো মূল্য"]||0}</td><td>${p["সাশ্রয়ী"]||0}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick="editProductRow('${p['ProductID']}')">এডিট</button>
-        <button class="btn small danger" onclick="deleteProductRow('${p['ProductID']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick="editProductRow('${p['ProductID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small danger" onclick="deleteProductRow('${p['ProductID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -3363,9 +3383,9 @@ function renderStockInTable(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${dt}</td><td class="cell-left">${e["পণ্যের নাম"]}</td><td>${e["বাজার মূল্য"]}</td><td>${e["কম্বো মূল্য"]}</td><td>${e["সাশ্রয়ী"]}</td><td>${e["সংখ্যা"]}</td><td>${e["মোট মূল্য"]}</td><td>${e["সর্বমোট"]||0}</td><td>${e["পরিশোধ"]||0}</td><td>${e["বকেয়া"]||0}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick="editStockEntryRow('${e['EntryID']}')">এডিট</button>
-        <button class="btn small secondary" onclick="printStockVoucherById('${e['ভাউচার নং']}')">প্রিন্ট</button>
-        <button class="btn small danger" onclick="deleteStockVoucherByNo('${e['ভাউচার নং']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick="editStockEntryRow('${e['EntryID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick="printStockVoucherById('${e['ভাউচার নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small danger" onclick="deleteStockVoucherByNo('${e['ভাউচার নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -3602,10 +3622,10 @@ function renderSalesInvoiceTable(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${e["ইনভয়েস নং"]}</td><td>${dt}</td><td class="cell-left">${e["ডিলার নাম"]}</td><td class="cell-left">${e["প্যাকেজ"]}</td><td>${e["একক মূল্য"]}</td><td>${e["সংখ্যা"]}</td><td>${e["মোট মূল্য"]}</td><td>${e["কমিশন %"]||0}</td><td>${e["কমিশন মূল্য"]||0}</td><td>${e["পরিশোধযোগ্য মূল্য"]||0}</td><td>${e["বকেয়া"]}</td><td>${status}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick="editSalesInvoiceByNo('${e['ইনভয়েস নং']}')">এডিট</button>
-        <button class="btn small secondary" onclick="printSalesInvoiceById('${e['ইনভয়েস নং']}')">প্রিন্ট</button>
-        ${isAgency && status !== "ডেলিভারি সম্পন্ন" ? `<button class="btn small secondary" onclick="markSiDelivered('${e['ইনভয়েস নং']}')">ডেলিভারি সম্পন্ন</button>` : ""}
-        <button class="btn small danger" onclick="deleteSalesInvoiceByNo('${e['ইনভয়েস নং']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick="editSalesInvoiceByNo('${e['ইনভয়েস নং']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick="printSalesInvoiceById('${e['ইনভয়েস নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        ${isAgency && status !== "ডেলিভারি সম্পন্ন" ? `<button class="btn icon small secondary" onclick="markSiDelivered('${e['ইনভয়েস নং']}')" title="ডেলিভারি সম্পন্ন" aria-label="ডেলিভারি সম্পন্ন">${IC.deliver}</button>` : ""}
+        <button class="btn icon small danger" onclick="deleteSalesInvoiceByNo('${e['ইনভয়েস নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -3718,8 +3738,8 @@ function renderPendingOrdersModalList(){
         <table><thead><tr><th class="cell-left">প্যাকেজ</th><th>একক মূল্য</th><th>সংখ্যা</th><th>মোট মূল্য</th></tr></thead><tbody>${rowsHtml}</tbody></table>
         ${isAgency ? `
           <div class="btn-row">
-            <button class="btn small" onclick="confirmPendingOrder('${inv}')">কনফার্ম করুন</button>
-            <button class="btn small danger" onclick="rejectPendingOrder('${inv}')">বাতিল করুন</button>
+            <button class="btn icon small" onclick="confirmPendingOrder('${inv}')" title="কনফার্ম করুন" aria-label="কনফার্ম করুন">${IC.check}</button>
+            <button class="btn icon small danger" onclick="rejectPendingOrder('${inv}')" title="বাতিল করুন" aria-label="বাতিল করুন">${IC.x}</button>
           </div>` : `<div style="color:var(--muted);font-size:0.85rem;">ডিপুর কনফার্মেশনের অপেক্ষায়</div>`}
       </div>`;
   }).join("");
@@ -4429,7 +4449,8 @@ async function loadDealerPackages(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="cell-left pkg-click-row">${p["নাম"]}</td><td>${p["ধরন"]}</td>
       <td>${p["সর্বমোট বাজার মূল্য"]||0}</td><td>${p["সর্বমোট মূল্য"]||0}</td><td>${p["সর্বমোট সাশ্রয়"]||0}</td>
-      <td class="no-print"><button class="btn small secondary" onclick="printDealerPackageById('${p['PackageID']}')">প্রিন্ট</button></td>`;
+      <td class="no-print"><button class="btn icon small secondary" onclick="printDealerPackageById('${p['PackageID']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small secondary" onclick="sharePackageById('${p['PackageID']}')" title="ছবি শেয়ার" aria-label="ছবি শেয়ার">${IC.share}</button></td>`;
     tr.querySelector(".pkg-click-row").onclick = () => showPkgDetail(p["PackageID"]);
     tbody.appendChild(tr);
   });
@@ -4802,6 +4823,148 @@ window.addEventListener("beforeunload", function(e){
   if(_cusQueue.length){ e.preventDefault(); e.returnValue = ""; }
 });
 
+
+/*******************************************************
+ * ছবি আকারে শেয়ার — ক্যানভাসে কার্ড এঁকে PNG বানায়।
+ * মোবাইলে শেয়ার মেনু (WhatsApp/Messenger ইত্যাদি) খোলে; না পারলে ছবি ডাউনলোড হয়।
+ * ফাংশনটি সম্পূর্ণ স্বয়ংসম্পূর্ণ — প্রিন্ট উইন্ডোতেও হুবহু বসিয়ে ব্যবহার করা হয়
+ * spec: { org, sub, sub2, title, blocks:[{t:"section",text} | {t:"kv",rows:[[l,v]]} |
+ *         {t:"table",head,rows,foot,widths,align}], footer }
+ *******************************************************/
+async function shareCardImage(spec, fileName){
+  const W = 900, PAD = 36, S = 2;
+  const FONT = '"Hind Siliguri","Noto Sans Bengali","Kalpurush",Arial,sans-serif';
+  try{ await document.fonts.load('16px "Hind Siliguri"'); await document.fonts.ready; }catch(e){}
+  const cv = document.createElement("canvas");
+  const ctx = cv.getContext("2d");
+  const IW = W - PAD * 2;
+  function setFont(sz, w){ ctx.font = (w || "400") + " " + sz + "px " + FONT; }
+  function wrap(text, maxW, sz, w){
+    setFont(sz, w);
+    const words = String(text == null ? "" : text).split(/\s+/);
+    const lines = []; let cur = "";
+    words.forEach(function(wd){
+      const t = cur ? cur + " " + wd : wd;
+      if(!cur || ctx.measureText(t).width <= maxW) cur = t; else { lines.push(cur); cur = wd; }
+    });
+    lines.push(cur);
+    return lines;
+  }
+  function run(draw){
+    let y = PAD;
+    function center(text, sz, w, color, gap){
+      setFont(sz, w);
+      if(draw){ ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText(text, W / 2, y + sz); }
+      y += sz + (gap || 8);
+    }
+    function rowBox(cells, widths, align, bg, bold){
+      const sz = 16, lh = 24;
+      const xs = []; let x = PAD;
+      widths.forEach(function(wf){ xs.push(x); x += IW * wf; });
+      const wrapped = cells.map(function(c, i){ return wrap(c, IW * widths[i] - 20, sz, bold ? "700" : "400"); });
+      const h = Math.max.apply(null, wrapped.map(function(l){ return l.length; })) * lh + 14;
+      if(draw){
+        cells.forEach(function(c, i){
+          const cw = IW * widths[i];
+          if(bg){ ctx.fillStyle = bg; ctx.fillRect(xs[i], y, cw, h); }
+          ctx.strokeStyle = "#888"; ctx.lineWidth = 1; ctx.strokeRect(xs[i], y, cw, h);
+          setFont(sz, bold ? "700" : "400"); ctx.fillStyle = "#1c2b28"; ctx.textBaseline = "alphabetic";
+          const a = align && align[i] === "r" ? "right" : (align && align[i] === "c" ? "center" : "left");
+          ctx.textAlign = a;
+          const tx = a === "right" ? xs[i] + cw - 10 : (a === "center" ? xs[i] + cw / 2 : xs[i] + 10);
+          wrapped[i].forEach(function(line, li){ ctx.fillText(line, tx, y + 7 + lh * li + 18); });
+        });
+      }
+      y += h;
+    }
+    if(spec.org) center(spec.org, 28, "700", "#153f37", 6);
+    if(spec.sub) center(spec.sub, 16, "600", "#b5502f", 4);
+    if(spec.sub2) center(spec.sub2, 14, "400", "#333", 6);
+    if(draw){ ctx.fillStyle = "#153f37"; ctx.fillRect(PAD, y + 2, IW, 3); }
+    y += 16;
+    if(spec.title) center(spec.title, 22, "700", "#1c2b28", 14);
+    (spec.blocks || []).forEach(function(b){
+      if(b.t === "section"){
+        if(draw){ ctx.fillStyle = "#153f37"; ctx.fillRect(PAD, y, IW, 32); setFont(16, "700"); ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(b.text, PAD + 10, y + 22); }
+        y += 32;
+      } else if(b.t === "kv"){
+        b.rows.forEach(function(r){ rowBox([r[0], r[1]], [0.32, 0.68], ["l", "l"], null, false); if(draw){ ctx.fillStyle = "rgba(238,240,233,0.9)"; } });
+      } else if(b.t === "table"){
+        const wd = b.widths || b.head.map(function(){ return 1 / b.head.length; });
+        rowBox(b.head, wd, b.head.map(function(){ return "c"; }), "#eef0e9", true);
+        b.rows.forEach(function(r){ rowBox(r, wd, b.align, null, false); });
+        if(b.foot) rowBox(b.foot, wd, b.align, "#eef0e9", true);
+      }
+      y += 12;
+    });
+    if(spec.footer) center(spec.footer, 12, "400", "#6b7570", 0);
+    y += PAD;
+    return y;
+  }
+  const H = Math.ceil(run(false));
+  cv.width = W * S; cv.height = H * S;
+  ctx.scale(S, S);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+  run(true);
+  const blob = await new Promise(function(r){ cv.toBlob(r, "image/png"); });
+  if(!blob){ alert("ছবি তৈরি করা যায়নি"); return; }
+  const file = new File([blob], fileName || "share.png", { type: "image/png" });
+  if(navigator.canShare && navigator.canShare({ files: [file] })){
+    try{ await navigator.share({ files: [file], title: spec.title || "" }); return; }
+    catch(e){ if(e && e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+}
+
+function packageShareSpec(p, sub){
+  const items = p.items || [];
+  const orgEl = document.getElementById("hdrDealerName");
+  return {
+    org: (orgEl && orgEl.textContent.trim()) || "ফেনী মানবিক সহায়তা",
+    sub: sub || "",
+    title: p["নাম"] || "",
+    blocks: [{ t: "table",
+      head: ["পণ্যের নাম ও পরিমাণ", "বাজার মূল্য", "কম্বো মূল্য", "সাশ্রয়"],
+      rows: items.map(function(it){ return [it["পণ্যের নাম ও পরিমাণ"], it["বাজার মূল্য"], it["কম্বো মূল্য"], it["সাশ্রয়"]]; }),
+      foot: ["সর্বমোট (" + (p.itemCount || items.length) + " টি পণ্য)", p["সর্বমোট বাজার মূল্য"] || 0, p["সর্বমোট মূল্য"] || 0, p["সর্বমোট সাশ্রয়"] || 0],
+      widths: [0.46, 0.18, 0.18, 0.18], align: ["l", "r", "r", "r"] }],
+    footer: "@Powered by: AM Shahed: 01605721296"
+  };
+}
+
+function sharePackageById(packageId){
+  const all = (window.__packagesCache || []).concat(typeof dealerPackagesCache !== "undefined" ? (dealerPackagesCache || []) : []);
+  const p = all.find(x => x["PackageID"] === packageId);
+  if(!p){ alert("প্যাকেজ পাওয়া যায়নি"); return; }
+  const sub = state.dealerId === "AGENCY" ? "" : "ডিলার: " + (state.dealerName || "") + (state.dealerMobile ? " | মোবাইল: " + state.dealerMobile : "");
+  shareCardImage(packageShareSpec(p, sub), "package-" + packageId + ".png");
+}
+
+function customerShareSpec(c){
+  const d = c["তারিখ"] ? new Date(c["তারিখ"]) : null;
+  const regDate = d && !isNaN(d) ? d.toLocaleDateString("bn-BD") : "";
+  const ward = c["ওয়ার্ড নং"] ? wardLabel(c["ওয়ার্ড নং"]) : "";
+  return {
+    org: "ফেনী মানবিক সহায়তা",
+    sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
+    sub2: "ডিলার: " + (state.dealerName || "") + (state.dealerMobile ? " | মোবাইল: " + state.dealerMobile : ""),
+    title: "গ্রাহক নিবন্ধন ফরম",
+    blocks: [
+      { t: "kv", rows: [["গ্রাহক আইডি", c["CustomerID"] || ""], ["নিবন্ধনের তারিখ", regDate]] },
+      { t: "section", text: "১. ব্যক্তিগত তথ্য" },
+      { t: "kv", rows: [["গ্রাহকের নাম", c["নাম"] || ""], ["পিতার নাম", c["পিতার নাম"] || ""], ["মোবাইল নং", c["মোবাইল নং"] || ""], ["NID/জন্মসনদ নং", c["NID/জন্মসনদ নং"] || ""]] },
+      { t: "section", text: "২. ঠিকানা" },
+      { t: "kv", rows: [["বাড়ির নাম", c["বাড়ির নাম"] || ""], ["গ্রাম", c["গ্রাম"] || ""], ["ওয়ার্ড নং", ward], ["ইউনিয়ন/পৌরসভা", c["ইউনিয়ন/পৌরসভা"] || ""]] },
+      { t: "section", text: "৩. প্রাপ্তি ও ফি সংক্রান্ত তথ্য" },
+      { t: "kv", rows: [["প্রাপ্তির স্থান", c["প্রাপ্তির স্থান"] || ""], ["কার্ড ফি (টাকা)", c["কার্ড ফি"] || 0]] }
+    ],
+    footer: "@Powered by: AM Shahed: 01605721296"
+  };
+}
+
 /* তালিকার সারি থেকে সেই গ্রাহকের কাছে কনফারমেশন মেসেজ পাঠানোর পপআপ খোলা */
 function sendConfirmMsgRow(id){
   const c = (window.__customersCache || []).find(x => x["CustomerID"] === id);
@@ -4844,11 +5007,11 @@ function renderCustomersTable(customers){
   if(customers.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(9, "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
   const rows = customers.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
       <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
-      <td class="no-print"><div class="act-stack">
-        <button class="btn small secondary" onclick="editCustomerRow('${c['CustomerID']}')">এডিট</button>
-        <button class="btn small secondary" onclick="printCustomerRowById('${c['CustomerID']}')">প্রিন্ট</button>
-        <button class="btn small danger" onclick="deleteCustomerRow('${c['CustomerID']}')">ডিলিট</button>
-        ${String(c["মোবাইল নং"] || "").trim() ? `<button class="btn small secondary" onclick="sendConfirmMsgRow('${c['CustomerID']}')">মেসেজ</button>` : ""}
+      <td class="no-print"><div class="act-row">
+        <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick="printCustomerRowById('${c['CustomerID']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small danger" onclick="deleteCustomerRow('${c['CustomerID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
+        ${String(c["মোবাইল নং"] || "").trim() ? `<button class="btn icon small secondary" onclick="sendConfirmMsgRow('${c['CustomerID']}')" title="মেসেজ" aria-label="মেসেজ">${IC.msg}</button>` : ""}
       </div></td></tr>`);
   table.innerHTML = head + "<tbody>" + rows.join("") + pendHtml + "</tbody>";
 }
@@ -5021,7 +5184,11 @@ function printCustomerFormOfficial(c){
       .sign-box{ text-align:center; width:30%; }
       .sign-line{ border-top:1px solid #333; padding-top:4px; font-size:12px; }
       .doc-footer{ margin-top:34px; font-size:9px; color:#6b7570; text-align:center; }
+      .share-bar{ text-align:right; padding:8px 0; }
+      .share-bar button{ font-family:inherit; font-size:14px; padding:8px 16px; border:0; border-radius:8px; background:#153f37; color:#fff; cursor:pointer; }
+      @media print{ .no-print{ display:none !important; } }
     </style></head><body>
+    <div class="share-bar no-print"><button onclick="doShare()">শেয়ার (ছবি)</button></div>
     <div class="letterhead">
       <h1>ফেনী মানবিক সহায়তা</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
@@ -5054,7 +5221,10 @@ function printCustomerFormOfficial(c){
       <div class="sign-box"><div class="sign-line">ডিলারের স্বাক্ষর ও তারিখ</div></div>
     </div>
     <div class="doc-footer">প্রিন্টের তারিখ: ${escMsgHtml(printDate)} — @Powered by: AM Shahed: 01605721296</div>
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>${shareCardImage.toString()}
+    window.__spec = ${JSON.stringify(customerShareSpec(c)).replace(/</g, "\\u003c")};
+    function doShare(){ shareCardImage(window.__spec, "customer-${escMsgHtml(c["CustomerID"])}.png"); }
+    window.onload=function(){window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
@@ -5170,9 +5340,9 @@ function renderSalesTable(){
       <td>${sale ? "বিক্রিত" : "—"}</td>
       <td class="no-print">
         ${!sale
-          ? `<button class="btn small" ${!pkgId?"disabled":""} onclick="makeSale('${c['CustomerID']}','${pkgId}','${priceInputId}')">বিক্রয়</button>`
-          : `<button class="btn small danger" onclick="undoSale('${sale['SaleID']}')">বাতিল</button>`}
-        <button class="btn small secondary" ${!pkgId?"disabled":""} onclick='printThermalReceipt(${cJson}, "${pkgId}")'>প্রিন্ট</button>
+          ? `<button class="btn icon small" ${!pkgId?"disabled":""} onclick="makeSale('${c['CustomerID']}','${pkgId}','${priceInputId}')" title="বিক্রয়" aria-label="বিক্রয়">${IC.sale}</button>`
+          : `<button class="btn icon small danger" onclick="undoSale('${sale['SaleID']}')" title="বাতিল" aria-label="বাতিল">${IC.x}</button>`}
+        <button class="btn icon small secondary" ${!pkgId?"disabled":""} onclick='printThermalReceipt(${cJson}, "${pkgId}")' title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
       </td>`;
     tbody.appendChild(tr);
   });
@@ -5329,9 +5499,9 @@ async function loadDealerExpenseVouchers(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${dt}</td><td>${v["বিবরণ"]}</td><td>${v["পরিমাণ"]}</td>
       <td class="no-print">
-        <button class="btn small secondary" onclick='editDealerExpenseRow(${vJson})'>এডিট</button>
-        <button class="btn small secondary" onclick='printDealerExpenseRow(${vJson})'>প্রিন্ট</button>
-        <button class="btn small danger" onclick="deleteDealerExpenseRow('${v['VoucherID']}')">ডিলিট</button>
+        <button class="btn icon small secondary" onclick='editDealerExpenseRow(${vJson})' title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick='printDealerExpenseRow(${vJson})' title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
+        <button class="btn icon small danger" onclick="deleteDealerExpenseRow('${v['VoucherID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
