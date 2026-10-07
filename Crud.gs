@@ -669,6 +669,23 @@ function getDashboardSummary(data) {
 
   const runningPackages = packages.filter(function (p) { return p["ধরন"] === "এক্টিভ"; });
 
+  // মোট সংখ্যা ও বর্তমান স্টক — রিপোর্টের হিসাবের সাথে মিল রেখে: কনফার্ম হওয়া অর্ডার
+  // ("অপেক্ষমান" বাদ) এর প্যাকেজ সংখ্যার যোগফল; স্টক = প্যাকেজ ভিত্তিক (ক্রয় − বিক্রি), ঋণাত্মক হলে ০
+  let totalOrderQty = 0;
+  const boughtQty = {};
+  invoiceLines.forEach(function (e) {
+    if (e["স্ট্যাটাস"] === "অপেক্ষমান") return;
+    const q = Number(e["সংখ্যা"]) || 0;
+    totalOrderQty += q;
+    boughtQty[e["PackageID"]] = (boughtQty[e["PackageID"]] || 0) + q;
+  });
+  const soldQty = {};
+  sales.forEach(function (s) { soldQty[s["PackageID"]] = (soldQty[s["PackageID"]] || 0) + 1; });
+  let currentStockQty = 0;
+  Object.keys(boughtQty).forEach(function (id) {
+    currentStockQty += Math.max(0, boughtQty[id] - (soldQty[id] || 0));
+  });
+
   // মোট কার্ড ফি — সব গ্রাহকের "কার্ড ফি" এর যোগফল
   let totalCardFee = 0;
   customers.forEach(function (c) { totalCardFee += Number(c["কার্ড ফি"]) || 0; });
@@ -681,7 +698,9 @@ function getDashboardSummary(data) {
       totalCustomers: customers.length,
       totalCardFee: totalCardFee,
       totalOrders: totalOrders,
-      totalSales: sales.length
+      totalOrderQty: totalOrderQty,
+      totalSales: sales.length,
+      currentStockQty: currentStockQty
     }
   };
 }

@@ -4478,7 +4478,9 @@ async function loadDashboard(){
     <div class="card"><div class="num">${s.totalCustomers}</div><div class="label">মোট গ্রাহক</div></div>
     <div class="card"><div class="num">${Number(s.totalCardFee) || 0}</div><div class="label">মোট কার্ড ফি</div></div>
     <div class="card"><div class="num">${s.totalOrders}</div><div class="label">মোট অর্ডার</div></div>
-    <div class="card"><div class="num">${s.totalSales}</div><div class="label">মোট বিক্রি</div></div>`;
+    <div class="card"><div class="num">${Number(s.totalOrderQty) || 0}</div><div class="label">মোট সংখ্যা</div></div>
+    <div class="card"><div class="num">${s.totalSales}</div><div class="label">মোট বিক্রি</div></div>
+    <div class="card"><div class="num">${Number(s.currentStockQty) || 0}</div><div class="label">বর্তমান স্টক</div></div>`;
 }
 
 /* ড্যাশবোর্ড — একটি টেবিলে রেফারেন্স (সারি) × ওয়ার্ড (কলাম) অনুযায়ী গ্রাহক সংখ্যা;
@@ -5032,7 +5034,8 @@ async function shareCardImage(specs, fileName){
   const FONT = '"Hind Siliguri","Noto Sans Bengali","Kalpurush",Arial,sans-serif';
   try{ await document.fonts.load('16px "Hind Siliguri"'); await document.fonts.ready; }catch(e){}
   async function render(spec){
-    const W = spec.width || 900, PAD = 36, K = (W / 900) * (spec.fs || 1);
+    const W = spec.width || 900, PAD = 36;
+    let K = (W / 900) * (spec.fs || 1);
     const cv = document.createElement("canvas");
     const ctx = cv.getContext("2d");
     const IW = W - PAD * 2;
@@ -5100,7 +5103,12 @@ async function shareCardImage(specs, fileName){
       y += PAD;
       return y;
     }
-    const H = Math.max(Math.ceil(run(false)), spec.minHeight || 0);
+    // পাতার সাইজ (minHeight) দেওয়া থাকলে লেখা বেশি হলে ফন্ট ছোট করে একই সাইজের ছবিতে ধরানো হয়
+    let H = Math.ceil(run(false));
+    for(let t = 0; spec.minHeight && H > spec.minHeight && t < 14; t++){
+      K *= 0.94; H = Math.ceil(run(false));
+    }
+    H = Math.max(H, spec.minHeight || 0);
     const S = Math.min(2, 16000 / H);
     cv.width = Math.round(W * S); cv.height = Math.round(H * S);
     ctx.scale(S, S);
@@ -5137,7 +5145,7 @@ function shareSalesInvoiceById(invoiceNo){
   const dateStr = first["তারিখ"] ? new Date(first["তারিখ"]).toLocaleDateString("bn-BD") : "";
   const net = lines.reduce((s, e) => s + (Number(e["পরিশোধযোগ্য মূল্য"]) || 0), 0) - (Number(first["ডিসকাউন্ট"]) || 0);
   shareCardImage({
-    width: 1000,
+    width: 1240, minHeight: 1754,   // A4 পোর্ট্রেট — প্রিন্টের পাতার সমান অনুপাত
     org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
     sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
     title: "অর্ডার ইনভয়েস",
@@ -5186,6 +5194,7 @@ function packageShareSpec(p, sub){
   const items = p.items || [];
   const orgEl = document.getElementById("hdrDealerName");
   return {
+    width: 1240, minHeight: 1754,   // A4 পোর্ট্রেট — প্রিন্টের পাতার সমান অনুপাত
     org: (orgEl && orgEl.textContent.trim()) || "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
     sub: sub || "",
     title: p["নাম"] || "",
@@ -5211,6 +5220,7 @@ function customerShareSpec(c){
   const regDate = d && !isNaN(d) ? d.toLocaleDateString("bn-BD") : "";
   const ward = c["ওয়ার্ড নং"] ? wardLabel(c["ওয়ার্ড নং"]) : "";
   return {
+    width: 1240, minHeight: 1754,   // A4 পোর্ট্রেট — প্রিন্টের পাতার সমান অনুপাত
     org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
     sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
     sub2: "ডিলার: " + (state.dealerName || "") + (state.dealerMobile ? " | মোবাইল: " + state.dealerMobile : ""),
