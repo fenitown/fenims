@@ -1339,7 +1339,9 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
       @page{ size:${landscape ? 'A4 landscape' : 'A4'}; margin:0.5in; }
       html, body{ margin:0; padding:0; }
       body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; }
-      ${landscape ? '.sheet{ width:271mm; } table{ font-size:11px; } th,td{ white-space:nowrap; font-size:inherit !important; padding:4px 6px !important; }' : ''}
+      ${landscape ? (opts.wrap
+        ? '.sheet{ width:271mm; } table{ font-size:10px; } th,td{ font-size:inherit !important; padding:3px 4px !important; word-break:break-word; } ' + (opts.nowrapCols || []).map(i => 'td:nth-child(' + (i+1) + '),th:nth-child(' + (i+1) + '){ white-space:nowrap; }').join(' ')
+        : '.sheet{ width:271mm; } table{ font-size:11px; } th,td{ white-space:nowrap; font-size:inherit !important; padding:4px 6px !important; }') : ''}
       .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:10px; margin-bottom:14px; }
       .letterhead h1{ margin:0; color:#153f37; font-size:20px; }
       .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
@@ -1363,7 +1365,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
     ${footerNote ? `<div class="doc-footer">${footerNote}</div>` : ''}
     </div>
     <script>${shareScript}window.onload=function(){
-      ${landscape ? "var sh=document.querySelector('.sheet'),t=document.querySelector('table'),fs=11;while(t.scrollWidth>sh.clientWidth&&fs>5){fs-=0.5;t.style.fontSize=fs+'px';}" : ''}
+      ${(landscape && !opts.wrap) ? "var sh=document.querySelector('.sheet'),t=document.querySelector('table'),fs=11;while(t.scrollWidth>sh.clientWidth&&fs>5){fs-=0.5;t.style.fontSize=fs+'px';}" : ''}
       window.print();}<\/script>
     </body></html>`);
   win.document.close();
@@ -4503,7 +4505,10 @@ function renderDashboardBreakdown(customers){
   const wLabel = w => w === "" ? "ওয়ার্ড নেই" : wardLabel(w);
   const rLabel = r => r === "" ? "(রেফারেন্স নেই)" : escMsgHtml(r);
 
-  let html = `<h3 style="margin:18px 0 6px;color:var(--teal-dark);">রেফারেন্স ও ওয়ার্ড ভিত্তিক গ্রাহক সংখ্যা</h3>
+  window.__dashBreakdown = { wards: wards, refs: refs, cell: cell, rowTot: rowTot, colTot: colTot, total: customers.length };
+  let html = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:18px 0 6px;">
+    <h3 style="margin:0;color:var(--teal-dark);">রেফারেন্স ও ওয়ার্ড ভিত্তিক গ্রাহক সংখ্যা</h3>
+    <button class="btn secondary small no-print" onclick="printDashboardBreakdown()">🖨 প্রিন্ট (A4 ল্যান্ডস্কেপ)</button></div>
     <div class="table-wrap"><table><thead><tr><th>রেফারেন্স</th>${wards.map(w => `<th>${escMsgHtml(wLabel(w))}</th>`).join("")}<th>মোট</th></tr></thead><tbody>`;
   refs.forEach(r => {
     html += `<tr><td class="cell-left name-cell">${rLabel(r)}</td>` +
@@ -4513,6 +4518,25 @@ function renderDashboardBreakdown(customers){
   html += `<tr style="font-weight:700;background:#eef0e9;"><td class="cell-left">মোট</td>` +
     wards.map(w => `<td>${colTot[w]}</td>`).join("") + `<td>${customers.length}</td></tr></tbody></table></div>`;
   box.innerHTML = html;
+}
+
+/* ড্যাশবোর্ডের "রেফারেন্স ও ওয়ার্ড ভিত্তিক গ্রাহক সংখ্যা" টেবিল — A4 ল্যান্ডস্কেপ প্রিন্ট */
+function printDashboardBreakdown(){
+  const d = window.__dashBreakdown;
+  if(!d){ alert("প্রিন্ট করার মতো তথ্য নেই"); return; }
+  const wLabel = w => w === "" ? "ওয়ার্ড নেই" : wardLabel(w);
+  const rLabel = r => r === "" ? "(রেফারেন্স নেই)" : escMsgHtml(r);
+  const headers = ["রেফারেন্স"].concat(d.wards.map(w => escMsgHtml(wLabel(w))), ["মোট"]);
+  const rows = d.refs.map(r => [rLabel(r)].concat(d.wards.map(w => d.cell[r + "\u0001" + w] || "—"), [d.rowTot[r]]));
+  const foot = [["মোট"].concat(d.wards.map(w => d.colTot[w]), [d.total])];
+  printOfficialTable(
+    "রেফারেন্স ও ওয়ার্ড ভিত্তিক গ্রাহক সংখ্যা",
+    "ডিলার: " + (state.dealerName || "") + " — মোট গ্রাহক: " + d.total,
+    headers, rows, foot,
+    "@Powered by: AM Shahed: 01605721296",
+    [0],
+    { landscape: true }
+  );
 }
 
 /* ================= ডিলার: সংস্থার তথ্য (শুধু ভিউ + A4 প্রিন্ট) ================= */
@@ -4925,7 +4949,7 @@ function enqueueNewCustomer(data, msgBox){
 }
 
 function pendingCustomerRowsHtml(searchQ){
-  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${escMsgHtml(q.data["নাম"])}</td><td class="cell-left">${escMsgHtml(q.data["পিতারনাম"]||"")}</td><td>${escMsgHtml(q.data.mobile||"")}</td><td>${escMsgHtml(q.data.praptirsthan||"")}</td><td>${q.data.cardFee||0}</td><td>${escMsgHtml(q.data.reference||"")}</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${escMsgHtml(q.data["নাম"])}</td><td class="cell-left">${escMsgHtml(q.data["পিতারনাম"]||"")}</td><td>${escMsgHtml(q.data.mobile||"")}</td><td>${escMsgHtml(q.data.nid||"")}</td><td class="cell-left">${escMsgHtml(q.data["বাড়িরনাম"]||"")}</td><td class="cell-left">${escMsgHtml(q.data["গ্রাম"]||"")}</td><td>${escMsgHtml(q.data.ward||"")}</td><td class="cell-left">${escMsgHtml(q.data.union||"")}</td><td>${escMsgHtml(q.data.praptirsthan||"")}</td><td>${q.data.cardFee||0}</td><td>${escMsgHtml(q.data.reference||"")}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -5008,7 +5032,7 @@ async function shareCardImage(specs, fileName){
   const FONT = '"Hind Siliguri","Noto Sans Bengali","Kalpurush",Arial,sans-serif';
   try{ await document.fonts.load('16px "Hind Siliguri"'); await document.fonts.ready; }catch(e){}
   async function render(spec){
-    const W = spec.width || 900, PAD = 36, K = W / 900;
+    const W = spec.width || 900, PAD = 36, K = (W / 900) * (spec.fs || 1);
     const cv = document.createElement("canvas");
     const ctx = cv.getContext("2d");
     const IW = W - PAD * 2;
@@ -5076,7 +5100,7 @@ async function shareCardImage(specs, fileName){
       y += PAD;
       return y;
     }
-    const H = Math.ceil(run(false));
+    const H = Math.max(Math.ceil(run(false)), spec.minHeight || 0);
     const S = Math.min(2, 16000 / H);
     cv.width = Math.round(W * S); cv.height = Math.round(H * S);
     ctx.scale(S, S);
@@ -5132,17 +5156,13 @@ function shareSalesInvoiceById(invoiceNo){
 
 /* গ্রাহক তালিকা — ছবির পাতা (প্রতি ছবিতে ২৫ জন; বেশি হলে একাধিক ছবি একসাথে শেয়ার হয়) */
 function customerListShareSpecs(grouped, total){
-  const head = ["ক্রম", "নাম", "পিতার নাম", "মোবাইল নং", "NID/জন্মসনদ নং", "ঠিকানা", "প্রাপ্তির স্থান", "কার্ড ফি", "রেফারেন্স"];
-  const widths = [0.05, 0.14, 0.13, 0.11, 0.12, 0.17, 0.11, 0.07, 0.10];
-  const align = ["c", "l", "l", "c", "c", "l", "l", "c", "l"];
+  const head = CUS_LIST_HEAD;
+  const widths = [0.04, 0.055, 0.11, 0.09, 0.08, 0.09, 0.07, 0.07, 0.05, 0.08, 0.08, 0.05, 0.07, 0.065];
+  const align = ["c", "c", "l", "l", "c", "c", "l", "l", "c", "l", "l", "c", "l", "c"];
   const items = [];
-  grouped.groups.forEach(g => g.items.forEach((c, i) => items.push({ label: g.label, row: [
-    i + 1, c["নাম"] || "", c["পিতার নাম"] || "", c["মোবাইল নং"] || "", c["NID/জন্মসনদ নং"] || "",
-    [c["বাড়ির নাম"] || "", c["গ্রাম"] || "", c["ইউনিয়ন/পৌরসভা"] || "", c["ওয়ার্ড নং"] ? ("ওয়ার্ড-" + c["ওয়ার্ড নং"]) : ""].filter(Boolean).join(", "),
-    c["প্রাপ্তির স্থান"] || "", c["কার্ড ফি"] || 0, c["রেফারেন্স"] || ""
-  ] })));
-  const PER = 25, pages = [];
-  for(let s = 0; s < items.length; s += PER) pages.push(items.slice(s, s + PER));
+  grouped.groups.forEach(g => g.items.forEach((c, i) => items.push({ label: g.label, row: cusListRow(c, i) })));
+  const PER = 16, pages = [];     // প্রতি ছবিতে ১৬ সারি — A4 ল্যান্ডস্কেপ (297×210) অনুপাত
+  for(let st = 0; st < items.length; st += PER) pages.push(items.slice(st, st + PER));
   return pages.map((pg, pi) => {
     const blocks = []; let curLabel = null, cur = null;
     pg.forEach(it => {
@@ -5154,7 +5174,7 @@ function customerListShareSpecs(grouped, total){
       cur.rows.push(it.row);
     });
     return {
-      width: 1300, org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
+      width: 1754, minHeight: 1240, fs: 0.62, org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
       sub: "ডিলার: " + (state.dealerName || "") + " — " + grouped.desc + " — মোট গ্রাহক: " + total,
       title: "গ্রাহক তালিকা" + (pages.length > 1 ? " (পাতা " + (pi + 1) + "/" + pages.length + ")" : ""),
       blocks: blocks, footer: "@Powered by: AM Shahed: 01605721296"
@@ -5260,10 +5280,10 @@ function renderCustomersTable(customers){
   const _info = document.getElementById("cusSearchInfo");
   if(_info) _info.textContent = _q ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
   const table = document.getElementById("customersTable");
-  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
+  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
   const pendHtml = pendingCustomerRowsHtml(_q);
-  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(10, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
-  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td class="cell-left">${escMsgHtml(c["পিতার নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
+  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(16, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td class="cell-left">${escMsgHtml(c["পিতার নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["NID/জন্মসনদ নং"]||"")}</td><td class="cell-left">${escMsgHtml(c["বাড়ির নাম"]||"")}</td><td class="cell-left">${escMsgHtml(c["গ্রাম"]||"")}</td><td>${escMsgHtml(c["ওয়ার্ড নং"]||"")}</td><td class="cell-left">${escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td><td>${escMsgHtml(cusDateText(c))}</td>
       <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
         <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
@@ -5356,25 +5376,32 @@ function runPrintOpt(share){
   else printCustomersOfficial(grouped, total);
 }
 
+/* গ্রাহক তালিকার সব কলাম — প্রিন্ট ও শেয়ার (ছবি) দুটোতেই একই */
+const CUS_LIST_HEAD = ["ক্রম", "আইডি", "নাম", "পিতার নাম", "মোবাইল নং", "NID/জন্মসনদ নং", "বাড়ির নাম", "গ্রাম", "ওয়ার্ড নং", "ইউনিয়ন/পৌরসভা", "প্রাপ্তির স্থান", "কার্ড ফি", "রেফারেন্স", "নিবন্ধনের তারিখ"];
+function cusDateText(c){
+  const d = c["তারিখ"] ? new Date(c["তারিখ"]) : null;
+  return d && !isNaN(d) ? d.toLocaleDateString("en-GB") : "";
+}
+function cusListRow(c, i){
+  return [i + 1, c["CustomerID"] || "", c["নাম"] || "", c["পিতার নাম"] || "", c["মোবাইল নং"] || "", c["NID/জন্মসনদ নং"] || "",
+    c["বাড়ির নাম"] || "", c["গ্রাম"] || "", c["ওয়ার্ড নং"] || "", c["ইউনিয়ন/পৌরসভা"] || "",
+    c["প্রাপ্তির স্থান"] || "", c["কার্ড ফি"] || 0, c["রেফারেন্স"] || "", cusDateText(c)];
+}
+
 /* গ্রাহক তালিকা — অফিসিয়াল ফরম্যাটে প্রিন্ট (A4 ল্যান্ডস্কেপ, হেডার সেন্টার, ডাটা লেফট) */
 function printCustomersOfficial(grouped, total){
-  const headers = ["ক্রম", "নাম", "পিতার নাম", "মোবাইল নং", "NID/জন্মসনদ নং", "ঠিকানা", "প্রাপ্তির স্থান", "কার্ড ফি", "রেফারেন্স"];
   const rows = [];
   grouped.groups.forEach(g => {
     if(g.label) rows.push({ group: escMsgHtml(g.label) + " — " + g.items.length + " জন" });
-    g.items.forEach((c, i) => rows.push([
-      i+1, c["নাম"]||"", c["পিতার নাম"]||"", c["মোবাইল নং"]||"", c["NID/জন্মসনদ নং"]||"",
-      [c["বাড়ির নাম"]||"", c["গ্রাম"]||"", c["ইউনিয়ন/পৌরসভা"]||"", c["ওয়ার্ড নং"]?("ওয়ার্ড-"+c["ওয়ার্ড নং"]):""].filter(Boolean).join(", "),
-      c["প্রাপ্তির স্থান"]||"", c["কার্ড ফি"]||0, c["রেফারেন্স"]||""
-    ]));
+    g.items.forEach((c, i) => rows.push(cusListRow(c, i).map((v, ci) => [2,3,6,7,9,10,12].indexOf(ci) !== -1 ? escMsgHtml(v) : v)));
   });
   printOfficialTable(
     "গ্রাহক তালিকা",
     "ডিলার: " + (state.dealerName||"") + " — " + grouped.desc + " — মোট গ্রাহক: " + total,
-    headers, rows, null,
+    CUS_LIST_HEAD, rows, null,
     "@Powered by: AM Shahed: 01605721296",
-    [1,2,5,6,8],
-    { landscape:true, shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
+    [2,3,6,7,9,10,12],
+    { landscape:true, wrap:true, nowrapCols:[0,1,4,5,8,11,13], shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
   );
 }
 
