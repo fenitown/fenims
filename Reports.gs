@@ -159,10 +159,13 @@ function dealerReport(data) {
   function pkgName(id) { return pkgMap[id] ? pkgMap[id].name : "(অজানা প্যাকেজ)"; }
   function pkgBazar(id) { return pkgMap[id] ? pkgMap[id].bazar : 0; }
 
-  // ---- অর্ডার (এই ডিলারের, কনফার্ম হওয়া — "অপেক্ষমান" বাদ) ----
-  const orderLines = genericListRows(getSheet(masterSS, "SalesInvoice")).filter(function (e) {
+  // ---- অর্ডার (এই ডিলারের) ----
+  // confirmedLines: কনফার্ম হওয়া সব অর্ডার ("অপেক্ষমান" বাদ) — ডিপুকে পরিশোধ হিসাবের জন্য
+  // orderLines: শুধু "ডেলিভারি সম্পন্ন" অর্ডার — ক্রয়/স্টক এ কেবল ডেলিভারি পাওয়া পণ্যই ধরা হয়
+  const confirmedLines = genericListRows(getSheet(masterSS, "SalesInvoice")).filter(function (e) {
     return e["DealerID"] === dealerId && e["স্ট্যাটাস"] !== "অপেক্ষমান";
   });
+  const orderLines = confirmedLines.filter(function (e) { return e["স্ট্যাটাস"] === "ডেলিভারি সম্পন্ন"; });
 
   // প্যাকেজ-ভিত্তিক সর্বমোট ক্রয় (সংখ্যা ও কম্বো মূল্য) — গড় ক্রয় কম্বো মূল্য বের করার জন্য
   const bought = {};            // সব সময়
@@ -172,6 +175,8 @@ function dealerReport(data) {
     if (!bought[id]) bought[id] = { qty: 0, combo: 0 };
     bought[id].qty += n(e["সংখ্যা"]);
     bought[id].combo += n(e["মোট মূল্য"]);
+  });
+  confirmedLines.forEach(function (e) {
     const k = e["ইনভয়েস নং"];
     if (invPaid[k] === undefined) invPaid[k] = n(e["পরিশোধ"]);
   });

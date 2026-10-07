@@ -393,6 +393,22 @@
   </div>
 </div>
 
+<!-- ================= ডেলিভারির আগে বকেয়া আদায় মডাল ================= -->
+<div class="modal-overlay" id="siCollectModal">
+  <div class="modal-box" style="max-width:560px;">
+    <h3>ডেলিভারির আগে বকেয়া আদায়</h3>
+    <div id="siCollectInfo" style="font-size:0.9rem;"></div>
+    <div class="field"><label>এখন আদায় (টাকা)</label><input type="number" id="siCollectAmount" min="0" oninput="updateSiCollectPreview()"></div>
+    <p id="siCollectPreview" style="font-size:0.88rem;margin:4px 0 8px;"></p>
+    <p class="msg" id="siCollectMsg"></p>
+    <div class="btn-row">
+      <button class="btn" onclick="submitSiCollect(false)">আদায় করে ডেলিভারি সম্পন্ন</button>
+      <button class="btn secondary" onclick="submitSiCollect(true)">বকেয়া রেখে ডেলিভারির অনুমতি</button>
+      <button class="btn secondary" onclick="closeSiCollect()">বাতিল</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="newCusMsgModal">
   <div class="modal-box" style="max-width:440px;">
     <h3>কনফারমেশন মেসেজ</h3>
@@ -3817,10 +3833,75 @@ function editSalesInvoiceByNo(invoiceNo){
   document.getElementById("sec-salesInvoice").scrollIntoView({ behavior:"smooth" });
 }
 
+/* ইনভয়েসের হিসাব (ক্যাশ থেকে) — নীট পরিশোধযোগ্য, পরিশোধ ও বকেয়া */
+function siInvoiceSummary(invoiceNo){
+  const lines = salesInvoicesCache.filter(x => x["ইনভয়েস নং"] === invoiceNo);
+  if(lines.length === 0) return null;
+  const first = lines[0];
+  const discount = Number(first["ডিসকাউন্ট"]) || 0;
+  const net = lines.reduce((s, e) => s + (Number(e["পরিশোধযোগ্য মূল্য"]) || 0), 0) - discount;
+  const paid = Number(first["পরিশোধ"]) || 0;
+  return { lines, first, discount, net, paid, due: Math.round((net - paid) * 100) / 100 };
+}
+
+/* ডেলিভারি — বকেয়া না থাকলে সরাসরি সম্পন্ন; বকেয়া থাকলে কালেকশনের জন্য ইনভয়েস খুলবে */
 async function markSiDelivered(invoiceNo){
+  const sm = siInvoiceSummary(invoiceNo);
+  if(sm && sm.due > 0){ openSiCollect(invoiceNo); return; }
   if(!confirm("এই ইনভয়েসটি ডেলিভারি সম্পন্ন হিসেবে চিহ্নিত করবেন?")) return;
   const res = await apiCall("updateSalesInvoiceStatus", { invoiceNo, status: "ডেলিভারি সম্পন্ন" });
-  if(res.success){ clearCache(); loadSalesInvoices(); } else alert(res.message);
+  if(res.success){ clearCache(); loadSalesInvoices(); }
+  else if(res.needsCollection){ await loadSalesInvoices(); openSiCollect(invoiceNo); }   // ক্যাশ পুরনো ছিল
+  else alert(res.message);
+}
+
+let __siCollectInvoice = null;
+function openSiCollect(invoiceNo){
+  const sm = siInvoiceSummary(invoiceNo);
+  if(!sm) return;
+  __siCollectInvoice = invoiceNo;
+  const dt = sm.first["তারিখ"] ? new Date(sm.first["তারিখ"]).toLocaleDateString("bn-BD") : "";
+  const rows = sm.lines.map((e, i) => `<tr><td>${i+1}</td><td class="cell-left">${escMsgHtml(e["প্যাকেজ"]||"")}</td><td>${e["সংখ্যা"]||0}</td><td>${e["পরিশোধযোগ্য মূল্য"]||0}</td></tr>`).join("");
+  document.getElementById("siCollectInfo").innerHTML = `
+    <p style="margin:0 0 6px;">ইনভয়েস নং: <b>${escMsgHtml(invoiceNo)}</b> | তারিখ: ${dt}<br>ডিলার: <b>${escMsgHtml(sm.first["ডিলার নাম"]||"")}</b></p>
+    <div class="table-wrap"><table><thead><tr><th>ক্রম</th><th class="cell-left">প্যাকেজ</th><th>সংখ্যা</th><th>পরিশোধযোগ্য মূল্য</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p style="margin:8px 0 0;">ডিসকাউন্ট: ${sm.discount} | নীট পরিশোধযোগ্য: <b>${sm.net}</b> | পরিশোধ: ${sm.paid} | <span style="color:#b5502f;">বকেয়া: <b>${sm.due}</b></span></p>`;
+  document.getElementById("siCollectAmount").value = sm.due;
+  document.getElementById("siCollectMsg").textContent = "";
+  document.getElementById("siCollectMsg").className = "msg";
+  updateSiCollectPreview();
+  document.getElementById("siCollectModal").style.display = "flex";
+}
+function closeSiCollect(){
+  document.getElementById("siCollectModal").style.display = "none";
+  __siCollectInvoice = null;
+}
+function updateSiCollectPreview(){
+  const sm = __siCollectInvoice ? siInvoiceSummary(__siCollectInvoice) : null;
+  if(!sm) return;
+  const amt = Number(document.getElementById("siCollectAmount").value) || 0;
+  const rem = Math.round((sm.due - amt) * 100) / 100;
+  document.getElementById("siCollectPreview").textContent = rem > 0 ? "আদায়ের পর বাকি থাকবে: " + rem + " টাকা" : "আদায়ের পর কোনো বকেয়া থাকবে না";
+}
+async function submitSiCollect(allowDue){
+  const inv = __siCollectInvoice;
+  const sm = inv ? siInvoiceSummary(inv) : null;
+  if(!sm) return;
+  const msg = document.getElementById("siCollectMsg");
+  const amount = Number(document.getElementById("siCollectAmount").value) || 0;
+  if(amount < 0 || amount > sm.due){ msg.textContent = "আদায়ের পরিমাণ ০ থেকে বকেয়া (" + sm.due + ") এর মধ্যে হতে হবে"; msg.className = "msg err"; return; }
+  const rem = Math.round((sm.due - amount) * 100) / 100;
+  if(rem > 0){
+    if(!allowDue){
+      msg.textContent = "এখনো বকেয়া " + rem + " টাকা আছে — পুরো বকেয়া আদায় করুন, অথবা \"বকেয়া রেখে ডেলিভারির অনুমতি\" দিন। অনুমতি না দিলে ডেলিভারি সম্পন্ন হবে না।";
+      msg.className = "msg err"; return;
+    }
+    if(!confirm("বকেয়া " + rem + " টাকা রেখে ডেলিভারি সম্পন্ন করবেন?")) return;
+  }
+  markSaving("siCollectMsg");
+  const res = await apiCall("updateSalesInvoiceStatus", { invoiceNo: inv, status: "ডেলিভারি সম্পন্ন", collectAmount: amount, allowDue: !!allowDue });
+  if(res.success){ closeSiCollect(); clearCache(); loadSalesInvoices(); }
+  else { msg.textContent = res.message; msg.className = "msg err"; }
 }
 
 async function deleteSalesInvoiceByNo(invoiceNo){
@@ -5545,6 +5626,7 @@ async function loadSalesSetup(){
   allPackagesCache = res.success ? res.packages : [];
   allCustomersCache = res.success ? res.customers : [];
   allSalesCache = res.success ? res.sales : [];
+  window.__deliveredQty = res.success && res.delivered ? res.delivered : null;   // প্যাকেজ → ডেলিভারি পাওয়া সংখ্যা
 
   const pkgSel = document.getElementById("saleFilterPackage");
   pkgSel.innerHTML = "<option value=''>-- সিলেক্ট করুন --</option>" +
@@ -5558,6 +5640,22 @@ async function loadSalesSetup(){
     (wards.length ? `<optgroup label="ওয়ার্ড নং">` + wards.map(w => `<option value="ward:${escMsgHtml(w)}">${escMsgHtml(wardLabel(w))}</option>`).join("") + `</optgroup>` : "");
 
   renderSalesTable();
+}
+
+/* প্যাকেজের বর্তমান স্টক = ডেলিভারি পাওয়া − বিক্রিত (ডেলিভারি তথ্য না থাকলে সার্ভারই যাচাই করবে) */
+function saleStockLeft(pkgId){
+  if(!window.__deliveredQty) return Infinity;
+  const sold = allSalesCache.filter(s => s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত").length;
+  return (window.__deliveredQty[pkgId] || 0) - sold;
+}
+function updateSalePackageStockLabels(){
+  const sel = document.getElementById("saleFilterPackage");
+  if(!sel || !window.__deliveredQty) return;
+  [...sel.options].forEach(o => {
+    if(!o.value) return;
+    if(!o.dataset.name) o.dataset.name = o.textContent;
+    o.textContent = o.dataset.name + " (স্টক: " + saleStockLeft(o.value) + ")";
+  });
 }
 
 async function loadSalesView(){
@@ -5613,6 +5711,7 @@ function printSalesOfficial(grouped, total){
 }
 
 function renderSalesTable(){
+  updateSalePackageStockLabels();
   const pkgId = document.getElementById("saleFilterPackage").value;
   const table = document.getElementById("salesTable");
 
@@ -5714,6 +5813,11 @@ function printThermalReceipt(c, packageId){
 
 async function makeSale(customerId, packageId, priceInputId){
   if(!packageId){ alert("আগে প্যাকেজ সিলেক্ট করুন"); return; }
+  if(saleStockLeft(packageId) <= 0){
+    const m = document.getElementById("salesMsg");
+    m.textContent = "এই প্যাকেজের পণ্য স্টকে নেই, বিক্রি করা যাবে না"; m.className = "msg err";
+    return;
+  }
   const priceInput = priceInputId ? document.getElementById(priceInputId) : null;
   const price = priceInput ? priceInput.value : 0;
 

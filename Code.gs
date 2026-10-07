@@ -569,7 +569,7 @@ const CACHEABLE_READS = {
   dealerReport:1, agencySalesReport:1, depotReport:1, dailyReport:1, monthlyReport:1, totalReport:1
 };
 const READ_CACHE_TTL = 300;
-const READ_CACHE_SALT = "r3";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
+const READ_CACHE_SALT = "r4";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
 const BACKEND_VERSION = "2026-10-06.5";

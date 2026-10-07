@@ -337,21 +337,71 @@ function updateSalesInvoiceStatus(data) {
   const perm = checkAgencyPermission(data.token);
   if (!perm.ok) return { success: false, message: perm.message };
 
+  const status = data.status || "ডেলিভারি সম্পন্ন";
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "SalesInvoice");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const idxInv = headers.indexOf("ইনভয়েস নং");
-  const idxStatus = headers.indexOf("স্ট্যাটাস");
 
-  let found = false;
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][idxInv] === data.invoiceNo) {
-      sheet.getRange(i + 1, idxStatus + 1).setValue(data.status || "ডেলিভারি সম্পন্ন");
-      found = true;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idxInv = headers.indexOf("ইনভয়েস নং");
+    const idxStatus = headers.indexOf("স্ট্যাটাস");
+    const idxPaid = headers.indexOf("পরিশোধ");
+    const idxDue = headers.indexOf("বকেয়া");
+    const idxPayable = headers.indexOf("পরিশোধযোগ্য মূল্য");
+    const idxDiscount = headers.indexOf("ডিসকাউন্ট");
+
+    const rowIdx = [];
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idxInv] === data.invoiceNo) rowIdx.push(i);
     }
+    if (rowIdx.length === 0) return { success: false, message: "ইনভয়েস পাওয়া যায়নি" };
+
+    let collect = 0, newPaid = null, newDue = null;
+    if (status === "ডেলিভারি সম্পন্ন") {
+      const first = values[rowIdx[0]];
+      if (first[idxStatus] === "অপেক্ষমান") {
+        return { success: false, message: "অর্ডারটি এখনো কনফার্ম করা হয়নি — আগে কনফার্ম করুন" };
+      }
+
+      // বকেয়া যাচাই — বকেয়া থাকলে হয় আদায় করতে হবে, নয়তো বকেয়া রেখে ডেলিভারির অনুমতি (allowDue) লাগবে
+      let payable = 0;
+      rowIdx.forEach(function (i) { payable += Number(values[i][idxPayable]) || 0; });
+      const net = payable - (Number(first[idxDiscount]) || 0);
+      const paid = Number(first[idxPaid]) || 0;
+      const dueNow = Math.round((net - paid) * 100) / 100;
+
+      collect = Number(data.collectAmount) || 0;
+      if (collect < 0 || collect > Math.max(dueNow, 0) + 0.009) {
+        return { success: false, message: "আদায়ের পরিমাণ ০ থেকে বকেয়া (" + dueNow + ") এর মধ্যে হতে হবে", due: dueNow };
+      }
+      newPaid = paid + collect;
+      newDue = Math.round((net - newPaid) * 100) / 100;
+
+      if (newDue > 0.009 && data.allowDue !== true) {
+        return {
+          success: false, needsCollection: true, due: newDue,
+          message: "ইনভয়েসে বকেয়া " + newDue + " টাকা আছে — বকেয়া আদায় করুন অথবা বকেয়া রেখে ডেলিভারির অনুমতি দিন"
+        };
+      }
+    }
+
+    rowIdx.forEach(function (i) {
+      if (collect > 0) {
+        sheet.getRange(i + 1, idxPaid + 1).setValue(newPaid);
+        sheet.getRange(i + 1, idxDue + 1).setValue(newDue);
+      }
+      sheet.getRange(i + 1, idxStatus + 1).setValue(status);
+    });
+    return {
+      success: true, due: newDue, paid: newPaid,
+      message: (collect > 0 ? collect + " টাকা আদায় হয়েছে। " : "") + "স্ট্যাটাস আপডেট হয়েছে"
+    };
+  } finally {
+    lock.releaseLock();
   }
-  return { success: found, message: found ? "স্ট্যাটাস আপডেট হয়েছে" : "ইনভয়েস পাওয়া যায়নি" };
 }
 
 /*******************************************************

@@ -572,24 +572,53 @@ function deletePackage(data) {
 /*=========================================================
  *  বিক্রি (Sales) — Admin + প্রতিনিধি
  *=======================================================*/
+/*******************************************************
+ * ডিলারের প্যাকেজ ভিত্তিক স্টক = ডিপু থেকে "ডেলিভারি সম্পন্ন" হওয়া অর্ডারের সংখ্যা − বিক্রিত।
+ * অপেক্ষমান/পেন্ডিং (ডেলিভারি হয়নি এমন) অর্ডার স্টকে ধরা হয় না।
+ *******************************************************/
+function getDealerDeliveredQtyMap(masterSS, dealerId) {
+  const map = {};
+  genericListRows(getSheet(masterSS, "SalesInvoice")).forEach(function (e) {
+    if (e["DealerID"] !== dealerId || e["স্ট্যাটাস"] !== "ডেলিভারি সম্পন্ন") return;
+    map[e["PackageID"]] = (map[e["PackageID"]] || 0) + (Number(e["সংখ্যা"]) || 0);
+  });
+  return map;
+}
+
 function addSale(data) {
   const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
   if (!perm.ok) return { success: false, message: perm.message };
 
   const ss = getDealerSpreadsheet(perm.payload.dealerId);
   const sheet = getSheet(ss, "Sales");
-  const saleId = generateId(sheet, "S");
 
-  genericAddRow(sheet, {
-    "SaleID": saleId,
-    "CustomerID": data.customerId,
-    "PackageID": data.packageId,
-    "তারিখ": new Date(),
-    "মূল্য": data.price || 0,
-    "স্ট্যাটাস": "বিক্রিত"
-  });
+  // দুটি বিক্রি একসাথে এলে যেন একই শেষ স্টক দুইবার বিক্রি না হয়
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    // স্টক যাচাই — প্যাকেজের পণ্য স্টকে না থাকলে বিক্রি হবে না
+    const delivered = getDealerDeliveredQtyMap(getMasterSS(), perm.payload.dealerId)[data.packageId] || 0;
+    let sold = 0;
+    genericListRows(sheet).forEach(function (s) {
+      if (s["PackageID"] === data.packageId && s["স্ট্যাটাস"] === "বিক্রিত") sold++;
+    });
+    if (delivered - sold <= 0) {
+      return { success: false, message: "এই প্যাকেজের পণ্য স্টকে নেই, বিক্রি করা যাবে না" };
+    }
 
-  return { success: true, saleId: saleId, message: "বিক্রি সম্পন্ন হয়েছে" };
+    const saleId = generateId(sheet, "S");
+    genericAddRow(sheet, {
+      "SaleID": saleId,
+      "CustomerID": data.customerId,
+      "PackageID": data.packageId,
+      "তারিখ": new Date(),
+      "মূল্য": data.price || 0,
+      "স্ট্যাটাস": "বিক্রিত"
+    });
+    return { success: true, saleId: saleId, message: "বিক্রি সম্পন্ন হয়েছে" };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /*******************************************************
@@ -642,7 +671,8 @@ function getSalesPageData(data) {
     success: true,
     packages: pkgResult.success ? pkgResult.packages : [],
     customers: customers,
-    sales: sales
+    sales: sales,
+    delivered: getDealerDeliveredQtyMap(getMasterSS(), perm.payload.dealerId)   // প্যাকেজ → ডেলিভারি সম্পন্ন সংখ্যা (স্টক যাচাইয়ের জন্য)
   };
 }
 
@@ -669,12 +699,12 @@ function getDashboardSummary(data) {
 
   const runningPackages = packages.filter(function (p) { return p["ধরন"] === "এক্টিভ"; });
 
-  // মোট সংখ্যা ও বর্তমান স্টক — রিপোর্টের হিসাবের সাথে মিল রেখে: কনফার্ম হওয়া অর্ডার
-  // ("অপেক্ষমান" বাদ) এর প্যাকেজ সংখ্যার যোগফল; স্টক = প্যাকেজ ভিত্তিক (ক্রয় − বিক্রি), ঋণাত্মক হলে ০
+  // মোট সংখ্যা ও বর্তমান স্টক — রিপোর্টের হিসাবের সাথে মিল রেখে: শুধু "ডেলিভারি সম্পন্ন"
+  // অর্ডারের প্যাকেজ সংখ্যার যোগফল; স্টক = প্যাকেজ ভিত্তিক (ডেলিভারি পাওয়া − বিক্রি), ঋণাত্মক হলে ০
   let totalOrderQty = 0;
   const boughtQty = {};
   invoiceLines.forEach(function (e) {
-    if (e["স্ট্যাটাস"] === "অপেক্ষমান") return;
+    if (e["স্ট্যাটাস"] !== "ডেলিভারি সম্পন্ন") return;
     const q = Number(e["সংখ্যা"]) || 0;
     totalOrderQty += q;
     boughtQty[e["PackageID"]] = (boughtQty[e["PackageID"]] || 0) + q;
