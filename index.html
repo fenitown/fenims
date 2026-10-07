@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ফেনী মানবিক সহায়তা (MSDS)</title>
+<title>ফেনী মানবিক সহায়তা (fenims)</title>
 <link id="faviconLink" rel="icon" type="image/png" href="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -62,10 +62,11 @@
     width:44px; height:44px; border-radius:50%;
     background:linear-gradient(135deg,var(--teal),var(--teal-dark));
     color:#fff; display:flex; align-items:center; justify-content:center;
-    font-weight:800; font-size:0.78rem; margin:0 auto 8px;
-    letter-spacing:0.5px;
+    font-weight:800; font-size:0.66rem; margin:0 auto 8px;
+    letter-spacing:0; overflow:hidden;
     box-shadow:0 6px 16px rgba(21,63,55,0.28);
   }
+  .login-avatar img{ width:100%; height:100%; object-fit:contain; background:#fff; }
   .login-box h1{ font-size:1.15rem; margin:0 0 1px; color:var(--teal-dark); }
   .login-box .tagline{ font-size:0.78rem; color:var(--clay); font-weight:600; margin:0 0 10px; }
   .login-box p.sub{ margin:0 0 12px; color:var(--muted); font-size:0.8rem; }
@@ -119,7 +120,7 @@
     background:var(--clay);
     color:#fff;
     display:flex; align-items:center; justify-content:center;
-    font-weight:800; font-size:0.78rem;
+    font-weight:800; font-size:0.66rem;
     overflow:hidden;
   }
   .brand .logo img{ width:100%; height:100%; object-fit:cover; }
@@ -218,6 +219,20 @@
   .item-row-v2 > input{ flex:1 1 110px; min-width:0; }
   .item-row-v2 > input.itemNaamPoriman{ flex:2 1 160px; }
   .item-row-v2 > button{ flex:0 0 auto; }
+  /* প্যাকেজ ফরম: কম্পিউটার-মোবাইল সবখানে এক লাইনে একটি পণ্য (নাম | বাজার | কম্বো | সাশ্রয় | ✕) */
+  #pkgItems{ overflow-x:auto; padding-bottom:2px; }
+  #pkgItems .item-row-v2{ flex-wrap:nowrap; align-items:center; gap:6px; }
+  #pkgItems .item-row-v2 > input{ flex:0 0 84px; width:84px; min-width:0; }
+  #pkgItems .item-row-v2 > input.itemNaamPoriman{ flex:1 1 180px; width:auto; min-width:110px; }
+  #pkgItems .item-row-v2 > button{ flex:0 0 auto; padding:6px 9px; }
+  #pkgItems input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
+  #pkgItems input[type=number]::-webkit-inner-spin-button, #pkgItems input[type=number]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
+  @media (max-width:600px){
+    #pkgItems .item-row-v2{ gap:4px; }
+    #pkgItems .item-row-v2 > input{ flex:0 0 56px; width:56px; padding:7px 3px; font-size:0.78rem; text-align:center; }
+    #pkgItems .item-row-v2 > input.itemNaamPoriman{ flex:1 1 90px; min-width:90px; padding:7px 6px; text-align:left; }
+    #pkgItems .item-row-v2 > button{ padding:6px 7px; font-size:0.8rem; }
+  }
   .expense-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
   .expense-row > input{ flex:1 1 110px; min-width:0; }
   .expense-row > input.expDesc{ flex:2 1 160px; }
@@ -308,8 +323,8 @@
 <!-- ================= লগইন স্ক্রিন ================= -->
 <div id="loginScreen">
   <div class="login-box">
-    <div class="login-avatar">MSDS</div>
-    <h1>ফেনী মানবিক সহায়তা</h1>
+    <div class="login-avatar">fenims</div>
+    <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
     <p class="tagline">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
     <p class="sub">ইউজার, ইউজারনেম ও পাসওয়ার্ড দিয়ে প্রবেশ করুন</p>
     <div class="field">
@@ -415,7 +430,7 @@
 <div id="appScreen">
   <header class="topbar">
     <div class="brand">
-      <div class="logo" id="hdrLogoBox">MSDS</div>
+      <div class="logo" id="hdrLogoBox">fenims</div>
       <div class="names">
         <div class="agency" id="hdrDealerName">—</div>
         <div class="dealer" id="hdrTagline">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</div>
@@ -714,11 +729,11 @@
         <div class="form-grid">
           <div class="field"><label>নাম</label><input id="cusNaam"></div>
           <div class="field"><label>পিতার নাম</label><input id="cusPitarNaam"></div>
-          <div class="field"><label>মোবাইল নং</label><input id="cusMobile" maxlength="11"></div>
-          <div class="field"><label>NID/জন্মসনদ নং</label><input id="cusNid"></div>
+          <div class="field"><label>মোবাইল নং</label><input id="cusMobile" maxlength="11" inputmode="numeric" oninput="this.value=toEnDigits(this.value)"></div>
+          <div class="field"><label>NID/জন্মসনদ নং</label><input id="cusNid" inputmode="numeric" oninput="this.value=toEnDigits(this.value)"></div>
           <div class="field"><label>বাড়ির নাম</label><input id="cusBariNaam"></div>
           <div class="field"><label>গ্রাম</label><input id="cusGram"></div>
-          <div class="field"><label>ওয়ার্ড নং</label><input id="cusWard"></div>
+          <div class="field"><label>ওয়ার্ড নং</label><input id="cusWard" inputmode="numeric" oninput="this.value=toEnDigits(this.value)"></div>
           <div class="field"><label>ইউনিয়ন/পৌরসভা</label><input id="cusUnion"></div>
           <div class="field"><label>প্রাপ্তির স্থান</label><input id="cusPraptirSthan"></div>
           <div class="field"><label>কার্ড ফি</label><input id="cusCardFee" type="number" min="0"></div>
@@ -917,6 +932,20 @@
 /* ============================================================
    কনফিগারেশন
    ============================================================ */
+/* বাংলা অঙ্ক → ইংরেজি অঙ্ক; শপের পুরনো নাম → নতুন নাম (সব API উত্তরে) */
+function toEnDigits(v){ return String(v == null ? "" : v).replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d))); }
+function fixOrgName(t){ return t.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)"); }
+function fixCustDigits(c){
+  if(!c || typeof c !== "object") return;
+  ["মোবাইল নং", "NID/জন্মসনদ নং", "ওয়ার্ড নং"].forEach(k => { if(c[k] != null && c[k] !== "") c[k] = toEnDigits(c[k]); });
+}
+function fixApiJson(j){
+  if(j && typeof j === "object"){
+    if(Array.isArray(j.customers)) j.customers.forEach(fixCustDigits);
+  }
+  return j;
+}
+
 const API_URL = "https://script.google.com/macros/s/AKfycbxmseU_Vj8xwWzq9rxK6b8NN5ZPvb3GNlc-LNN-hgwa2kr3kS6lAe11ZWseK7qd9PuB-g/exec";
 
 
@@ -936,7 +965,7 @@ const _icp = {
 const IC = {};
 Object.keys(_icp).forEach(k => { IC[k] = '<svg viewBox="0 0 24 24" aria-hidden="true">' + _icp[k] + '</svg>'; });
 
-let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null };
+let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null, dealerUnion:"" };
 
 /* যেসব অনুরোধ ডাটা বদলায় (সংরক্ষণ/এডিট/ডিলিট) — এগুলোতে ইউনিক requestId যায়,
    যাতে নেটওয়ার্ক সমস্যায় আবার পাঠালেও সার্ভার দুইবার সংরক্ষণ না করে */
@@ -980,9 +1009,9 @@ async function apiCallRaw(action, data){
     const timer = setTimeout(() => ctrl.abort(), _tmo[Math.min(attempt - 1, _tmo.length - 1)]);
     try{
       const res = await fetch(API_URL, { method:"POST", body: JSON.stringify({ action, data }), signal: ctrl.signal });
-      const text = await res.text();
+      const text = fixOrgName(await res.text());
       try{
-        const json = JSON.parse(text);
+        const json = fixApiJson(JSON.parse(text));
         if(mutating) showCallTiming(action, performance.now() - tStart, json && json._ms, attempt);
         return json;
       }
@@ -1022,12 +1051,31 @@ function emptyRowHtml(colspan, message){
 const _cache = {};
 const _inflight = {};
 async function cachedApiCall(action, data, ttlMs){
-  ttlMs = ttlMs || 20000;
+  ttlMs = Math.max(ttlMs || 20000, 90000);   // কমপক্ষে ৯০ সেকেন্ড তাজা; নিজের যেকোনো সংরক্ষণে ক্যাশ নিজে থেকেই মুছে যায়
   data = data || {};
   const key = action + "::" + JSON.stringify(data);
   const now = Date.now();
-  if(_cache[key] && (now - _cache[key].time) < ttlMs){
-    return _cache[key].value;
+  const hit = _cache[key];
+  if(hit){
+    const age = now - hit.time;
+    if(age < ttlMs) return hit.value;
+    // পুরনো (২০ মিনিটের ভেতর) — সাথে সাথে দেখানো, পেছনে নতুন তথ্য এনে ক্যাশ হালনাগাদ; বদলালে খোলা তালিকা নিজে নতুন হয়
+    if(age < 20 * 60 * 1000){
+      if(!_inflight[key]){
+        const gen0 = _cacheGen;
+        _inflight[key] = apiCall(action, data).then(res => {
+          delete _inflight[key];
+          if(res && res.success && gen0 === _cacheGen){
+            const old = hit.value;
+            _cache[key] = { time: Date.now(), value: res };
+            if(_apiChanged(old, res)) softRefreshActiveSection();
+          }
+          return res;
+        }, err => { delete _inflight[key]; });
+        _inflight[key].catch(() => {});
+      }
+      return hit.value;
+    }
   }
   // একই কল ইতিমধ্যে চলছে (যেমন লগইনের পর প্রি-লোড) — নতুন কল না করে সেটারই অপেক্ষা
   if(_inflight[key]) return _inflight[key];
@@ -1039,15 +1087,34 @@ async function cachedApiCall(action, data, ttlMs){
   }, err => { delete _inflight[key]; throw err; });
   return _inflight[key];
 }
+function _apiChanged(a, b){
+  try{ return JSON.stringify(Object.assign({}, a, {_ms:0})) !== JSON.stringify(Object.assign({}, b, {_ms:0})); }catch(e){ return false; }
+}
+/* পেছনে আনা নতুন তথ্য আগের থেকে আলাদা হলে, খোলা তালিকা-সেকশন (ফরম ছাড়া) চুপচাপ আবার আঁকা */
+function softRefreshActiveSection(){
+  try{
+    const ae = document.activeElement;
+    if(ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;      // কেউ লিখছে — বিরক্ত করা হবে না
+    const sec = document.querySelector(".section.active");
+    if(!sec) return;
+    const name = sec.id.replace(/^sec-/, "");
+    const map = { dashboard: "loadDashboard", agencyDashboard: "loadAgencyDashboard", customers: "loadCustomers", packages: "loadDealerPackages", agencyPackages: "loadAgencyPackages" };
+    if(map[name] && typeof window[map[name]] === "function") window[map[name]]();
+  }catch(e){}
+}
 /* সার্ভারকে আবার না ডেকে, হাতে থাকা সর্বশেষ তথ্য সরাসরি ক্যাশে বসানো (সংরক্ষণের পর তালিকা তাৎক্ষণিক আপডেটের জন্য) */
 function seedCache(action, data, value){
   _cache[action + "::" + JSON.stringify(data || {})] = { time: Date.now(), value: value };
 }
 let _cacheGen = 0;
+let _pfTimer = null;
 function clearCache(){
   _cacheGen++;                               // চলমান পুরনো কলের ফল ক্যাশে ঢুকবে না
   Object.keys(_cache).forEach(k => delete _cache[k]);
   Object.keys(_inflight).forEach(k => delete _inflight[k]);
+  // সংরক্ষণের পর সব প্রধান তালিকা পেছনে আবার আনা — মেনুতে গেলেই তৈরি পাওয়া যায়
+  clearTimeout(_pfTimer);
+  _pfTimer = setTimeout(() => { try{ if(state && state.token) prefetchAfterLogin(); }catch(e){} }, 1500);
 }
 
 /*******************************************************
@@ -1085,20 +1152,52 @@ function warmServer(){
 warmServer();
 setInterval(warmServer, 4 * 60 * 1000);
 
-/* লগইনের পর যে তালিকাগুলো প্রথমে লাগে সেগুলো পেছনে আগে থেকেই এনে রাখা — সেকশন খুললেই তাৎক্ষণিক দেখা যায় */
-function prefetchAfterLogin(){
+/* লগইন পেজের উপরের গোল শেপে এজেন্সির লোগো — আগের বারের লোগো সাথে সাথে, নতুনটা পেছনে এনে হালনাগাদ */
+function setLoginLogo(url){
+  const el = document.querySelector(".login-avatar");
+  if(!el) return;
+  if(url){ el.innerHTML = ""; const im = document.createElement("img"); im.alt = ""; im.src = url; el.appendChild(im); }
+  else { el.textContent = "fenims"; }
+}
+(function initLoginBranding(){
+  try{ const c = localStorage.getItem("fenims_login_logo"); if(c) setLoginLogo(c); }catch(e){}
   try{
+    fetch(API_URL, { method:"POST", body: JSON.stringify({ action:"getLoginBranding", data:{} }) })
+      .then(r => r.text()).then(t => {
+        const j = JSON.parse(t);
+        if(j && j.success){
+          setLoginLogo(j.logo || "");
+          try{ if(j.logo) localStorage.setItem("fenims_login_logo", j.logo); else localStorage.removeItem("fenims_login_logo"); }catch(e){}
+        }
+      }).catch(() => {});
+  }catch(e){}
+})();
+
+/* লগইনের পর যে তালিকাগুলো প্রথমে লাগে সেগুলো পেছনে আগে থেকেই এনে রাখা — সেকশন খুললেই তাৎক্ষণিক দেখা যায় */
+async function prefetchAfterLogin(){
+  try{
+    let jobs;
     if(state.dealerId === "AGENCY"){
-      cachedApiCall("listDealers", {}, 60000);
-      cachedApiCall("listPackages", {}, 60000);
+      jobs = [
+        ["listDealers", {}], ["listPackages", {}], ["depotReport", { mode: "total" }], ["getAgencyInfo", {}], ["getAbout", {}],
+        ["listProducts", {}], ["listCommissions", {}], ["listExpenses", {}], ["listIncomeReceipts", {}]
+      ];
     } else {
-      // একটি কলেই প্যাকেজ + গ্রাহক + বিক্রি — শীট একবার খোলে; তারপর গ্রাহক/প্যাকেজ তালিকার ক্যাশ ভরে দেওয়া হয়
-      cachedApiCall("getSalesPageData", {}, 60000).then(r => {
-        if(r && r.success && state.token){
+      jobs = [
+        ["getSalesPageData", {}], ["dashboardSummary", {}], ["listExpenseVouchers", {}], ["listIncomeReceipts", {}],
+        ["getAbout", {}], ["getAgencyInfo", {}]
+      ];
+    }
+    // একসাথে ৩টি করে, যাতে ব্যবহারকারীর নিজের অনুরোধ আটকে না যায়
+    for(let i = 0; i < jobs.length; i += 3){
+      if(!state.token) return;
+      await Promise.all(jobs.slice(i, i + 3).map(j => cachedApiCall(j[0], j[1], 120000).then(r => {
+        if(j[0] === "getSalesPageData" && r && r.success && state.token){
+          // একটি কলেই প্যাকেজ + গ্রাহক + বিক্রি — তালিকার ক্যাশও ভরে দেওয়া হয়
           seedCache("listCustomers", {}, { success:true, customers:r.customers });
           seedCache("listPackages", {}, { success:true, packages:r.packages });
         }
-      }).catch(() => {});
+      }).catch(() => {})));
     }
   }catch(e){}
 }
@@ -1255,7 +1354,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
     ${opts.shareSpecs ? '<div class="share-bar no-print"><button onclick="doShare()">শেয়ার (ছবি)</button></div>' : ''}
     <div class="sheet">
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা</h1>
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">${title}</div>
     </div>
@@ -1326,6 +1425,7 @@ async function doLogin(){
   state.name = res.name;
   state.dealerPhotoUrl = res.dealerPhotoUrl || "";
   state.dealerMobile = res.dealerMobile || "";
+  state.dealerUnion = res.dealerUnion || "";
   state.dealerFacebookLink = res.dealerFacebookLink || "";
 
   // এজেন্সির লোগো/নাম আনার জন্য আর অপেক্ষা করা হয় না — অ্যাপ সাথে সাথে খুলে যায়,
@@ -1346,7 +1446,7 @@ async function doLogin(){
 
 async function applyAgencyBranding(){
   const agencyRes = await cachedApiCall("getAgencyInfo", {}, 60000);
-  const agencyName = (agencyRes.success && agencyRes.agency["নাম"]) ? agencyRes.agency["নাম"] : "ফেনী মানবিক সহায়তা";
+  const agencyName = (agencyRes.success && agencyRes.agency["নাম"]) ? agencyRes.agency["নাম"] : "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)";
   const agencyLogoUrl = (agencyRes.success && agencyRes.agency["লোগো(URL)"]) ? agencyRes.agency["লোগো(URL)"] : "";
   if(!state.token) return;   // এর মধ্যে লগআউট হয়ে গেলে কিছু করবে না
 
@@ -1358,7 +1458,7 @@ async function applyAgencyBranding(){
   if(agencyLogoUrl){
     logoBox.innerHTML = `<img src="${agencyLogoUrl}" style="width:100%;height:100%;object-fit:contain;background:#fff;">`;
   } else {
-    logoBox.innerHTML = "MSDS";
+    logoBox.innerHTML = "fenims";
   }
 }
 
@@ -1393,7 +1493,7 @@ function doLogout(){
   clearCache();
   closeAllSubMenus();
   state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null };
-  document.getElementById("hdrLogoBox").innerHTML = "MSDS";
+  document.getElementById("hdrLogoBox").innerHTML = "fenims";
   document.getElementById("appScreen").style.display = "none";
   document.getElementById("loginScreen").style.display = "flex";
   document.getElementById("loginUsername").value = "";
@@ -1945,7 +2045,7 @@ function showSection(name){
   if(name === "dashboard") loadDashboard();
   if(name === "about") loadAboutView();
   if(name === "packages") loadDealerPackages();
-  if(name === "customers") loadCustomers();
+  if(name === "customers"){ fillDefaultCusUnion(); loadCustomers(); }
   if(name === "messages"){
     document.getElementById("msgSetupToggleBtn").style.display = (state.role === "Admin") ? "inline-block" : "none";
     loadMessagesSection();
@@ -1954,6 +2054,33 @@ function showSection(name){
   if(name === "expenseVoucher") loadDealerExpenseVouchers();
   if(name === "income") loadIncomeSection();
   if(name === "reports") switchReportTab("daily", document.querySelector("#sec-reports .tabs button"));
+}
+
+/* ডিলারের ঠিকানা: ৩ ঘর (ইউনিয়ন/পৌরসভা, উপজেলা, জেলা) — প্রিন্টে একটিতে, প্রতিটার পর কমা দিয়ে */
+function dealerThikanaCombined(){
+  return ["rUnion", "rUpozila", "rJela"].map(id => document.getElementById(id).value.trim()).filter(Boolean).join(", ");
+}
+function dealerAddrText(d){
+  const p = [d["ইউনিয়ন/পৌরসভা"], d["উপজেলা"], d["জেলা"]].map(x => String(x == null ? "" : x).trim()).filter(Boolean);
+  return p.length ? p.join(", ") : (d["ঠিকানা"] || "");
+}
+function fillDealerAddress(d){
+  let u = d["ইউনিয়ন/পৌরসভা"] || "", up = d["উপজেলা"] || "", j = d["জেলা"] || "";
+  if(!u && !up && !j && d["ঠিকানা"]){      // পুরনো একক ঠিকানা — কমা দিয়ে ৩ ভাগ থাকলে ভাগ করে বসানো
+    const parts = String(d["ঠিকানা"]).split(",").map(x => x.trim()).filter(Boolean);
+    if(parts.length === 3){ u = parts[0]; up = parts[1]; j = parts[2]; } else { u = String(d["ঠিকানা"]); }
+  }
+  document.getElementById("rUnion").value = u;
+  document.getElementById("rUpozila").value = up;
+  document.getElementById("rJela").value = j;
+}
+
+/* গ্রাহক ফরমের ইউনিয়ন/পৌরসভা — লগইন করা ডিলারের ইউনিয়ন অটো বসে (চাইলে বদলানো যায়) */
+function fillDefaultCusUnion(){
+  try{
+    const el = document.getElementById("cusUnion");
+    if(el && !editingCustomerId && !el.value && state.dealerUnion) el.value = state.dealerUnion;
+  }catch(e){}
 }
 
 /* ================= এজেন্সি: ড্যাশবোর্ড ================= */
@@ -2035,7 +2162,7 @@ function renderRegisterForm(box){
   editingDealerId = null;
   box.innerHTML = `
     <div class="official-letterhead">
-      <div class="ol-title">ফেনী মানবিক সহায়তা</div>
+      <div class="ol-title">ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</div>
       <div class="ol-tagline">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</div>
       <div class="ol-formtitle" id="registerFormLegend">ডিলার নিয়োগ / রেজিস্ট্রেশন ফরম</div>
     </div>
@@ -2050,7 +2177,9 @@ function renderRegisterForm(box){
         <div class="field"><label>NID/জন্মসনদ নং</label><input id="rNid"></div>
         <div class="field"><label>ট্রেড লাইসেন্স নং</label><input id="rTrade"></div>
         <div class="field"><label>এরিয়া</label><input id="rArea" placeholder="যেমন: ৮নং আমিরাবাদ ইউনিয়ন"></div>
-        <div class="field" style="grid-column:1/-1;"><label>ঠিকানা</label><input id="rThikana"></div>
+        <div class="field"><label>ইউনিয়ন/পৌরসভা</label><input id="rUnion"></div>
+        <div class="field"><label>উপজেলা</label><input id="rUpozila"></div>
+        <div class="field"><label>জেলা</label><input id="rJela"></div>
         <div class="field"><label>Facebook Link (ঐচ্ছিক)</label><input id="rFacebook" type="url"></div>
         <div class="field">
           <label>ডিলারের ছবি</label>
@@ -2133,7 +2262,7 @@ async function submitRegister(){
         "NID/জন্মসনদ": document.getElementById("rNid").value.trim(),
         "ট্রেড লাইসেন্স নং": document.getElementById("rTrade").value.trim(),
         "এরিয়া": document.getElementById("rArea").value.trim(),
-        "ঠিকানা": document.getElementById("rThikana").value.trim(),
+        "ঠিকানা": dealerThikanaCombined(), "ইউনিয়ন/পৌরসভা": document.getElementById("rUnion").value.trim(), "উপজেলা": document.getElementById("rUpozila").value.trim(), "জেলা": document.getElementById("rJela").value.trim(),
         "Facebook Link": document.getElementById("rFacebook").value.trim()
       },
       nomineeFields: {
@@ -2154,6 +2283,7 @@ async function submitRegister(){
       if(selfRes.token) state.token = selfRes.token;
       state.dealerName = selfData.dealerFields["নাম"] || state.dealerName;
       state.dealerMobile = selfData.dealerFields["মোবাইল"];
+      state.dealerUnion = selfData.dealerFields["ইউনিয়ন/পৌরসভা"] || "";
       state.dealerFacebookLink = selfData.dealerFields["Facebook Link"];
       if(selfRes.dealerPhotoUrl) state.dealerPhotoUrl = selfRes.dealerPhotoUrl;
       if(selfData.adminName) state.name = selfData.adminName;
@@ -2178,7 +2308,7 @@ async function submitRegister(){
         "NID/জন্মসনদ": document.getElementById("rNid").value.trim(),
         "ট্রেড লাইসেন্স নং": document.getElementById("rTrade").value.trim(),
         "এরিয়া": document.getElementById("rArea").value.trim(),
-        "ঠিকানা": document.getElementById("rThikana").value.trim(),
+        "ঠিকানা": dealerThikanaCombined(), "ইউনিয়ন/পৌরসভা": document.getElementById("rUnion").value.trim(), "উপজেলা": document.getElementById("rUpozila").value.trim(), "জেলা": document.getElementById("rJela").value.trim(),
         "Facebook Link": document.getElementById("rFacebook").value.trim()
       },
       nomineeFields: {
@@ -2211,7 +2341,7 @@ async function submitRegister(){
     "nid": document.getElementById("rNid").value.trim(),
     "tradeLicense": document.getElementById("rTrade").value.trim(),
     "area": document.getElementById("rArea").value.trim(),
-    "thikana": document.getElementById("rThikana").value.trim(),
+    "thikana": dealerThikanaCombined(), "union": document.getElementById("rUnion").value.trim(), "upozila": document.getElementById("rUpozila").value.trim(), "jela": document.getElementById("rJela").value.trim(),
     "facebookLink": document.getElementById("rFacebook").value.trim(),
     "dealerPhotoBase64": dealerPhotoBase64,
     "adminUsername": document.getElementById("rAdminUser").value.trim(),
@@ -2257,7 +2387,7 @@ async function renderDealersList(box){
     html += `<tr>
       <td>${photoUrl ? `<img src="${photoUrl}" class="dealer-thumb">` : "—"}</td>
       <td>${d["DealerID"]}</td><td class="cell-left">${d["নাম"]}</td><td>${d["মোবাইল"]}</td>
-      <td>${d["এরিয়া"]||""}</td><td class="cell-left">${d["ঠিকানা"]||""}</td><td>${d["স্ট্যাটাস"]}</td>
+      <td>${d["এরিয়া"]||""}</td><td class="cell-left">${dealerAddrText(d)}</td><td>${d["স্ট্যাটাস"]}</td>
       <td class="no-print">
         <button class="btn icon small" onclick="toggleDealerStatus('${d["DealerID"]}','${d["স্ট্যাটাস"]}')" title="${d["স্ট্যাটাস"]==="সক্রিয়" ? "নিষ্ক্রিয় করুন" : "সক্রিয় করুন"}" aria-label="স্ট্যাটাস বদলান">${IC.power}</button>
         <button class="btn icon small secondary" onclick="editDealerRow('${d["DealerID"]}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
@@ -2302,7 +2432,7 @@ async function editDealerRow(dealerId){
   document.getElementById("rNid").value = d["NID/জন্মসনদ"] || "";
   document.getElementById("rTrade").value = d["ট্রেড লাইসেন্স নং"] || "";
   document.getElementById("rArea").value = d["এরিয়া"] || "";
-  document.getElementById("rThikana").value = d["ঠিকানা"] || "";
+  fillDealerAddress(d);
   document.getElementById("rFacebook").value = d["Facebook Link"] || "";
   if(d["ডিলারের ছবি(URL)"]){
     document.getElementById("rDealerPhotoPreview").src = d["ডিলারের ছবি(URL)"];
@@ -2385,7 +2515,7 @@ async function renderMyDealerForm(box){
   document.getElementById("rNid").value = d["NID/জন্মসনদ"] || "";
   document.getElementById("rTrade").value = d["ট্রেড লাইসেন্স নং"] || "";
   document.getElementById("rArea").value = d["এরিয়া"] || "";
-  document.getElementById("rThikana").value = d["ঠিকানা"] || "";
+  fillDealerAddress(d);
   document.getElementById("rFacebook").value = d["Facebook Link"] || "";
   if(d["ডিলারের ছবি(URL)"]){
     document.getElementById("rDealerPhotoPreview").src = d["ডিলারের ছবি(URL)"];
@@ -2418,7 +2548,7 @@ async function printMyDealerForm(){
   printOfficialDealerForm({
     dealerId: d["DealerID"], status: d["স্ট্যাটাস"],
     naam: d["নাম"], pitarNaam: d["পিতার নাম"], mobile: d["মোবাইল"], gmail: d["Gmail"],
-    nid: d["NID/জন্মসনদ"], trade: d["ট্রেড লাইসেন্স নং"], area: d["এরিয়া"], thikana: d["ঠিকানা"],
+    nid: d["NID/জন্মসনদ"], trade: d["ট্রেড লাইসেন্স নং"], area: d["এরিয়া"], thikana: dealerAddrText(d),
     dealerPhotoSrc: dealerPhotoSrc,
     nomNaam: n["নমিনির নাম"], nomNid: n["NID নং"], nomMobile: n["মোবাইল নং"], nomSomporko: n["সম্পর্ক"],
     nomPhotoSrc: nomPhotoSrc
@@ -2429,7 +2559,7 @@ function printDealerRow(d){
   printOfficialDealerForm({
     dealerId: d["DealerID"], status: d["স্ট্যাটাস"],
     naam: d["নাম"], pitarNaam: d["পিতার নাম"], mobile: d["মোবাইল"], gmail: d["Gmail"],
-    nid: d["NID/জন্মসনদ"], trade: d["ট্রেড লাইসেন্স নং"], area: d["এরিয়া"], thikana: d["ঠিকানা"],
+    nid: d["NID/জন্মসনদ"], trade: d["ট্রেড লাইসেন্স নং"], area: d["এরিয়া"], thikana: dealerAddrText(d),
     dealerPhotoSrc: d["ডিলারের ছবি(URL)"] || "",
     nomNaam: d.nominee ? d.nominee["নমিনির নাম"] : "",
     nomNid: d.nominee ? d.nominee["NID নং"] : "",
@@ -2453,7 +2583,7 @@ async function printRegistrationForm(){
     gmail: document.getElementById("rGmail").value.trim(),
     nid: document.getElementById("rNid").value.trim(),
     trade: document.getElementById("rTrade").value.trim(),
-    thikana: document.getElementById("rThikana").value.trim(),
+    thikana: dealerThikanaCombined(),
     dealerPhotoSrc: dealerPhotoSrc,
     adminUsername: document.getElementById("rAdminUser").value.trim(),
     adminPassword: document.getElementById("rAdminPass").value,
@@ -2494,7 +2624,7 @@ function printOfficialDealerForm(d){
       .sign-line{ border-top:1px solid #333; margin-top:40px; padding-top:4px; font-size:12px; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা</h1>
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
     </div>
     <div class="form-title">ডিলার নিয়োগ / রেজিস্ট্রেশন ফরম</div>
@@ -2614,9 +2744,9 @@ function addPkgItemRow(prefill){
   const row = document.createElement("div");
   row.className = "item-row-v2";
   row.innerHTML = `
-    <input placeholder="পণ্যের নাম ও পরিমাণ (যেমন: চিনি - ১ কেজি)" class="itemNaamPoriman" value="${prefill?(prefill.naamPoriman||''):''}">
-    <input placeholder="বাজার মূল্য" type="number" min="0" class="itemBazar" oninput="updateItemSaving(this)" value="${prefill?(prefill.bazarMulyo||''):''}">
-    <input placeholder="কম্বো মূল্য" type="number" min="0" class="itemCombo" oninput="updateItemSaving(this)" value="${prefill?(prefill.comboMulyo||''):''}">
+    <input placeholder="পণ্যের নাম ও পরিমাণ" class="itemNaamPoriman" value="${prefill?(prefill.naamPoriman||''):''}">
+    <input placeholder="বাজার" title="বাজার মূল্য" type="number" min="0" class="itemBazar" oninput="updateItemSaving(this)" value="${prefill?(prefill.bazarMulyo||''):''}">
+    <input placeholder="কম্বো" title="কম্বো মূল্য" type="number" min="0" class="itemCombo" oninput="updateItemSaving(this)" value="${prefill?(prefill.comboMulyo||''):''}">
     <input placeholder="সাশ্রয়" type="number" class="itemSashroy" readonly value="${prefill?((Number(prefill.bazarMulyo)||0)-(Number(prefill.comboMulyo)||0)):''}">
     <button type="button" class="btn secondary small" onclick="this.parentElement.remove()">✕</button>`;
   wrap.appendChild(row);
@@ -3831,7 +3961,7 @@ function printSalesInvoiceById(invoiceNo){
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা</h1>
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">অর্ডার ইনভয়েস</div>
     </div>
@@ -4211,7 +4341,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
   agency = agency || { "নাম":"", "মোবাইল":"", "লোগো(URL)":"" };
   const logoImg = agency["লোগো(URL)"]
     ? `<img src="${agency["লোগো(URL)"]}">`
-    : `<span>MSDS</span>`;
+    : `<span>fenims</span>`;
 
   const cardsHtml = customers.map(c => {
     const qrData = encodeURIComponent(API_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
@@ -4553,7 +4683,7 @@ function printPackagesOfficial(packages, subtitle){
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা</h1>
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">প্যাকেজ তালিকা (পণ্যভিত্তিক)</div>
     </div>
@@ -4674,11 +4804,11 @@ async function submitCustomer(){
   const data = {
     "নাম": document.getElementById("cusNaam").value.trim(),
     "পিতারনাম": document.getElementById("cusPitarNaam").value.trim(),
-    "mobile": document.getElementById("cusMobile").value.trim(),
-    "nid": document.getElementById("cusNid").value.trim(),
+    "mobile": toEnDigits(document.getElementById("cusMobile").value.trim()),
+    "nid": toEnDigits(document.getElementById("cusNid").value.trim()),
     "বাড়িরনাম": document.getElementById("cusBariNaam").value.trim(),
     "গ্রাম": document.getElementById("cusGram").value.trim(),
-    "ward": document.getElementById("cusWard").value.trim(),
+    "ward": toEnDigits(document.getElementById("cusWard").value.trim()),
     "union": document.getElementById("cusUnion").value.trim(),
     "praptirsthan": document.getElementById("cusPraptirSthan").value.trim(),
     "cardFee": document.getElementById("cusCardFee").value,
@@ -4755,6 +4885,7 @@ async function submitCustomerInner(data, msgBox){
   if(res.success){
     ["cusNaam","cusPitarNaam","cusMobile","cusNid","cusBariNaam","cusGram","cusWard","cusUnion","cusPraptirSthan","cusCardFee","cusReference"]
       .forEach(id => document.getElementById(id).value = "");
+    fillDefaultCusUnion();
     if(Array.isArray(window.__customersCache)){
       const newRow = {
         "CustomerID": res.customerId, "তারিখ": new Date().toISOString(),
@@ -4787,6 +4918,7 @@ function enqueueNewCustomer(data, msgBox){
   if(_cusQueue.some(q => q.sig === sig)){ msgBox.className = "msg err"; msgBox.textContent = "এই গ্রাহক ইতিমধ্যে সংরক্ষণের অপেক্ষায় আছে"; return; }
   _cusQueue.push({ data: data, sig: sig, status: "pending", fails: 0, batchId: "" });
   CUS_FORM_IDS.forEach(id => document.getElementById(id).value = "");
+  fillDefaultCusUnion();
   refreshCusQueueUI();
   document.getElementById("cusNaam").focus();
   runCusQueue();
@@ -4982,7 +5114,7 @@ function shareSalesInvoiceById(invoiceNo){
   const net = lines.reduce((s, e) => s + (Number(e["পরিশোধযোগ্য মূল্য"]) || 0), 0) - (Number(first["ডিসকাউন্ট"]) || 0);
   shareCardImage({
     width: 1000,
-    org: "ফেনী মানবিক সহায়তা",
+    org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
     sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
     title: "অর্ডার ইনভয়েস",
     blocks: [
@@ -5022,7 +5154,7 @@ function customerListShareSpecs(grouped, total){
       cur.rows.push(it.row);
     });
     return {
-      width: 1300, org: "ফেনী মানবিক সহায়তা",
+      width: 1300, org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
       sub: "ডিলার: " + (state.dealerName || "") + " — " + grouped.desc + " — মোট গ্রাহক: " + total,
       title: "গ্রাহক তালিকা" + (pages.length > 1 ? " (পাতা " + (pi + 1) + "/" + pages.length + ")" : ""),
       blocks: blocks, footer: "@Powered by: AM Shahed: 01605721296"
@@ -5034,7 +5166,7 @@ function packageShareSpec(p, sub){
   const items = p.items || [];
   const orgEl = document.getElementById("hdrDealerName");
   return {
-    org: (orgEl && orgEl.textContent.trim()) || "ফেনী মানবিক সহায়তা",
+    org: (orgEl && orgEl.textContent.trim()) || "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
     sub: sub || "",
     title: p["নাম"] || "",
     blocks: [{ t: "table",
@@ -5059,7 +5191,7 @@ function customerShareSpec(c){
   const regDate = d && !isNaN(d) ? d.toLocaleDateString("bn-BD") : "";
   const ward = c["ওয়ার্ড নং"] ? wardLabel(c["ওয়ার্ড নং"]) : "";
   return {
-    org: "ফেনী মানবিক সহায়তা",
+    org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
     sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
     sub2: "ডিলার: " + (state.dealerName || "") + (state.dealerMobile ? " | মোবাইল: " + state.dealerMobile : ""),
     title: "গ্রাহক নিবন্ধন ফরম",
@@ -5094,6 +5226,7 @@ function cancelCusEdit(){
   ["cusNaam","cusPitarNaam","cusMobile","cusNid","cusBariNaam","cusGram","cusWard","cusUnion","cusPraptirSthan","cusCardFee","cusReference"]
     .forEach(id => document.getElementById(id).value = "");
   document.getElementById("cusMsg").textContent = "";
+  fillDefaultCusUnion();
 }
 
 /* সর্বশেষ মেসেজ কার কাছে গেছে — গ্রাহক তালিকার WhatsApp/SMS কলাম (প্রিন্টে আসে না) */
@@ -5317,7 +5450,7 @@ function printCustomerFormOfficial(c){
     </style></head><body>
     <div class="share-bar no-print"><button onclick="doShare()">শেয়ার (ছবি)</button></div>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা</h1>
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <p class="dealer">ডিলার: ${escMsgHtml(state.dealerName||"")}${state.dealerMobile ? " | মোবাইল: " + escMsgHtml(state.dealerMobile) : ""}</p>
     </div>
@@ -5795,7 +5928,7 @@ function printDealerReport(){
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা</h1>
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">রিপোর্ট</div>
     </div>

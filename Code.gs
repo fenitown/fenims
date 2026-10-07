@@ -62,7 +62,8 @@ const MASTER_SHEETS_DEF = {
   "Dealers": [
     "DealerID", "তারিখ", "নাম", "পিতার নাম", "NID/জন্মসনদ",
     "মোবাইল", "Gmail", "ট্রেড লাইসেন্স নং", "ঠিকানা", "ডিলারের ছবি(URL)",
-    "SpreadsheetID", "স্ট্যাটাস", "Facebook Link", "এরিয়া"
+    "SpreadsheetID", "স্ট্যাটাস", "Facebook Link", "এরিয়া",
+    "ইউনিয়ন/পৌরসভা", "উপজেলা", "জেলা"
   ],
   "DealerNominee": [
     "NomineeID", "DealerID", "নমিনির নাম", "NID নং", "মোবাইল নং", "সম্পর্ক", "নমিনির ছবি(URL)"
@@ -381,6 +382,15 @@ function registerDealer(data) {
   ]);
   dealersSheet.getRange(dealersSheet.getLastRow(), 6).setNumberFormat("@");
 
+  // ঠিকানার ৩ ঘর (ইউনিয়ন/পৌরসভা, উপজেলা, জেলা) — কলাম না থাকলে যোগ হয়, তারপর হেডার-নাম ধরে বসানো
+  ensureDealerAddrCols(dealersSheet);
+  const dHeaders = dealersSheet.getRange(1, 1, 1, dealersSheet.getLastColumn()).getValues()[0];
+  const addrVals = { "ইউনিয়ন/পৌরসভা": data.union || "", "উপজেলা": data.upozila || "", "জেলা": data.jela || "" };
+  Object.keys(addrVals).forEach(function (h) {
+    const ci = dHeaders.indexOf(h);
+    if (ci !== -1) dealersSheet.getRange(dealersSheet.getLastRow(), ci + 1).setValue(addrVals[h]);
+  });
+
   // ৬. ডিলারের নমিনি তথ্য যোগ (যদি দেওয়া থাকে)
   if (data.nominee) {
     let nomineePhotoUrl = "";
@@ -555,6 +565,7 @@ const CACHEABLE_READS = {
   listDealers:1, listSalesInvoices:1, listPendingOrderConfirmations:1,
   listProducts:1, listStockVouchers:1, listExpenses:1, listExpenseVouchers:1,
   listIncomeReceipts:1, listCommissions:1, listCustomersForDealer:1,
+  getAgencyInfo:1, getAbout:1, listSales:1,
   dealerReport:1, agencySalesReport:1, depotReport:1, dailyReport:1, monthlyReport:1, totalReport:1
 };
 const READ_CACHE_TTL = 300;
@@ -676,8 +687,25 @@ function runIdempotentFine(action, data, reqKey, cache) {
   return out;
 }
 
+/* শপের নাম একরূপ রাখা — শীটের ডাটায় পুরনো নাম থাকলেও সব উত্তরে নতুন নাম যায় */
+const ORG_NAME_NEW = "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)";
+function normalizeOrgName(str) {
+  if (typeof str !== "string") return str;
+  return str.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, ORG_NAME_NEW);
+}
+/* লগইন পেজে দেখানোর জন্য শুধু এজেন্সির লোগো ও নাম — গোপন কিছু নয় */
+function getLoginBranding() {
+  const cache = CacheService.getScriptCache();
+  try { const hit = cacheGetBig(cache, "login_brand"); if (hit) return JSON.parse(hit); } catch (e) { /* বাদ */ }
+  const rows = genericListRows(getSheet(getMasterSS(), "Agency"));
+  const r = rows.length > 0 ? rows[0] : {};
+  const out = { success: true, logo: r["লোগো(URL)"] || "", name: r["নাম"] || "" };
+  try { cachePutBig(cache, "login_brand", JSON.stringify(out), 120); } catch (e) { /* বাদ */ }
+  return out;
+}
+
 function respondJson(out, t0) {
-  return ContentService.createTextOutput(withTiming(out, t0)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(normalizeOrgName(withTiming(out, t0))).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -737,6 +765,11 @@ function runAction(action, data) {
       // ---- সার্ভার ওয়ার্ম-আপ (কোল্ড স্টার্টের দেরি এড়াতে) ----
       case "ping":
         result = { success: true, version: BACKEND_VERSION };
+        break;
+
+      // ---- লগইন পেজের লোগো (লগইনের আগে লাগে, তাই টোকেন ছাড়া) ----
+      case "getLoginBranding":
+        result = getLoginBranding();
         break;
 
       // ---- অথেনটিকেশন ----
@@ -1072,7 +1105,7 @@ function renderCustomerCardPage(dealerId, customerId) {
     '.card{background:#fff;border-radius:10px;padding:20px;max-width:400px;margin:0 auto;box-shadow:0 4px 14px rgba(0,0,0,0.08);}</style>' +
     '</head><body><div class="card">' + bodyHtml + '</div></body></html>';
 
-  return HtmlService.createHtmlOutput(html)
+  return HtmlService.createHtmlOutput(normalizeOrgName(html))
     .setTitle("গ্রাহক তথ্য")
     .addMetaTag("viewport", "width=device-width, initial-scale=1.0")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

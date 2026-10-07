@@ -59,6 +59,7 @@ function loginUser(data) {
   let dealerPhotoUrl = "";
   let dealerMobile = "";
   let dealerFacebookLink = "";
+  let dealerUnion = "";
   if (dealerId !== AGENCY_ID) {
     const dealerInfo = getDealerRow(dealersSheet, dealerId);
     if (!dealerInfo) {
@@ -71,6 +72,7 @@ function loginUser(data) {
     dealerPhotoUrl = dealerInfo.photoUrl || "";
     dealerMobile = dealerInfo.mobile || "";
     dealerFacebookLink = dealerInfo.facebookLink || "";
+    dealerUnion = dealerInfo.union || "";
   }
 
   const token = createToken({
@@ -89,7 +91,8 @@ function loginUser(data) {
     dealerName: dealerName,
     dealerPhotoUrl: dealerPhotoUrl,
     dealerMobile: dealerMobile,
-    dealerFacebookLink: dealerFacebookLink
+    dealerFacebookLink: dealerFacebookLink,
+    dealerUnion: dealerUnion
   };
 }
 
@@ -121,6 +124,7 @@ function getDealerRow(dealersSheet, dealerId) {
   const idxPhoto = headers.indexOf("ডিলারের ছবি(URL)");
   const idxMobile = headers.indexOf("মোবাইল");
   const idxFacebook = headers.indexOf("Facebook Link");
+  const idxUnion = headers.indexOf("ইউনিয়ন/পৌরসভা");
 
   return {
     name: row[idxName],
@@ -128,7 +132,8 @@ function getDealerRow(dealersSheet, dealerId) {
     status: row[idxStatus],
     photoUrl: idxPhoto !== -1 ? row[idxPhoto] : "",
     mobile: idxMobile !== -1 ? row[idxMobile] : "",
-    facebookLink: idxFacebook !== -1 ? row[idxFacebook] : ""
+    facebookLink: idxFacebook !== -1 ? row[idxFacebook] : "",
+    union: idxUnion !== -1 ? row[idxUnion] : ""
   };
 }
 

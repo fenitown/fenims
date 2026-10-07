@@ -179,6 +179,12 @@ function genericDeleteRow(sheet, idColumnName, idValue) {
 /*=========================================================
  *  গ্রাহক (Customers) — Admin + প্রতিনিধি
  *=======================================================*/
+/* বাংলা অঙ্ক (০-৯) → ইংরেজি অঙ্ক (0-9) — মোবাইল, NID, ওয়ার্ড নং সবসময় ইংরেজিতে সংরক্ষণ হবে */
+function enDigits(v) {
+  if (v === null || v === undefined) return v;
+  return String(v).replace(/[০-৯]/g, function (ch) { return String("০১২৩৪৫৬৭৮৯".indexOf(ch)); });
+}
+
 function addCustomer(data) {
   const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
   if (!perm.ok) return { success: false, message: perm.message };
@@ -197,11 +203,11 @@ function addCustomer(data) {
       "তারিখ": new Date(),
       "নাম": data.নাম,
       "পিতার নাম": data.পিতারনাম,
-      "মোবাইল নং": data.mobile,
-      "NID/জন্মসনদ নং": data.nid,
+      "মোবাইল নং": enDigits(data.mobile),
+      "NID/জন্মসনদ নং": enDigits(data.nid),
       "বাড়ির নাম": data.বাড়িরনাম,
       "গ্রাম": data.গ্রাম,
-      "ওয়ার্ড নং": data.ward,
+      "ওয়ার্ড নং": enDigits(data.ward),
       "ইউনিয়ন/পৌরসভা": data.union,
       "প্রাপ্তির স্থান": data.praptirsthan,
       "কার্ড ফি": data.cardFee || 0,
@@ -251,9 +257,9 @@ function addCustomers(data) {
       ids.push(id);
       const obj = {
         "CustomerID": id, "তারিখ": now,
-        "নাম": d.নাম, "পিতার নাম": d.পিতারনাম, "মোবাইল নং": d.mobile,
-        "NID/জন্মসনদ নং": d.nid, "বাড়ির নাম": d.বাড়িরনাম, "গ্রাম": d.গ্রাম,
-        "ওয়ার্ড নং": d.ward, "ইউনিয়ন/পৌরসভা": d.union, "প্রাপ্তির স্থান": d.praptirsthan,
+        "নাম": d.নাম, "পিতার নাম": d.পিতারনাম, "মোবাইল নং": enDigits(d.mobile),
+        "NID/জন্মসনদ নং": enDigits(d.nid), "বাড়ির নাম": d.বাড়িরনাম, "গ্রাম": d.গ্রাম,
+        "ওয়ার্ড নং": enDigits(d.ward), "ইউনিয়ন/পৌরসভা": d.union, "প্রাপ্তির স্থান": d.praptirsthan,
         "কার্ড ফি": d.cardFee || 0, "রেফারেন্স": d.reference || ""
       };
       return headers.map(function (h) {
@@ -304,7 +310,11 @@ function updateCustomer(data) {
   if (!perm.ok) return { success: false, message: perm.message };
   const ss = getDealerSpreadsheet(perm.payload.dealerId);
   const sheet = getSheet(ss, "Customers");
-  const ok = genericUpdateRow(sheet, "CustomerID", data.customerId, data.fields);
+  const fields = data.fields || {};
+  ["মোবাইল নং", "NID/জন্মসনদ নং", "ওয়ার্ড নং"].forEach(function (k) {
+    if (fields.hasOwnProperty(k)) fields[k] = enDigits(fields[k]);
+  });
+  const ok = genericUpdateRow(sheet, "CustomerID", data.customerId, fields);
   return { success: ok, message: ok ? "আপডেট হয়েছে" : "গ্রাহক পাওয়া যায়নি" };
 }
 

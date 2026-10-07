@@ -57,8 +57,8 @@ function createAgencyAdminOnce() {
   const masterSS = getMasterSS();
   const usersSheet = getSheet(masterSS, "Users");
 
-  const username = "agencyadmin";      // চাইলে বদলান
-  const password = "ChangeThis123";    // অবশ্যই পরে বদলে নিন
+  const username = "Office";          // চাইলে বদলান
+  const password = "12345";           // অবশ্যই পরে বদলে নিন
 
   const userId = generateId(usersSheet, "U");
   usersSheet.appendRow([
@@ -75,6 +75,51 @@ function createAgencyAdminOnce() {
     "ডিপু এডমিন তৈরি হয়েছে।\nইউজারনেম: " + username + "\nপাসওয়ার্ড: " + password +
     "\n\nঅনুগ্রহ করে লগইন করার পর এই পাসওয়ার্ড অবশ্যই পরিবর্তন করুন।"
   );
+}
+
+/*******************************************************
+ * একবার ম্যানুয়ালি রান করুন (ফাংশন ড্রপডাউন থেকে resetAgencyAdminLogin ▶ Run):
+ * মূল ডিপুর বিদ্যমান Admin লগইন বদলে ইউজারনেম "Office" ও পাসওয়ার্ড "12345" করে দেয়।
+ * ডিপু Admin না থাকলে নতুন তৈরি করে।
+ *******************************************************/
+function resetAgencyAdminLogin() {
+  const NEW_USER = "Office", NEW_PASS = "12345";
+  const usersSheet = getSheet(getMasterSS(), "Users");
+  const values = usersSheet.getDataRange().getValues();
+  const h = values[0];
+  const iDealer = h.indexOf("DealerID"), iRole = h.indexOf("রোল");
+  const iUser = h.indexOf("ইউজারনেম"), iPass = h.indexOf("পাসওয়ার্ড");
+
+  let row = -1;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][iDealer] === AGENCY_ID && values[i][iRole] === "Admin") { row = i + 1; break; }
+  }
+  if (row === -1) {
+    usersSheet.appendRow([generateId(usersSheet, "U"), AGENCY_ID, NEW_USER, NEW_PASS, "Admin", "মূল ডিপু এডমিন", ""]);
+  } else {
+    usersSheet.getRange(row, iUser + 1).setValue(NEW_USER);
+    usersSheet.getRange(row, iPass + 1).setNumberFormat("@").setValue(NEW_PASS);
+  }
+  const msg = "ডিপু লগইন হালনাগাদ হয়েছে। ইউজারনেম: " + NEW_USER + ", পাসওয়ার্ড: " + NEW_PASS;
+  Logger.log(msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { /* এডিটর থেকে চালালে লগেই দেখা যাবে */ }
+}
+
+/*******************************************************
+ * ডিলারের ঠিকানা ৩ ঘরে (ইউনিয়ন/পৌরসভা, উপজেলা, জেলা) — Dealers ট্যাবে কলাম না থাকলে
+ * নিজে থেকে যোগ হয় (আলাদা সেটআপ লাগে না)। "ঠিকানা" কলামে কমা দিয়ে জোড়া ঠিকানা থাকে (প্রিন্টের জন্য)
+ *******************************************************/
+const DEALER_ADDR_COLS = ["ইউনিয়ন/পৌরসভা", "উপজেলা", "জেলা"];
+function ensureDealerAddrCols(sheet) {
+  const cache = CacheService.getScriptCache();
+  if (cache.get("dealer_addr_cols_v1")) return;
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  let col = lastCol;
+  DEALER_ADDR_COLS.forEach(function (h) {
+    if (headers.indexOf(h) === -1) { col++; sheet.getRange(1, col).setValue(h); }
+  });
+  try { cache.put("dealer_addr_cols_v1", "1", 21600); } catch (e) { /* বাদ */ }
 }
 
 /*******************************************************
@@ -355,6 +400,7 @@ function updateDealerFull(data) {
 
   const masterSS = getMasterSS();
   const dealersSheet = getDealersSheet(masterSS);
+  ensureDealerAddrCols(dealersSheet);
   const usersSheet = getSheet(masterSS, "Users");
 
   const dealerFields = data.dealerFields || {};
@@ -411,7 +457,7 @@ function updateDealerFull(data) {
  *  পাঠানো কোনো dealerId গ্রহণ করা হয় না — তাই একজন ডিলার অন্যজনের
  *  তথ্য দেখতে/বদলাতে পারে না। স্ট্যাটাস, SpreadsheetID, DealerID বদলানো যায় না।
  *=======================================================*/
-const SELF_DEALER_FIELDS = ["নাম", "পিতার নাম", "মোবাইল", "Gmail", "NID/জন্মসনদ", "ট্রেড লাইসেন্স নং", "এরিয়া", "ঠিকানা", "Facebook Link"];
+const SELF_DEALER_FIELDS = ["নাম", "পিতার নাম", "মোবাইল", "Gmail", "NID/জন্মসনদ", "ট্রেড লাইসেন্স নং", "এরিয়া", "ঠিকানা", "ইউনিয়ন/পৌরসভা", "উপজেলা", "জেলা", "Facebook Link"];
 const SELF_NOMINEE_FIELDS = ["নমিনির নাম", "NID নং", "মোবাইল নং", "সম্পর্ক"];
 
 function checkDealerSelfPermission(token) {
@@ -490,6 +536,7 @@ function updateMyDealerFull(data) {
   const dealerId = perm.payload.dealerId;
   const masterSS = getMasterSS();
   const dealersSheet = getDealersSheet(masterSS);
+  ensureDealerAddrCols(dealersSheet);
   const nomineeSheet = getSheet(masterSS, "DealerNominee");
   const usersSheet = getSheet(masterSS, "Users");
 
