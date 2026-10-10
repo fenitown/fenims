@@ -909,7 +909,7 @@
         <div class="field"><label>প্যাকেজ সিলেক্ট করুন</label><select id="saleFilterPackage" onchange="loadSalesView()"></select></div>
         <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
       </div>
-      <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button></div>
+      <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button> <button class="btn secondary small" onclick="openPrintOpt('salesinfo')">🖨 বিক্রয় তথ্য</button></div>
       <div class="table-wrap"><table id="salesTable"><thead></thead><tbody></tbody></table></div>
       <div id="salesMsg" class="msg"></div>
     </section>
@@ -5403,17 +5403,18 @@ let printOptCtx = null;
 const PO_KEY_LABELS = { ward:"ওয়ার্ড নং", loc:"প্রাপ্তির স্থান", ref:"রেফারেন্স" };
 const PO_FIELD = { ward:"ওয়ার্ড নং", loc:"প্রাপ্তির স্থান", ref:"রেফারেন্স" };
 
-function poCustomers(){ return printOptCtx === "sales" ? allCustomersCache : (window.__customersCache || []); }
+function poCustomers(){ return (printOptCtx === "sales" || printOptCtx === "salesinfo") ? allCustomersCache : (window.__customersCache || []); }
 function poKey(c, mode){ const v = c[PO_FIELD[mode]]; return String(v == null ? "" : v).trim(); }
 
 function openPrintOpt(ctx){
   if(ctx === "sales" && !document.getElementById("saleFilterPackage").value){ alert("আগে প্যাকেজ সিলেক্ট করুন"); return; }
   printOptCtx = ctx;
-  document.getElementById("poShareBtn").style.display = ctx === "sales" ? "none" : "";
+  document.getElementById("poShareBtn").style.display = (ctx === "sales" || ctx === "salesinfo") ? "none" : "";
   if(poCustomers().length === 0){ alert("প্রিন্ট করার জন্য কোনো গ্রাহক নেই"); return; }
-  const modes = [["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]];
+  // বিক্রয় তথ্য: নির্দিষ্ট গ্রাহক / সকল / ওয়ার্ড / রেফারেন্স ভিত্তিক
+  const modes = ctx === "salesinfo" ? [["one","নির্দিষ্ট গ্রাহক"],["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"],["ref","রেফারেন্স ভিত্তিক"]] : [["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]];
   if(ctx === "sales") modes.push(["loc","প্রাপ্তির স্থান ভিত্তিক"]);
-  modes.push(["ref","রেফারেন্স ভিত্তিক"]);
+  if(ctx !== "salesinfo") modes.push(["ref","রেফারেন্স ভিত্তিক"]);
   document.getElementById("poMode").innerHTML = modes.map(m => `<option value="${m[0]}">${m[1]}</option>`).join("");
   refreshPrintOptValues();
   document.getElementById("printOptModal").style.display = "flex";
@@ -5425,6 +5426,13 @@ function refreshPrintOptValues(){
   const wrap = document.getElementById("poValueWrap");
   if(mode === "all"){ wrap.style.display = "none"; return; }
   const customers = poCustomers();
+  if(mode === "one"){
+    document.getElementById("poValueLabel").textContent = "গ্রাহক বাছুন";
+    document.getElementById("poValue").innerHTML = customers.map(c =>
+      `<option value="${escMsgHtml(c["CustomerID"])}">${escMsgHtml((c["নাম"]||"") + (c["পিতার নাম"] ? " — " + c["পিতার নাম"] : "") + " (" + c["CustomerID"] + ")")}</option>`).join("");
+    wrap.style.display = "";
+    return;
+  }
   const set = {}; let hasBlank = false;
   customers.forEach(c => { const k = poKey(c, mode); if(k) set[k] = true; else hasBlank = true; });
   const keys = Object.keys(set).sort((a,b) => a.localeCompare(b, "bn", { numeric:true }));
@@ -5458,12 +5466,15 @@ function groupCustomersForPrint(customers, mode, value){
 function runPrintOpt(share){
   const mode = document.getElementById("poMode").value;
   const value = mode === "all" ? "" : document.getElementById("poValue").value;
-  const grouped = groupCustomersForPrint(poCustomers(), mode, value);
+  const grouped = mode === "one"
+    ? { groups: [{ label: "", items: poCustomers().filter(c => c["CustomerID"] === value) }], desc: "নির্দিষ্ট গ্রাহক" }
+    : groupCustomersForPrint(poCustomers(), mode, value);
   const total = grouped.groups.reduce((n, g) => n + g.items.length, 0);
   if(total === 0){ alert("প্রিন্ট করার জন্য কোনো গ্রাহক নেই"); return; }
   closePrintOpt();
   if(share === true && printOptCtx !== "sales"){ shareCardImage(customerListShareSpecs(grouped, total), "grahok-talika.png"); return; }
-  if(printOptCtx === "sales") printSalesOfficial(grouped, total);
+  if(printOptCtx === "salesinfo") printSalesInfo(grouped, total);
+  else if(printOptCtx === "sales") printSalesOfficial(grouped, total);
   else printCustomersOfficial(grouped, total);
 }
 
@@ -5684,6 +5695,54 @@ function getSalesViewData(){
 }
 
 /* বিক্রি — গ্রাহক তালিকা প্রিন্ট (A4 ল্যান্ডস্কেপ; প্রিন্ট অপশন মডাল থেকে গ্রুপসহ আসে) */
+/*******************************************************
+ * বিক্রয় তথ্য — আইডি, নাম, পিতার নাম ও বিক্রির তারিখ (প্রতিটি বিক্রির তারিখ আলাদা কলামে)।
+ * যে তারিখে গ্রাহক পণ্য নেননি, সেই তারিখের কলাম তার সারিতে খালি থাকে।
+ * প্যাকেজ সিলেক্ট করা থাকলে শুধু সেই প্যাকেজের বিক্রি, না থাকলে সব প্যাকেজের বিক্রি ধরা হয়।
+ *******************************************************/
+function printSalesInfo(grouped, total){
+  const pkgId = document.getElementById("saleFilterPackage").value;
+  const pkg = pkgId ? allPackagesCache.find(p => p["PackageID"] === pkgId) : null;
+  const dayKey = d => d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+
+  // ছাপা হচ্ছে এমন গ্রাহকদের বিক্রি: গ্রাহক → { তারিখ-কী → সংখ্যা }, আর সব তারিখের তালিকা
+  const ids = {};
+  grouped.groups.forEach(g => g.items.forEach(c => { ids[c["CustomerID"]] = true; }));
+  const perCustomer = {}, dates = {};
+  allSalesCache.forEach(sl => {
+    if(sl["স্ট্যাটাস"] !== "বিক্রিত" || !ids[sl["CustomerID"]]) return;
+    if(pkgId && sl["PackageID"] !== pkgId) return;
+    const d = sl["তারিখ"] ? new Date(sl["তারিখ"]) : null;
+    if(!d || isNaN(d)) return;
+    const k = dayKey(d);
+    dates[k] = d;
+    const m = perCustomer[sl["CustomerID"]] = perCustomer[sl["CustomerID"]] || {};
+    m[k] = (m[k] || 0) + 1;
+  });
+  const dateKeys = Object.keys(dates).sort();
+  if(dateKeys.length === 0){ alert("বিক্রয় তথ্য নেই — এই গ্রাহকদের কোনো বিক্রি পাওয়া যায়নি"); return; }
+
+  const fmt = k => dates[k].toLocaleDateString("en-GB");
+  const head = ["ক্রম", "আইডি", "নাম", "পিতার নাম"].concat(dateKeys.map(fmt));
+  const rows = [];
+  grouped.groups.forEach(g => {
+    if(g.label) rows.push({ group: escMsgHtml(g.label) + " — " + g.items.length + " জন" });
+    g.items.forEach((c, i) => {
+      const m = perCustomer[c["CustomerID"]] || {};
+      rows.push([i + 1, c["CustomerID"] || "", escMsgHtml(c["নাম"] || ""), escMsgHtml(c["পিতার নাম"] || "")]
+        .concat(dateKeys.map(k => m[k] ? fmt(k) + (m[k] > 1 ? " ×" + m[k] : "") : "")));
+    });
+  });
+  printOfficialTable(
+    "বিক্রয় তথ্য",
+    (pkg ? "প্যাকেজ: " + pkg["নাম"] + " | " : "সব প্যাকেজ | ") + grouped.desc + " | ডিলার: " + (state.dealerName || "") + " | মোট গ্রাহক: " + total,
+    head, rows, null,
+    "@Powered by: AM Shahed: 01605721296",
+    [2, 3],
+    { landscape: true }
+  );
+}
+
 function printSalesOfficial(grouped, total){
   const view = getSalesViewData();
   let sum = 0;
