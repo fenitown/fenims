@@ -384,6 +384,7 @@
   <div class="modal-box" style="max-width:420px;">
     <h3>প্রিন্ট / শেয়ার</h3>
     <div class="field"><label>প্রিন্টের ধরন</label><select id="poMode" onchange="refreshPrintOptValues()"></select></div>
+    <div class="field" id="poSearchWrap" style="display:none;"><label>গ্রাহক খুঁজুন (নাম / মোবাইল / এনআইডি)</label><input type="search" id="poSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="fillPoCustomerOptions()" autocomplete="off"></div>
     <div class="field" id="poValueWrap" style="display:none;"><label id="poValueLabel"></label><select id="poValue"></select></div>
     <div class="btn-row">
       <button class="btn" onclick="runPrintOpt()">🖨 প্রিন্ট</button>
@@ -908,6 +909,8 @@
       <div class="form-grid no-print">
         <div class="field"><label>প্যাকেজ সিলেক্ট করুন</label><select id="saleFilterPackage" onchange="loadSalesView()"></select></div>
         <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
+        <div class="field"><label>বিক্রয়ের তারিখ</label><input type="date" id="saleDate" onchange="renderSalesTable()"></div>
+        <div class="field"><label>সার্চ (নাম / মোবাইল / এনআইডি)</label><input type="search" id="saleSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="onSaleSearch()" autocomplete="off"></div>
       </div>
       <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button> <button class="btn secondary small" onclick="openPrintOpt('salesinfo')">🖨 বিক্রয় তথ্য</button></div>
       <div class="table-wrap"><table id="salesTable"><thead></thead><tbody></tbody></table></div>
@@ -5421,15 +5424,25 @@ function openPrintOpt(ctx){
 }
 function closePrintOpt(){ document.getElementById("printOptModal").style.display = "none"; }
 
+/* নির্দিষ্ট গ্রাহক — সার্চ বক্সের লেখা (নাম/মোবাইল/NID) অনুযায়ী তালিকা ছোট করা */
+function fillPoCustomerOptions(){
+  const q = cusNorm(document.getElementById("poSearch").value);
+  const list = poCustomers().filter(c => !q || cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q));
+  document.getElementById("poValue").innerHTML = list.length
+    ? list.map(c => `<option value="${escMsgHtml(c["CustomerID"])}">${escMsgHtml((c["নাম"]||"") + (c["পিতার নাম"] ? " — " + c["পিতার নাম"] : "") + " | " + (c["মোবাইল নং"]||"") + " (" + c["CustomerID"] + ")")}</option>`).join("")
+    : `<option value="">কোনো গ্রাহক পাওয়া যায়নি</option>`;
+}
+
 function refreshPrintOptValues(){
   const mode = document.getElementById("poMode").value;
   const wrap = document.getElementById("poValueWrap");
+  document.getElementById("poSearchWrap").style.display = mode === "one" ? "" : "none";
   if(mode === "all"){ wrap.style.display = "none"; return; }
   const customers = poCustomers();
   if(mode === "one"){
+    document.getElementById("poSearch").value = "";
     document.getElementById("poValueLabel").textContent = "গ্রাহক বাছুন";
-    document.getElementById("poValue").innerHTML = customers.map(c =>
-      `<option value="${escMsgHtml(c["CustomerID"])}">${escMsgHtml((c["নাম"]||"") + (c["পিতার নাম"] ? " — " + c["পিতার নাম"] : "") + " (" + c["CustomerID"] + ")")}</option>`).join("");
+    fillPoCustomerOptions();
     wrap.style.display = "";
     return;
   }
@@ -5466,6 +5479,7 @@ function groupCustomersForPrint(customers, mode, value){
 function runPrintOpt(share){
   const mode = document.getElementById("poMode").value;
   const value = mode === "all" ? "" : document.getElementById("poValue").value;
+  if(mode === "one" && !value){ alert("আগে একজন গ্রাহক সিলেক্ট করুন"); return; }
   const grouped = mode === "one"
     ? { groups: [{ label: "", items: poCustomers().filter(c => c["CustomerID"] === value) }], desc: "নির্দিষ্ট গ্রাহক" }
     : groupCustomersForPrint(poCustomers(), mode, value);
@@ -5639,6 +5653,9 @@ async function loadSalesSetup(){
   allSalesCache = res.success ? res.sales : [];
   window.__deliveredQty = res.success && res.delivered ? res.delivered : null;   // প্যাকেজ → ডেলিভারি পাওয়া সংখ্যা
 
+  const dateEl = document.getElementById("saleDate");
+  if(dateEl && !dateEl.value) dateEl.value = localDayKey(new Date());
+
   const pkgSel = document.getElementById("saleFilterPackage");
   pkgSel.innerHTML = "<option value=''>-- সিলেক্ট করুন --</option>" +
     allPackagesCache.map(p => `<option value="${p['PackageID']}">${p['নাম']}</option>`).join("");
@@ -5652,6 +5669,24 @@ async function loadSalesSetup(){
 
   renderSalesTable();
 }
+
+/* বিক্রয়ের তারিখ — বক্সে বাছা তারিখ (ডিফল্ট আজ); পুরনো তারিখ বাছলে সেই তারিখের নামে এন্ট্রি হবে */
+function localDayKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function saleSelectedDate(){
+  const el = document.getElementById("saleDate");
+  return el && el.value ? el.value : localDayKey(new Date());
+}
+function saleDayOf(sale){
+  const d = sale["তারিখ"] ? new Date(sale["তারিখ"]) : null;
+  return d && !isNaN(d) ? localDayKey(d) : "";
+}
+/* নির্বাচিত তারিখে এই গ্রাহকের এই প্যাকেজের বিক্রি (থাকলে) */
+function findSaleFor(customerId, pkgId){
+  const day = saleSelectedDate();
+  return allSalesCache.find(s => s["CustomerID"] === customerId && s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত" && saleDayOf(s) === day);
+}
+let _saleSearchTimer = null;
+function onSaleSearch(){ clearTimeout(_saleSearchTimer); _saleSearchTimer = setTimeout(renderSalesTable, 150); }
 
 /* প্যাকেজের বর্তমান স্টক = ডেলিভারি পাওয়া − বিক্রিত (ডেলিভারি তথ্য না থাকলে সার্ভারই যাচাই করবে) */
 function saleStockLeft(pkgId){
@@ -5689,6 +5724,9 @@ function getSalesViewData(){
     customers = customers.filter(c => String(c["ওয়ার্ড নং"]==null?"":c["ওয়ার্ড নং"]).trim() === w);
     filterText = wardLabel(w);
   }
+  const qEl = document.getElementById("saleSearch");
+  const q = qEl ? cusNorm(qEl.value) : "";
+  if(q) customers = customers.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q));
   const pkg = allPackagesCache.find(p => p["PackageID"] === pkgId);
   const defaultPrice = pkg ? (pkg["সর্বমোট মূল্য"] || 0) : 0;
   return { pkgId, pkg, customers, defaultPrice, filterText };
@@ -5750,7 +5788,7 @@ function printSalesOfficial(grouped, total){
   grouped.groups.forEach(g => {
     if(g.label) rows.push({ group: escMsgHtml(g.label) + " — " + g.items.length + " জন" });
     g.items.forEach((c, i) => {
-      const sale = allSalesCache.find(s => s["CustomerID"] === c["CustomerID"] && s["PackageID"] === view.pkgId && s["স্ট্যাটাস"] === "বিক্রিত");
+      const sale = findSaleFor(c["CustomerID"], view.pkgId);
       const priceEl = document.getElementById("salePrice_" + c["CustomerID"]);
       const price = priceEl ? priceEl.value : (sale && sale["মূল্য"] !== "" && sale["মূল্য"] !== undefined ? sale["মূল্য"] : view.defaultPrice);
       sum += Number(price) || 0;
@@ -5759,7 +5797,7 @@ function printSalesOfficial(grouped, total){
   });
   printOfficialTable(
     "বিক্রি — গ্রাহক তালিকা",
-    "প্যাকেজ: " + (view.pkg ? view.pkg["নাম"] : "") + " | " + grouped.desc + " | ডিলার: " + (state.dealerName||"") + " | মোট গ্রাহক: " + total,
+    "প্যাকেজ: " + (view.pkg ? view.pkg["নাম"] : "") + " | বিক্রয়ের তারিখ: " + saleSelectedDate().split("-").reverse().join("/") + " | " + grouped.desc + " | ডিলার: " + (state.dealerName||"") + " | মোট গ্রাহক: " + total,
     ["ক্রম","নাম","পিতার নাম","মোবাইল","ওয়ার্ড","প্রাপ্তির স্থান","রেফারেন্স","মূল্য","স্ট্যাটাস"],
     rows,
     [["", "সাবটোটাল", "", "", "", "", "", sum, ""]],
@@ -5782,7 +5820,7 @@ function renderSalesTable(){
   let subtotal = 0;
 
   customers.forEach(c => {
-    const sale = allSalesCache.find(s => s["CustomerID"] === c["CustomerID"] && s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত");
+    const sale = findSaleFor(c["CustomerID"], pkgId);
     const cJson = JSON.stringify(c).replace(/'/g, "&#39;");
     const priceValue = sale ? (sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? sale["মূল্য"] : defaultPrice) : defaultPrice;
     subtotal += Number(priceValue) || 0;
@@ -5825,8 +5863,9 @@ async function updateSalePriceHandler(saleId, newPrice){
  *******************************************************/
 function printThermalReceipt(c, packageId){
   const pkg = allPackagesCache.find(p => p["PackageID"] === packageId);
-  const sale = allSalesCache.find(s => s["CustomerID"] === c["CustomerID"] && s["PackageID"] === packageId && s["স্ট্যাটাস"] === "বিক্রিত");
-  const dt = sale && sale["তারিখ"] ? new Date(sale["তারিখ"]).toLocaleDateString("bn-BD") : new Date().toLocaleDateString("bn-BD");
+  const sale = findSaleFor(c["CustomerID"], packageId);
+  const selDay = saleSelectedDate().split("-");
+  const dt = sale && sale["তারিখ"] ? new Date(sale["তারিখ"]).toLocaleDateString("bn-BD") : new Date(+selDay[0], +selDay[1]-1, +selDay[2]).toLocaleDateString("bn-BD");
   const dealerName = state.dealerName || "";
   const dealerMobile = state.dealerMobile || "";
 
@@ -5881,11 +5920,13 @@ async function makeSale(customerId, packageId, priceInputId){
   const price = priceInput ? priceInput.value : 0;
 
   // অপটিমিস্টিক আপডেট — সাথে সাথে UI বদলে যাবে, সার্ভার রেসপন্সের অপেক্ষা না করে
-  const tempSale = { SaleID:"tmp-"+Date.now(), CustomerID:customerId, PackageID:packageId, "মূল্য":price, "স্ট্যাটাস":"বিক্রিত" };
+  const saleDay = saleSelectedDate();   // YYYY-MM-DD
+  const dp = saleDay.split("-");
+  const tempSale = { SaleID:"tmp-"+Date.now(), CustomerID:customerId, PackageID:packageId, "তারিখ": new Date(Date.UTC(+dp[0], +dp[1]-1, +dp[2], 12)).toISOString(), "মূল্য":price, "স্ট্যাটাস":"বিক্রিত" };
   allSalesCache.push(tempSale);
   renderSalesTable();
 
-  const res = await apiCall("addSale", { customerId, packageId, price });
+  const res = await apiCall("addSale", { customerId, packageId, price, date: saleDay });
   document.getElementById("salesMsg").textContent = res.message;
   document.getElementById("salesMsg").className = "msg " + (res.success?"ok":"err");
 

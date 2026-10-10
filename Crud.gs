@@ -585,6 +585,14 @@ function getDealerDeliveredQtyMap(masterSS, dealerId) {
   return map;
 }
 
+/* বিক্রয়ের তারিখ ("YYYY-MM-DD") — দুপুর ১২টা UTC ধরে রাখা হয়, যাতে টাইমজোন যা-ই হোক একই দিনের তারিখ দেখায়;
+   তারিখ না এলে বা ভুল ফরম্যাট হলে এখনকার সময় */
+function parseSaleDate(v) {
+  const m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return new Date();
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
+}
+
 function addSale(data) {
   const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
   if (!perm.ok) return { success: false, message: perm.message };
@@ -611,7 +619,7 @@ function addSale(data) {
       "SaleID": saleId,
       "CustomerID": data.customerId,
       "PackageID": data.packageId,
-      "তারিখ": new Date(),
+      "তারিখ": parseSaleDate(data.date),
       "মূল্য": data.price || 0,
       "স্ট্যাটাস": "বিক্রিত"
     });
