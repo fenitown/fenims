@@ -197,6 +197,8 @@
   /* পাসওয়ার্ড ঘর — type="password" না হওয়ায় ব্রাউজারের "Save/Check your password" পপআপ আসে না */
   .pw-mask{ -webkit-text-security:disc; text-security:disc; }
   .name-cell{ white-space:nowrap; }
+  #customersTable td, #customersTable th{ white-space:nowrap; }
+  #customersTable td .fit{ display:inline-block; white-space:nowrap; }
   table th, table td{ border:1px solid var(--line); padding:7px 8px; font-size:0.88rem; text-align:center; }
   table th{ background:#eef0e9; text-align:center; }
   table td.cell-left{ text-align:left; }
@@ -5064,7 +5066,7 @@ function enqueueNewCustomer(data, msgBox){
 }
 
 function pendingCustomerRowsHtml(searchQ){
-  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${escMsgHtml(q.data["নাম"])}</td><td class="cell-left">${escMsgHtml(q.data["পিতারনাম"]||"")}</td><td>${escMsgHtml(q.data.mobile||"")}</td><td>${escMsgHtml(q.data.nid||"")}</td><td class="cell-left">${escMsgHtml(q.data["বাড়িরনাম"]||"")}</td><td class="cell-left">${escMsgHtml(q.data["গ্রাম"]||"")}</td><td>${escMsgHtml(q.data.ward||"")}</td><td class="cell-left">${escMsgHtml(q.data.union||"")}</td><td>${escMsgHtml(q.data.praptirsthan||"")}</td><td>${q.data.cardFee||0}</td><td>${escMsgHtml(q.data.reference||"")}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.mobile||""))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -5396,6 +5398,14 @@ function onCusSearch(){
   _cusSearchTimer = setTimeout(() => { if(Array.isArray(window.__customersCache)) renderCustomersTable(window.__customersCache); }, 150);
 }
 
+/* গ্রাহক তালিকা: লেখা এক লাইনে থাকবে; বেশি বড় হলে সাইজ একটু ছোট হবে */
+function cusFit(v){
+  const t = String(v == null ? "" : v);
+  const n = t.length;
+  if(n <= 16) return t;
+  const sz = n <= 22 ? "0.88em" : n <= 30 ? "0.78em" : n <= 40 ? "0.68em" : "0.6em";
+  return `<span class="fit" style="font-size:${sz}">${t}</span>`;
+}
 function renderCustomersTable(customers){
   window.__customersCache = customers;   // পুরো তালিকা (সার্চ শুধু দেখানোয় ফিল্টার করে — প্রিন্ট/মেসেজে পুরো তালিকাই থাকে)
   const _q = cusSearchQuery();
@@ -5406,7 +5416,7 @@ function renderCustomersTable(customers){
   const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
   const pendHtml = pendingCustomerRowsHtml(_q);
   if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(16, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
-  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${escMsgHtml(c["নাম"]||"")}</td><td class="cell-left">${escMsgHtml(c["পিতার নাম"]||"")}</td><td>${escMsgHtml(c["মোবাইল নং"]||"")}</td><td>${escMsgHtml(c["NID/জন্মসনদ নং"]||"")}</td><td class="cell-left">${escMsgHtml(c["বাড়ির নাম"]||"")}</td><td class="cell-left">${escMsgHtml(c["গ্রাম"]||"")}</td><td>${escMsgHtml(c["ওয়ার্ড নং"]||"")}</td><td class="cell-left">${escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||"")}</td><td>${escMsgHtml(c["প্রাপ্তির স্থান"]||"")}</td><td>${c["কার্ড ফি"]||0}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td><td>${escMsgHtml(cusDateText(c))}</td>
+  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${cusFit(escMsgHtml(c["মোবাইল নং"]||""))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
       <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
         <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
@@ -5538,7 +5548,7 @@ function printCustomersOfficial(grouped, total){
   const rows = [];
   grouped.groups.forEach(g => {
     if(g.label) rows.push({ group: escMsgHtml(g.label) + " — " + g.items.length + " জন" });
-    g.items.forEach((c, i) => rows.push(cusListRow(c, i).map((v, ci) => [2,3,6,7,9,10,12].indexOf(ci) !== -1 ? escMsgHtml(v) : v)));
+    g.items.forEach((c, i) => rows.push(cusListRow(c, i).map((v, ci) => [2,3,6,7,9,10,12].indexOf(ci) !== -1 ? cusFit(escMsgHtml(v)) : v)));
   });
   printOfficialTable(
     "গ্রাহক তালিকা",
@@ -5546,7 +5556,7 @@ function printCustomersOfficial(grouped, total){
     CUS_LIST_HEAD, rows, null,
     "@Powered by: AM Shahed: 01605721296",
     [2,3,6,7,9,10,12],
-    { landscape:true, wrap:true, nowrapCols:[0,1,4,5,8,11,13], shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
+    { landscape:true, shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
   );
 }
 
