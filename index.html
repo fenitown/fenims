@@ -4577,6 +4577,14 @@ async function loadDashboard(){
   if(!res.success){ box.innerHTML = "<p>"+res.message+"</p>"; return; }
   custPromise.then(cr => { if(cr && cr.success) renderDashboardBreakdown(cr.customers); }).catch(() => {});
   const s = res.summary;
+  // মোট খরচ = খরচ ভাউচার তালিকার "পরিমাণ" এর যোগফল (বাংলা সংখ্যা/কমা থাকলেও ধরা হয়); তালিকা না এলে সার্ভারের সামারি
+  let expTotal = Number(s.totalExpense) || 0;
+  try{
+    const er = await cachedApiCall("listExpenseVouchers", {}, 15000);
+    if(er && er.success){
+      expTotal = Math.round(er.vouchers.reduce((n, v) => n + (Number(toEnDigits(v["পরিমাণ"]).replace(/,/g, "")) || 0), 0) * 100) / 100;
+    }
+  }catch(e){}
   box.innerHTML = `
     <div class="card"><div class="num">${s.totalPackages}</div><div class="label">মোট প্যাকেজ</div></div>
     <div class="card"><div class="num">${s.runningPackages}</div><div class="label">চলমান প্যাকেজ</div></div>
@@ -4586,7 +4594,7 @@ async function loadDashboard(){
     <div class="card"><div class="num">${Number(s.totalOrderQty) || 0}</div><div class="label">মোট সংখ্যা</div></div>
     <div class="card"><div class="num">${s.totalSales}</div><div class="label">মোট বিক্রি</div></div>
     <div class="card"><div class="num">${Number(s.currentStockQty) || 0}</div><div class="label">বর্তমান স্টক</div></div>
-    <div class="card"><div class="num">${Number(s.totalExpense) || 0}</div><div class="label">মোট খরচ</div></div>`;
+    <div class="card"><div class="num">${expTotal}</div><div class="label">মোট খরচ</div></div>`;
 }
 
 /* ড্যাশবোর্ড — একটি টেবিলে রেফারেন্স (সারি) × ওয়ার্ড (কলাম) অনুযায়ী গ্রাহক সংখ্যা;
@@ -6039,7 +6047,7 @@ async function loadDealerExpenseVouchers(){
     const dt = v["তারিখ"] ? new Date(v["তারিখ"]).toLocaleDateString("bn-BD") : "";
     const vJson = JSON.stringify(v).replace(/'/g, "&#39;");
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${dt}</td><td>${v["বিবরণ"]}</td><td>${v["পরিমাণ"]}</td>
+    tr.innerHTML = `<td>${dt}</td><td class="cell-left">${escMsgHtml(v["বিবরণ"])}</td><td>${v["পরিমাণ"]}</td>
       <td class="no-print">
         <button class="btn icon small secondary" onclick='editDealerExpenseRow(${vJson})' title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick='printDealerExpenseRow(${vJson})' title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
