@@ -394,6 +394,25 @@
   </div>
 </div>
 
+<!-- ================= খরচ ভাউচার প্রিন্ট মডাল (তারিখ / মাস / বছর / সর্বমোট) ================= -->
+<div class="modal-overlay" id="expPrintModal">
+  <div class="modal-box" style="max-width:420px;">
+    <h3>খরচ ভাউচার প্রিন্ট</h3>
+    <div class="field"><label>প্রিন্টের ধরন</label>
+      <select id="epMode" onchange="refreshExpPrintControls()">
+        <option value="date">তারিখ ভিত্তিক</option>
+        <option value="month">মাস ভিত্তিক</option>
+        <option value="year">বছর ভিত্তিক</option>
+        <option value="total">সর্বমোট</option>
+      </select></div>
+    <div id="epControls"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="runExpPrint()">🖨 প্রিন্ট</button>
+      <button class="btn secondary" onclick="closeExpPrint()">বাতিল</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= ডেলিভারির আগে বকেয়া আদায় মডাল ================= -->
 <div class="modal-overlay" id="siCollectModal">
   <div class="modal-box" style="max-width:560px;">
@@ -910,7 +929,7 @@
         <div class="field"><label>প্যাকেজ সিলেক্ট করুন</label><select id="saleFilterPackage" onchange="loadSalesView()"></select></div>
         <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
         <div class="field"><label>বিক্রয়ের তারিখ</label><input type="date" id="saleDate" onchange="renderSalesTable()"></div>
-        <div class="field"><label>অন্যান্য খরচ (প্যাকেজ মূল্যের সাথে যোগ হবে)</label><input type="number" id="saleOtherExpense" min="0" value="0" oninput="onSaleOtherExpense()"></div>
+        <div class="field"><label>অন্যান্য খরচ</label><input type="number" id="saleOtherExpense" min="0" value="0" oninput="onSaleOtherExpense()"></div>
         <div class="field"><label>সার্চ (নাম / মোবাইল / এনআইডি)</label><input type="search" id="saleSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="onSaleSearch()" autocomplete="off"></div>
       </div>
       <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button> <button class="btn secondary small" onclick="openPrintOpt('salesinfo')">🖨 বিক্রয় তথ্য</button></div>
@@ -927,6 +946,7 @@
         <div class="btn-row"><button class="btn" onclick="submitDealerExpense()">সংরক্ষণ করুন</button></div>
         <div id="dealerExpenseMsg" class="msg"></div>
       </fieldset>
+      <div class="toolbar no-print"><button class="btn secondary small" onclick="openExpPrint()">🖨 খরচ ভাউচার প্রিন্ট</button></div>
       <div class="table-wrap"><table id="dealerExpenseTable"><thead></thead><tbody></tbody></table></div>
     </section>
 
@@ -4565,7 +4585,8 @@ async function loadDashboard(){
     <div class="card"><div class="num">${s.totalOrders}</div><div class="label">মোট অর্ডার</div></div>
     <div class="card"><div class="num">${Number(s.totalOrderQty) || 0}</div><div class="label">মোট সংখ্যা</div></div>
     <div class="card"><div class="num">${s.totalSales}</div><div class="label">মোট বিক্রি</div></div>
-    <div class="card"><div class="num">${Number(s.currentStockQty) || 0}</div><div class="label">বর্তমান স্টক</div></div>`;
+    <div class="card"><div class="num">${Number(s.currentStockQty) || 0}</div><div class="label">বর্তমান স্টক</div></div>
+    <div class="card"><div class="num">${Number(s.totalExpense) || 0}</div><div class="label">মোট খরচ</div></div>`;
 }
 
 /* ড্যাশবোর্ড — একটি টেবিলে রেফারেন্স (সারি) × ওয়ার্ড (কলাম) অনুযায়ী গ্রাহক সংখ্যা;
@@ -6039,6 +6060,90 @@ function editDealerExpenseRow(v){
   });
 }
 
+/*******************************************************
+ * খরচ ভাউচার প্রিন্ট — তারিখ (থেকে–পর্যন্ত, একদিন বাছতে দুটোতেই একই তারিখ) / মাস / বছর / সর্বমোট
+ * বছর ও সর্বমোটে মাস অনুযায়ী আলাদা গ্রুপ ও মাসের উপমোট থাকে
+ *******************************************************/
+function openExpPrint(){
+  document.getElementById("epMode").value = "date";
+  refreshExpPrintControls();
+  document.getElementById("expPrintModal").style.display = "flex";
+}
+function closeExpPrint(){ document.getElementById("expPrintModal").style.display = "none"; }
+function refreshExpPrintControls(){
+  const mode = document.getElementById("epMode").value;
+  const now = new Date(), dk = localDayKey(now);
+  let h = "";
+  if(mode === "date") h = `<div class="field"><label>তারিখ থেকে</label><input type="date" id="epFrom" value="${dk}"></div>
+    <div class="field"><label>তারিখ পর্যন্ত</label><input type="date" id="epTo" value="${dk}"></div>`;
+  else if(mode === "month") h = `<div class="field"><label>বছর</label><input type="number" id="epYear" value="${now.getFullYear()}"></div>
+    <div class="field"><label>মাস</label>${monthSelectHtml("epMonth", "", now.getMonth()+1)}</div>`;
+  else if(mode === "year") h = `<div class="field"><label>বছর</label><input type="number" id="epYear" value="${now.getFullYear()}"></div>`;
+  document.getElementById("epControls").innerHTML = h;
+}
+async function runExpPrint(){
+  const mode = document.getElementById("epMode").value;
+  const res = await cachedApiCall("listExpenseVouchers", {}, 15000);
+  if(!res.success){ alert(res.message); return; }
+
+  let list = res.vouchers.map(v => {
+    const d = v["তারিখ"] ? new Date(v["তারিখ"]) : null;
+    return { v, d: d && !isNaN(d) ? d : null };
+  });
+  const fmtDay = k => k.split("-").reverse().join("/");
+  let periodText = "সর্বমোট";
+  if(mode === "date"){
+    let from = document.getElementById("epFrom").value, to = document.getElementById("epTo").value;
+    if(!from || !to){ alert("তারিখ বাছুন"); return; }
+    if(from > to){ const t = from; from = to; to = t; }
+    list = list.filter(x => x.d && localDayKey(x.d) >= from && localDayKey(x.d) <= to);
+    periodText = from === to ? "তারিখ: " + fmtDay(from) : "তারিখ: " + fmtDay(from) + " থেকে " + fmtDay(to);
+  } else if(mode === "month"){
+    const y = Number(document.getElementById("epYear").value), m = Number(document.getElementById("epMonth").value);
+    if(!y){ alert("বছর লিখুন"); return; }
+    list = list.filter(x => x.d && x.d.getFullYear() === y && x.d.getMonth() + 1 === m);
+    periodText = "মাস: " + monthName(m) + " " + y;
+  } else if(mode === "year"){
+    const y = Number(document.getElementById("epYear").value);
+    if(!y){ alert("বছর লিখুন"); return; }
+    list = list.filter(x => x.d && x.d.getFullYear() === y);
+    periodText = "বছর: " + y;
+  }
+  if(list.length === 0){ alert("এই সময়ে কোনো খরচ ভাউচার নেই"); return; }
+  list.sort((a, b) => (a.d ? a.d.getTime() : Infinity) - (b.d ? b.d.getTime() : Infinity));
+
+  const amt = x => Number(x.v["পরিমাণ"]) || 0;
+  const r2 = n => Math.round(n * 100) / 100;
+  const grandTotal = r2(list.reduce((n, x) => n + amt(x), 0));
+  const grouped = mode === "year" || mode === "total";   // বছর/সর্বমোট: মাস অনুযায়ী গ্রুপ
+  const rows = [];
+  let serial = 0, curKey = null;
+  const groupHeader = key => {
+    const items = list.filter(x => (x.d ? x.d.getFullYear() + "-" + x.d.getMonth() : "none") === key);
+    const sub = r2(items.reduce((n, x) => n + amt(x), 0));
+    const label = key === "none" ? "তারিখ নেই" : monthName(items[0].d.getMonth() + 1) + " " + items[0].d.getFullYear();
+    return { group: escMsgHtml(label) + " — " + items.length + " টি — মোট: " + sub };
+  };
+  list.forEach(x => {
+    if(grouped){
+      const key = x.d ? x.d.getFullYear() + "-" + x.d.getMonth() : "none";
+      if(key !== curKey){ rows.push(groupHeader(key)); curKey = key; }
+    }
+    rows.push([++serial, x.d ? x.d.toLocaleDateString("en-GB") : "", escMsgHtml(x.v["বিবরণ"] || ""), amt(x)]);
+  });
+
+  closeExpPrint();
+  printOfficialTable(
+    "খরচ ভাউচার",
+    periodText + " | ডিলার: " + (state.dealerName || "") + " | মোট এন্ট্রি: " + list.length,
+    ["ক্রম", "তারিখ", "বিবরণ", "পরিমাণ"],
+    rows,
+    [["", "", "সর্বমোট খরচ", grandTotal]],
+    "@Powered by: AM Shahed: 01605721296",
+    [2]
+  );
+}
+
 function printDealerExpenseRow(v){
   printSingleRecord("খরচ ভাউচার", [
     { label:"তারিখ", value:v["তারিখ"] ? new Date(v["তারিখ"]).toLocaleDateString("bn-BD") : "" },
@@ -6114,7 +6219,8 @@ function buildDealerReportSections(r){
       ["মোট মূল্য (কম্বো)", sh.purchaseAmount],
       ["মোট বিক্রি সংখ্যা", sh.soldQty],
       ["বর্তমান স্টক সংখ্যা", sh.stockQty],
-      ["প্যাকেজ বিক্রি থেকে আয়", sh.packageProfit],
+      ["প্যাকেজ বিক্রি থেকে আয়", Math.round((Number(r.products.totals.soldAmount) || 0) * 100) / 100],   // বিক্রিত প্যাকেজের মোট মূল্য
+      ["প্যাকেজ বিক্রি থেকে মোট লাভ", sh.packageProfit],
       ["আয় রশিদ থেকে আয়", sh.receiptIncome],
       ["কার্ড ফি থেকে আয়", sh.cardFeeIncome],
       ["মোট আয়", sh.totalIncome],
