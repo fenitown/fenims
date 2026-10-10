@@ -910,6 +910,7 @@
         <div class="field"><label>প্যাকেজ সিলেক্ট করুন</label><select id="saleFilterPackage" onchange="loadSalesView()"></select></div>
         <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
         <div class="field"><label>বিক্রয়ের তারিখ</label><input type="date" id="saleDate" onchange="renderSalesTable()"></div>
+        <div class="field"><label>অন্যান্য খরচ (প্যাকেজ মূল্যের সাথে যোগ হবে)</label><input type="number" id="saleOtherExpense" min="0" value="0" oninput="onSaleOtherExpense()"></div>
         <div class="field"><label>সার্চ (নাম / মোবাইল / এনআইডি)</label><input type="search" id="saleSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="onSaleSearch()" autocomplete="off"></div>
       </div>
       <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button> <button class="btn secondary small" onclick="openPrintOpt('salesinfo')">🖨 বিক্রয় তথ্য</button></div>
@@ -5685,6 +5686,14 @@ function findSaleFor(customerId, pkgId){
   const day = saleSelectedDate();
   return allSalesCache.find(s => s["CustomerID"] === customerId && s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত" && saleDayOf(s) === day);
 }
+/* অন্যান্য খরচ — প্যাকেজ মূল্যের সাথে যোগ হয়ে বিক্রির মূল্য (নতুন বিক্রির ডিফল্ট মূল্য) হয় */
+function saleOtherExpense(){
+  const el = document.getElementById("saleOtherExpense");
+  const v = el ? Number(el.value) : 0;
+  return v > 0 ? v : 0;
+}
+let _saleOtherTimer = null;
+function onSaleOtherExpense(){ clearTimeout(_saleOtherTimer); _saleOtherTimer = setTimeout(renderSalesTable, 200); }
 let _saleSearchTimer = null;
 function onSaleSearch(){ clearTimeout(_saleSearchTimer); _saleSearchTimer = setTimeout(renderSalesTable, 150); }
 
@@ -5728,7 +5737,7 @@ function getSalesViewData(){
   const q = qEl ? cusNorm(qEl.value) : "";
   if(q) customers = customers.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q));
   const pkg = allPackagesCache.find(p => p["PackageID"] === pkgId);
-  const defaultPrice = pkg ? (pkg["সর্বমোট মূল্য"] || 0) : 0;
+  const defaultPrice = pkg ? (Number(pkg["সর্বমোট মূল্য"]) || 0) + saleOtherExpense() : 0;   // প্যাকেজ মূল্য + অন্যান্য খরচ
   return { pkgId, pkg, customers, defaultPrice, filterText };
 }
 
@@ -5755,26 +5764,37 @@ function printSalesInfo(grouped, total){
     const k = dayKey(d);
     dates[k] = d;
     const m = perCustomer[sl["CustomerID"]] = perCustomer[sl["CustomerID"]] || {};
-    m[k] = (m[k] || 0) + 1;
+    const cell = m[k] = m[k] || { n: 0, amt: 0 };
+    const sp = allPackagesCache.find(p => p["PackageID"] === sl["PackageID"]);
+    const price = sl["মূল্য"] !== undefined && sl["মূল্য"] !== "" ? Number(sl["মূল্য"]) : (sp ? Number(sp["সর্বমোট মূল্য"]) : 0);
+    cell.n++; cell.amt += price || 0;
   });
   const dateKeys = Object.keys(dates).sort();
   if(dateKeys.length === 0){ alert("বিক্রয় তথ্য নেই — এই গ্রাহকদের কোনো বিক্রি পাওয়া যায়নি"); return; }
 
   const fmt = k => dates[k].toLocaleDateString("en-GB");
-  const head = ["ক্রম", "আইডি", "নাম", "পিতার নাম"].concat(dateKeys.map(fmt));
+  const head = ["ক্রম", "আইডি", "নাম", "পিতার নাম"].concat(dateKeys.map(fmt)).concat(["মোট মূল্য"]);
   const rows = [];
+  let grandTotal = 0;
   grouped.groups.forEach(g => {
     if(g.label) rows.push({ group: escMsgHtml(g.label) + " — " + g.items.length + " জন" });
     g.items.forEach((c, i) => {
       const m = perCustomer[c["CustomerID"]] || {};
+      let rowTotal = 0;
+      const cells = dateKeys.map(k => {
+        if(!m[k]) return "";   // এই তারিখে নেননি — ঘর খালি
+        rowTotal += m[k].amt;
+        return fmt(k) + (m[k].n > 1 ? " ×" + m[k].n : "") + "<br>" + m[k].amt + " ৳";
+      });
+      grandTotal += rowTotal;
       rows.push([i + 1, c["CustomerID"] || "", escMsgHtml(c["নাম"] || ""), escMsgHtml(c["পিতার নাম"] || "")]
-        .concat(dateKeys.map(k => m[k] ? fmt(k) + (m[k] > 1 ? " ×" + m[k] : "") : "")));
+        .concat(cells).concat([rowTotal]));
     });
   });
   printOfficialTable(
     "বিক্রয় তথ্য",
     (pkg ? "প্যাকেজ: " + pkg["নাম"] + " | " : "সব প্যাকেজ | ") + grouped.desc + " | ডিলার: " + (state.dealerName || "") + " | মোট গ্রাহক: " + total,
-    head, rows, null,
+    head, rows, [[""].concat(Array(head.length - 2).fill("")).concat([grandTotal]).map((v, i) => i === 2 ? "সর্বমোট" : v)],
     "@Powered by: AM Shahed: 01605721296",
     [2, 3],
     { landscape: true }
@@ -5874,7 +5894,7 @@ function printThermalReceipt(c, packageId){
     ["Mobile No", c["মোবাইল নং"]||""],
     ["Collection Point", c["প্রাপ্তির স্থান"]||""],
     ["Package", pkg ? pkg["নাম"] : ""],
-    ["Price", sale && sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? sale["মূল্য"] : (pkg ? pkg["সর্বমোট মূল্য"] : "")],
+    ["Price", sale && sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? sale["মূল্য"] : (pkg ? (Number(pkg["সর্বমোট মূল্য"]) || 0) + saleOtherExpense() : "")],
     ["Date", dt],
     ["Status", sale ? "বিক্রিত" : "অপেক্ষমান"]
   ];
