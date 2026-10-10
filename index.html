@@ -898,7 +898,7 @@
           <div class="field" style="margin-top:8px;">
             <label>মেসেজ</label>
             <select id="msgPrevSelect" onchange="onPrevMsgSelect()"></select>
-            <textarea id="msgText" rows="4" style="width:100%;resize:vertical;margin-top:6px;" placeholder="নতুন মেসেজ হলে শুধু মূল লেখাটা লিখুন" oninput="updateMsgPreview()"></textarea>
+            <textarea id="msgText" rows="4" style="width:100%;resize:vertical;margin-top:6px;" placeholder="মেসেজ লিখুন — ডিলারের নাম/এরিয়াসহ সব নিজে লিখুন (শুধু গ্রাহকের নাম আগে অটো বসবে)" oninput="updateMsgPreview()"></textarea>
           </div>
           <div class="field" style="margin-top:10px;">
             <label>মাধ্যম</label>
@@ -910,7 +910,7 @@
             </div>
           </div>
           <p id="msgChannelNote" style="font-size:0.78rem;color:var(--muted);">
-            শুধু মূল লেখাটা লিখুন, শেষে আপনার <b>নাম ও এরিয়া</b> নিজে থেকেই বসে যাবে। যে মাধ্যম বাছবেন শুধু সেটাতেই যাবে, দুটোতে একসাথে যাবে না।
+            প্রতিটি মেসেজের প্রথম লাইনে শুধু <b>গ্রাহকের নাম</b> নিজে থেকে বসে যাবে; বাকি মেসেজ ও আপনার <b>নাম/এরিয়া</b> নিজে লিখবেন। যে মাধ্যম বাছবেন শুধু সেটাতেই যাবে, দুটোতে একসাথে যাবে না।
             আগের মেসেজ তালিকা থেকে বেছে লেখা এডিট করে অন্য এরিয়াতেও পাঠানো যায়। WhatsApp এ পাঠিয়ে পরে একই মেসেজ <b>SMS → শুধুমাত্র যাদের WhatsApp নাই</b> বেছে পাঠালে শুধু বাকিদের কাছে SMS যাবে।
           </p>
           <div id="msgPreviewBox" style="font-size:0.8rem;background:#f6f3ea;border:1px dashed #d8d2c2;border-radius:8px;padding:8px 10px;margin-bottom:8px;white-space:pre-wrap;"></div>
@@ -1792,11 +1792,10 @@ async function toggleMsgForm(){
 }
 
 /* ---------- মেসেজের পূর্ণ লেখা ও SMS খরচের হিসাব ---------- */
+/* সব মেসেজে শুধু গ্রাহকের নাম অটো (প্রথম লাইনে); বাকি লেখা ও ডিলারের নাম/এরিয়া ডিলার নিজে লেখেন */
 function buildFullMessage(main, customerName){
-  const st = messagingStatusCache || {};
-  const sig = st.signature !== undefined ? st.signature : (state.dealerName || "");
   const nameLine = customerName ? (customerName + "\n") : "";
-  return nameLine + main + (sig ? "\n\n" + sig : "");
+  return nameLine + main;
 }
 
 /* কয়টি SMS হবে — বাংলা (ইউনিকোড) হলে ৭০/৬৭, শুধু ইংরেজি হলে ১৬০/১৫৩ */
@@ -1894,7 +1893,7 @@ function updateMsgPreview(){
   const box = document.getElementById("msgPreviewBox");
   if(!box) return;
   const raw = document.getElementById("msgText").value.trim();
-  box.textContent = buildFullMessage(raw || "(আপনার লেখা মেসেজ)");
+  box.textContent = buildFullMessage(raw || "(আপনার লেখা মেসেজ)", "(গ্রাহকের নাম)");
   const costBox = document.getElementById("msgCostBox");
   if(costBox){
     if(!raw){ costBox.style.display = "none"; return; }
@@ -1902,7 +1901,7 @@ function updateMsgPreview(){
     if(getMsgChannel() === "whatsapp"){
       costBox.innerHTML = `WhatsApp এ পাঠানো হবে — প্রাপক: <b>${Number(count).toLocaleString("bn-BD")}</b> জন<br><span style="color:var(--muted);font-size:0.78rem;">(SMS এর খরচ লাগবে না; যাদের নাম্বারে WhatsApp নেই তাদের কাছে যাবে না)</span>`;
     } else {
-      costBox.innerHTML = costHtml(buildFullMessage(raw), count);
+      costBox.innerHTML = costHtml(buildFullMessage(raw, "(গ্রাহকের নাম)"), count);
     }
     costBox.style.display = "block";
   }

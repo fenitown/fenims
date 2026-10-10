@@ -130,8 +130,7 @@ function getMessagingStatus(data) {
     smsSenderId: config.smsSenderId || "",
     smsReady: isSmsReady(config),
     waReady: isWhatsAppReady(config),
-    smsRate: Number(config.smsRate) > 0 ? Number(config.smsRate) : 0.35,   // প্রতি SMS (টাকা)
-    signature: buildSignature(getDealerNameAndAddress(perm.payload.dealerId))
+    smsRate: Number(config.smsRate) > 0 ? Number(config.smsRate) : 0.35   // প্রতি SMS (টাকা)
   };
 }
 
@@ -258,19 +257,17 @@ function getDealerNameAndAddress(dealerId) {
 }
 
 /*******************************************************
- * চূড়ান্ত মেসেজ তৈরি — ডিলার শুধু মূল লেখাটা লেখেন, শেষে অটো বসে:
+ * চূড়ান্ত মেসেজ তৈরি — সব মেসেজে শুধু গ্রাহকের নাম অটো বসে (প্রথম লাইনে):
  *
- *   <ডিলারের লেখা মূল মেসেজ>
+ *   <গ্রাহকের নাম>
+ *   <ডিলারের লেখা পুরো মেসেজ>
  *
- *   <ডিলারের নাম>
- *   <ডিলারের এরিয়া>
- *
+ * ডিলারের নাম/এরিয়া আর অটো বসে না — ডিলার নিজে মেসেজের ভেতরেই লিখবেন।
+ * (dealerInfo ও prefixName প্যারামিটার আগের কলগুলোর সাথে মিল রাখতে থাকলো, এখন ব্যবহার হয় না)
  *******************************************************/
 function composeCustomerMessage(customerName, mainText, dealerInfo, prefixName) {
-  // প্রিফিক্স চাইলে (নতুন গ্রাহক) প্রথম লাইনে গ্রাহকের নাম, তারপর মূল লেখা, শেষে ডিলারের নাম ও এরিয়া
-  const signature = buildSignature(dealerInfo);
-  const nameLine = (prefixName && String(customerName || "").trim()) ? String(customerName).trim() + "\n" : "";
-  return nameLine + String(mainText).trim() + (signature ? "\n\n" + signature : "");
+  const nameLine = String(customerName || "").trim() ? String(customerName).trim() + "\n" : "";
+  return nameLine + String(mainText).trim();
 }
 
 /*******************************************************
