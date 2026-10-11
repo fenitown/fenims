@@ -199,6 +199,8 @@
   .name-cell{ white-space:nowrap; }
   #customersTable td, #customersTable th{ white-space:nowrap; }
   #customersTable td .fit{ display:inline-block; white-space:nowrap; }
+  #salesTable td, #salesTable th{ white-space:nowrap; }
+  #salesTable td .fit{ display:inline-block; white-space:nowrap; }
   table th, table td{ border:1px solid var(--line); padding:7px 8px; font-size:0.88rem; text-align:center; }
   table th{ background:#eef0e9; text-align:center; }
   table td.cell-left{ text-align:left; }
@@ -5825,7 +5827,7 @@ function printSalesInfo(grouped, total){
         return fmt(k) + (m[k].n > 1 ? " ×" + m[k].n : "") + "<br>" + m[k].amt + " ৳";
       });
       grandTotal += rowTotal;
-      rows.push([i + 1, c["CustomerID"] || "", escMsgHtml(c["নাম"] || ""), escMsgHtml(c["পিতার নাম"] || "")]
+      rows.push([i + 1, c["CustomerID"] || "", cusFit(escMsgHtml(c["নাম"] || "")), cusFit(escMsgHtml(c["পিতার নাম"] || ""))]
         .concat(cells).concat([rowTotal]));
     });
   });
@@ -5850,17 +5852,17 @@ function printSalesOfficial(grouped, total){
       const priceEl = document.getElementById("salePrice_" + c["CustomerID"]);
       const price = priceEl ? priceEl.value : (sale && sale["মূল্য"] !== "" && sale["মূল্য"] !== undefined ? sale["মূল্য"] : view.defaultPrice);
       sum += Number(price) || 0;
-      rows.push([i+1, c["নাম"]||"", c["পিতার নাম"]||"", c["মোবাইল নং"]||"", c["ওয়ার্ড নং"]||"", c["প্রাপ্তির স্থান"]||"", c["রেফারেন্স"]||"", price, sale ? "বিক্রিত" : "—"]);
+      rows.push([i+1, c["CustomerID"]||"", cusFit(escMsgHtml(c["নাম"]||"")), cusFit(escMsgHtml(c["পিতার নাম"]||"")), cusFit(escMsgHtml(c["মোবাইল নং"]||"")), cusFit(escMsgHtml(c["ওয়ার্ড নং"]||"")), cusFit(escMsgHtml(c["রেফারেন্স"]||"")), price, sale ? "বিক্রিত" : "—"]);
     });
   });
   printOfficialTable(
     "বিক্রি — গ্রাহক তালিকা",
     "প্যাকেজ: " + (view.pkg ? view.pkg["নাম"] : "") + " | বিক্রয়ের তারিখ: " + saleSelectedDate().split("-").reverse().join("/") + " | " + grouped.desc + " | ডিলার: " + (state.dealerName||"") + " | মোট গ্রাহক: " + total,
-    ["ক্রম","নাম","পিতার নাম","মোবাইল","ওয়ার্ড","প্রাপ্তির স্থান","রেফারেন্স","মূল্য","স্ট্যাটাস"],
+    ["ক্রম","আইডি","নাম","পিতার নাম","মোবাইল","ওয়ার্ড","রেফারেন্স","মূল্য","স্ট্যাটাস"],
     rows,
-    [["", "সাবটোটাল", "", "", "", "", "", sum, ""]],
+    [["", "", "সাবটোটাল", "", "", "", "", sum, ""]],
     "@Powered by: AM Shahed: 01605721296",
-    [1,2,5,6],
+    [2,3,6],
     { landscape:true }
   );
 }
@@ -5873,11 +5875,11 @@ function renderSalesTable(){
   const view = getSalesViewData();
   const customers = view.customers, pkg = view.pkg, defaultPrice = view.defaultPrice;
 
-  table.innerHTML = "<thead><tr><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>ওয়ার্ড</th><th>প্রাপ্তির স্থান</th><th>রেফারেন্স</th><th>মূল্য</th><th>স্ট্যাটাস</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  table.innerHTML = "<thead><tr><th>ক্রম</th><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>ওয়ার্ড</th><th>রেফারেন্স</th><th>মূল্য</th><th>স্ট্যাটাস</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
   const tbody = table.querySelector("tbody");
   let subtotal = 0;
 
-  customers.forEach(c => {
+  customers.forEach((c, ci) => {
     const sale = findSaleFor(c["CustomerID"], pkgId);
     const cJson = JSON.stringify(c).replace(/'/g, "&#39;");
     const priceValue = sale ? (sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? sale["মূল্য"] : defaultPrice) : defaultPrice;
@@ -5885,7 +5887,7 @@ function renderSalesTable(){
     const priceInputId = "salePrice_" + c["CustomerID"];
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="cell-left name-cell">${c["নাম"]}</td><td class="cell-left name-cell">${c["পিতার নাম"]||""}</td><td>${c["মোবাইল নং"]}</td><td>${c["ওয়ার্ড নং"]||""}</td><td>${c["প্রাপ্তির স্থান"]||""}</td><td>${escMsgHtml(c["রেফারেন্স"]||"")}</td>
+      <td>${ci + 1}</td><td>${escMsgHtml(c["CustomerID"]||"")}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${cusFit(escMsgHtml(c["মোবাইল নং"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td>
       <td><input type="number" class="price-input" id="${priceInputId}" value="${priceValue}" ${!pkgId?"disabled":""}
         ${sale ? `onchange="updateSalePriceHandler('${sale['SaleID']}', this.value)"` : ""}></td>
       <td>${sale ? "বিক্রিত" : "—"}</td>
@@ -5902,7 +5904,7 @@ function renderSalesTable(){
     const trFoot = document.createElement("tr");
     trFoot.style.fontWeight = "700";
     trFoot.style.background = "#eef0e9";
-    trFoot.innerHTML = `<td class="cell-left" colspan="6">সাবটোটাল</td><td>${subtotal}</td><td></td><td class="no-print"></td>`;
+    trFoot.innerHTML = `<td class="cell-left" colspan="7">সাবটোটাল</td><td>${subtotal}</td><td></td><td class="no-print"></td>`;
     tbody.appendChild(trFoot);
   }
 }
