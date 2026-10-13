@@ -128,7 +128,9 @@ const DEALER_SHEETS_DEF = {
     "রেফারেন্স"
   ],
   "Sales": [
-    "SaleID", "CustomerID", "PackageID", "তারিখ", "মূল্য", "স্ট্যাটাস"
+    "SaleID", "CustomerID", "PackageID", "তারিখ", "মূল্য", "স্ট্যাটাস",
+    // স্টক ব্যাচ (ডেলিভারি সম্পন্ন ইনভয়েস নং) — শীটের শেষে যোগ হয়
+    "ব্যাচ"
   ],
   // Orders (deprecated) — dealer-side "order" tracking has been replaced
   // by the shared master-level SalesInvoice system (same as ডিপু's

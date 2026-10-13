@@ -488,6 +488,19 @@ function sendCustomerMessage(data) {
       return picked.indexOf(String(c["ওয়ার্ড নং"] === undefined || c["ওয়ার্ড নং"] === null ? "" : c["ওয়ার্ড নং"]).trim()) !== -1;
     });
     statusText = "ওয়ার্ড: " + picked.join(", ");
+  } else if (data.type === "ref" && picked.length) {
+    targeted = customers.filter(function (c) {
+      return picked.indexOf(String(c["রেফারেন্স"] || "").trim()) !== -1;
+    });
+    statusText = "রেফারেন্স: " + picked.join(", ");
+  }
+
+  // ব্যাচ / মেসেজ প্রাপ্তি (বিক্রি হয়েছে/হয় নি) ফিল্টার — ক্লায়েন্ট চূড়ান্ত গ্রাহক আইডি তালিকা পাঠায়
+  if (Array.isArray(data.customerIds) && data.type !== "single") {
+    const idSet = {};
+    data.customerIds.forEach(function (id) { idSet[String(id)] = true; });
+    targeted = targeted.filter(function (c) { return idSet[String(c["CustomerID"])]; });
+    if (data.audienceLabel) statusText = String(data.audienceLabel).slice(0, 200);
   }
 
   const mainText = String(data.message).trim();

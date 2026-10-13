@@ -585,6 +585,18 @@ function getDealerDeliveredQtyMap(masterSS, dealerId) {
   return map;
 }
 
+/* স্টক ব্যাচ — ডিলারের প্রতিটি "ডেলিভারি সম্পন্ন" ইনভয়েস লাইন (ইনভয়েস নং + প্যাকেজ) */
+function getDealerDeliveredBatches(masterSS, dealerId) {
+  const map = {};
+  genericListRows(getSheet(masterSS, "SalesInvoice")).forEach(function (e) {
+    if (e["DealerID"] !== dealerId || e["স্ট্যাটাস"] !== "ডেলিভারি সম্পন্ন") return;
+    const key = e["ইনভয়েস নং"] + "|" + e["PackageID"];
+    if (!map[key]) map[key] = { batchId: e["ইনভয়েস নং"], packageId: e["PackageID"], date: e["তারিখ"], qty: 0 };
+    map[key].qty += Number(e["সংখ্যা"]) || 0;
+  });
+  return Object.keys(map).map(function (k) { return map[k]; });
+}
+
 /* বিক্রয়ের তারিখ ("YYYY-MM-DD") — দুপুর ১২টা UTC ধরে রাখা হয়, যাতে টাইমজোন যা-ই হোক একই দিনের তারিখ দেখায়;
    তারিখ না এলে বা ভুল ফরম্যাট হলে এখনকার সময় */
 function parseSaleDate(v) {
@@ -614,6 +626,19 @@ function addSale(data) {
       return { success: false, message: "এই প্যাকেজের পণ্য স্টকে নেই, বিক্রি করা যাবে না" };
     }
 
+    // নির্দিষ্ট স্টক ব্যাচ থেকে বিক্রি হলে সেই ব্যাচের সংখ্যা যাচাই
+    if (data.batchId) {
+      const batch = getDealerDeliveredBatches(getMasterSS(), perm.payload.dealerId).filter(function (b) {
+        return b.batchId === data.batchId && b.packageId === data.packageId;
+      })[0];
+      if (!batch) return { success: false, message: "স্টক ব্যাচ পাওয়া যায়নি" };
+      let soldInBatch = 0;
+      genericListRows(sheet).forEach(function (s) {
+        if (s["ব্যাচ"] === data.batchId && s["PackageID"] === data.packageId && s["স্ট্যাটাস"] === "বিক্রিত") soldInBatch++;
+      });
+      if (soldInBatch >= batch.qty) return { success: false, message: "এই স্টক ব্যাচের পণ্য শেষ, অন্য ব্যাচ বাছুন" };
+    }
+
     const saleId = generateId(sheet, "S");
     genericAddRow(sheet, {
       "SaleID": saleId,
@@ -621,7 +646,8 @@ function addSale(data) {
       "PackageID": data.packageId,
       "তারিখ": parseSaleDate(data.date),
       "মূল্য": data.price || 0,
-      "স্ট্যাটাস": "বিক্রিত"
+      "স্ট্যাটাস": "বিক্রিত",
+      "ব্যাচ": data.batchId || ""
     });
     return { success: true, saleId: saleId, message: "বিক্রি সম্পন্ন হয়েছে" };
   } finally {
@@ -680,6 +706,7 @@ function getSalesPageData(data) {
     packages: pkgResult.success ? pkgResult.packages : [],
     customers: customers,
     sales: sales,
+    batches: getDealerDeliveredBatches(getMasterSS(), perm.payload.dealerId),
     delivered: getDealerDeliveredQtyMap(getMasterSS(), perm.payload.dealerId)   // প্যাকেজ → ডেলিভারি সম্পন্ন সংখ্যা (স্টক যাচাইয়ের জন্য)
   };
 }

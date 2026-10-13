@@ -390,10 +390,24 @@
     <div class="field"><label>প্রিন্টের ধরন</label><select id="poMode" onchange="refreshPrintOptValues()"></select></div>
     <div class="field" id="poSearchWrap" style="display:none;"><label>গ্রাহক খুঁজুন (নাম / মোবাইল / এনআইডি)</label><input type="search" id="poSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="fillPoCustomerOptions()" autocomplete="off"></div>
     <div class="field" id="poValueWrap" style="display:none;"><label id="poValueLabel"></label><select id="poValue"></select></div>
+    <div class="field" id="poSoldWrap" style="display:none;"><label>কাদের তথ্য</label><select id="poSoldMode"><option value="all">সকল গ্রাহক</option><option value="sold">শুধুমাত্র যাদের নিকট বিক্রি হয়েছে</option></select></div>
+    <div class="field"><label>পাতার দিক (প্রিন্ট)</label><select id="poOrient"><option value="landscape">Landscape (আড়াআড়ি)</option><option value="portrait">Portrait (লম্বালম্বি)</option></select></div>
     <div class="btn-row">
       <button class="btn" onclick="runPrintOpt()">🖨 প্রিন্ট</button>
       <button class="btn secondary" id="poShareBtn" onclick="runPrintOpt(true)">শেয়ার (ছবি)</button>
       <button class="btn secondary" onclick="closePrintOpt()">বাতিল</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="batchModal">
+  <div class="modal-box" style="max-width:900px;width:96%;">
+    <h3>স্টক ব্যাচ রিপোর্ট</h3>
+    <div class="field"><label>স্টক ব্যাচ বাছুন</label><select id="bmBatch" onchange="renderBatchReport()"></select></div>
+    <div id="bmBody" style="overflow-x:auto;"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="printBatchReport()">🖨 প্রিন্ট</button>
+      <button class="btn secondary" onclick="document.getElementById('batchModal').style.display='none'">বন্ধ</button>
     </div>
   </div>
 </div>
@@ -887,17 +901,30 @@
             <label>Sender ID / মোবাইল নং (গেটওয়ে যেভাবে চায়)</label>
             <input id="msgFromMobile" placeholder="যেমন: 01XXXXXXXXX">
           </div>
+          <div class="field" style="margin-top:8px;">
+            <label>ব্যাচ নং</label>
+            <select id="msgBatch" onchange="updateMsgPreview()"></select>
+          </div>
           <div class="field" id="msgTypeField" style="margin-top:8px;">
             <label>গ্রাহক ধরন</label>
             <select id="msgType" onchange="onMsgTypeChange()">
               <option value="all">সকল গ্রাহক</option>
               <option value="location">প্রাপ্তির স্থান ভিত্তিক</option>
               <option value="ward">ওয়ার্ড ভিত্তিক</option>
+              <option value="ref">রেফারেন্স ভিত্তিক</option>
             </select>
           </div>
           <div class="field" id="msgLocationField" style="display:none;margin-top:8px;">
             <label id="msgLocationLabel">প্রাপ্তির স্থান সিলেক্ট করুন</label>
             <div id="msgLocationChecks" style="max-height:140px;overflow-y:auto;border:1px solid #d8d2c2;border-radius:8px;padding:8px;"></div>
+          </div>
+          <div class="field" style="margin-top:8px;">
+            <label>মেসেজ প্রাপ্তি</label>
+            <select id="msgAudience" onchange="updateMsgPreview()">
+              <option value="all">সকল গ্রাহক</option>
+              <option value="sold">যাদের নিকট বিক্রি হয়েছে</option>
+              <option value="unsold">যাদের নিকট বিক্রি হয় নি</option>
+            </select>
           </div>
           <div class="field" style="margin-top:8px;">
             <label>মেসেজ</label>
@@ -931,12 +958,13 @@
       <h2>বিক্রি</h2>
       <div class="form-grid no-print">
         <div class="field"><label>প্যাকেজ সিলেক্ট করুন</label><select id="saleFilterPackage" onchange="loadSalesView()"></select></div>
-        <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
+        <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং / রেফারেন্স</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
+        <div class="field"><label>স্টক ব্যাচ</label><select id="saleBatch"></select></div>
         <div class="field"><label>বিক্রয়ের তারিখ</label><input type="date" id="saleDate" onchange="renderSalesTable()"></div>
         <div class="field"><label>অন্যান্য খরচ</label><input type="number" id="saleOtherExpense" min="0" value="0" oninput="onSaleOtherExpense()"></div>
         <div class="field"><label>সার্চ (নাম / মোবাইল / এনআইডি)</label><input type="search" id="saleSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="onSaleSearch()" autocomplete="off"></div>
       </div>
-      <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button> <button class="btn secondary small" onclick="openPrintOpt('salesinfo')">🖨 বিক্রয় তথ্য</button></div>
+      <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('sales')">🖨 প্রিন্ট</button> <button class="btn secondary small" onclick="openPrintOpt('salesinfo')">🖨 বিক্রয় তথ্য</button> <button class="btn secondary small" onclick="openBatchReport()">📦 স্টক ব্যাচ রিপোর্ট</button></div>
       <div class="table-wrap"><table id="salesTable"><thead></thead><tbody></tbody></table></div>
       <div id="salesMsg" class="msg"></div>
     </section>
@@ -1352,6 +1380,7 @@ function printSingleRecord(title, fields){
  * headers: টেবিল হেডার (center-align), rows: 2D array (data left-align)
  * extraFooterRows: টোটাল/সারাংশ সারি (ঐচ্ছিক, bold দেখাবে)
  *******************************************************/
+const PRINT_FIT_JS = "document.querySelectorAll('th,td').forEach(function(c){c.style.whiteSpace='nowrap'});document.querySelectorAll('table').forEach(function(t){var fs=parseFloat(getComputedStyle(t).fontSize)||12,box=t.parentElement;while(t.offsetWidth>box.clientWidth+1&&fs>4.5){fs-=0.5;t.style.fontSize=fs+'px';t.querySelectorAll('th,td').forEach(function(c){c.style.fontSize=fs+'px';});}});";
 function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, footerNote, leftAlignCols, opts){
   opts = opts || {};
   const landscape = !!opts.landscape;
@@ -1383,9 +1412,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
       @page{ size:${landscape ? 'A4 landscape' : 'A4'}; margin:0.5in; }
       html, body{ margin:0; padding:0; }
       body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; }
-      ${landscape ? (opts.wrap
-        ? '.sheet{ width:271mm; } table{ font-size:10px; } th,td{ font-size:inherit !important; padding:3px 4px !important; word-break:break-word; } ' + (opts.nowrapCols || []).map(i => 'td:nth-child(' + (i+1) + '),th:nth-child(' + (i+1) + '){ white-space:nowrap; }').join(' ')
-        : '.sheet{ width:271mm; } table{ font-size:11px; } th,td{ white-space:nowrap; font-size:inherit !important; padding:4px 6px !important; }') : ''}
+      .sheet{ width:${landscape ? '271mm' : '194mm'}; } table{ font-size:11px; } th,td{ white-space:nowrap; font-size:inherit !important; padding:4px 6px !important; }
       .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:10px; margin-bottom:14px; }
       .letterhead h1{ margin:0; color:#153f37; font-size:20px; }
       .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
@@ -1409,7 +1436,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
     ${footerNote ? `<div class="doc-footer">${footerNote}</div>` : ''}
     </div>
     <script>${shareScript}window.onload=function(){
-      ${(landscape && !opts.wrap) ? "var sh=document.querySelector('.sheet'),t=document.querySelector('table'),fs=11;while(t.scrollWidth>sh.clientWidth&&fs>5){fs-=0.5;t.style.fontSize=fs+'px';}" : ''}
+      ${PRINT_FIT_JS}
       window.print();}<\/script>
     </body></html>`);
   win.document.close();
@@ -1709,6 +1736,7 @@ async function loadMessagesSection(){
   const cres = await cachedApiCall("listCustomers", {}, 60000);
   if(cres.success) window.__customersCache = cres.customers;
   if(document.getElementById("msgFormWrap").style.display !== "none") onMsgTypeChange();
+  loadMsgBatchData();
   loadMessagesList();
 }
 
@@ -1778,6 +1806,8 @@ async function toggleMsgForm(){
   document.getElementById("msgResult").innerHTML = "";
   document.getElementById("msgResult").className = "msg";
   document.getElementById("msgType").value = "all";
+  document.getElementById("msgAudience").value = "all";
+  document.getElementById("msgBatch").value = "";
   document.getElementById("msgLocationField").style.display = "none";
 
   const c = await loadMessagingStatus();
@@ -1830,18 +1860,51 @@ function onMsgChannelChange(){
 }
 
 /* বর্তমান নির্বাচন অনুযায়ী প্রাপক-গ্রাহক এবং সার্ভারের মতো একই "স্ট্যাটাস টেক্সট" */
+function msgSoldIdSet(batchVal){
+  const ids = {};
+  if(batchVal){
+    const v = batchVal.split("|");
+    const b = batchStats(v[0]).find(x => x.batchId === v[1]);
+    if(b) b.sales.forEach(x => { ids[x["CustomerID"]] = true; });
+  } else {
+    allSalesCache.forEach(x => { if(x["স্ট্যাটাস"] === "বিক্রিত") ids[x["CustomerID"]] = true; });
+  }
+  return ids;
+}
+async function loadMsgBatchData(){
+  const res = await cachedApiCall("getSalesPageData", {}, 10000);
+  if(res.success){
+    allPackagesCache = res.packages; allSalesCache = res.sales; window.__batches = res.batches || [];
+  }
+  const sel = document.getElementById("msgBatch"), prev = sel.value;
+  const pn = id => { const p = allPackagesCache.find(x => x["PackageID"] === id); return p ? p["নাম"] : id; };
+  sel.innerHTML = '<option value="">সকল ব্যাচ</option>' + batchStats("").slice().reverse().map(b =>
+    `<option value="${escMsgHtml(b.packageId + "|" + b.batchId)}">${escMsgHtml(b.batchId)} — ${escMsgHtml(pn(b.packageId))} (${new Date(b.date).toLocaleDateString("en-GB")})</option>`).join("");
+  if([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  updateMsgPreview();
+}
 function getMsgAudience(){
   const customers = window.__customersCache || [];
   const type = document.getElementById("msgType").value;
-  if(type === "location" || type === "ward"){
+  let list = customers, label = "সকল গ্রাহক";
+  if(type === "location" || type === "ward" || type === "ref"){
     const picked = Array.from(document.querySelectorAll(".msgLocChk:checked")).map(el => el.value);
-    const key = type === "location" ? "প্রাপ্তির স্থান" : "ওয়ার্ড নং";
-    return {
-      list: customers.filter(c => picked.indexOf(String(c[key]==null?"":c[key]).trim()) !== -1),
-      statusText: picked.length ? (type === "ward" ? "ওয়ার্ড: " + picked.join(", ") : picked.join(", ")) : ""
-    };
+    const key = type === "location" ? "প্রাপ্তির স্থান" : type === "ward" ? "ওয়ার্ড নং" : "রেফারেন্স";
+    list = customers.filter(c => picked.indexOf(String(c[key]==null?"":c[key]).trim()) !== -1);
+    label = picked.length ? (type === "ward" ? "ওয়ার্ড: " + picked.join(", ") : type === "ref" ? "রেফারেন্স: " + picked.join(", ") : picked.join(", ")) : "";
   }
-  return { list: customers, statusText: "সকল গ্রাহক" };
+  const batchSel = document.getElementById("msgBatch"), modeSel = document.getElementById("msgAudience");
+  const batchVal = batchSel ? batchSel.value : "", mode = modeSel ? modeSel.value : "all";
+  const filtered = !!(batchVal || mode !== "all");
+  if(filtered){
+    const sold = msgSoldIdSet(batchVal);
+    if(mode === "sold") list = list.filter(c => sold[c["CustomerID"]]);
+    else if(mode === "unsold") list = list.filter(c => !sold[c["CustomerID"]]);
+    if(label){
+      label += (batchVal ? " — ব্যাচ: " + batchVal.split("|")[1] : "") + (mode === "sold" ? " — বিক্রি হয়েছে" : mode === "unsold" ? " — বিক্রি হয় নি" : "");
+    }
+  }
+  return { list, statusText: label, filtered };
 }
 
 /* সার্ভারের resolveMessageRecord এর মতো: এই লেখা/প্রাপক-ধরন একই এবং ৬ ঘণ্টার মধ্যে হলে আগের মেসেজের আইডি */
@@ -2005,12 +2068,15 @@ function onMsgTypeChange(){
   if(type === "location"){
     document.getElementById("msgLocationLabel").textContent = "প্রাপ্তির স্থান সিলেক্ট করুন";
     items = Array.from(new Set(customers.map(c => c["প্রাপ্তির স্থান"]).filter(Boolean))).map(l => ({ value:l, label:l }));
+  } else if(type === "ref"){
+    document.getElementById("msgLocationLabel").textContent = "রেফারেন্স সিলেক্ট করুন";
+    items = Array.from(new Set(customers.map(c => String(c["রেফারেন্স"]||"").trim()).filter(Boolean))).sort((a,b) => a.localeCompare(b, "bn")).map(r => ({ value:r, label:r }));
   } else {
     document.getElementById("msgLocationLabel").textContent = "ওয়ার্ড নং সিলেক্ট করুন";
     items = uniqueWards(customers).map(w => ({ value:w, label:wardLabel(w) }));
   }
   if(items.length === 0){
-    box.innerHTML = "<p style='color:var(--muted);font-size:0.85rem;margin:0;'>" + (type === "location" ? "কোনো প্রাপ্তির স্থান" : "কোনো ওয়ার্ড") + " পাওয়া যায়নি</p>";
+    box.innerHTML = "<p style='color:var(--muted);font-size:0.85rem;margin:0;'>" + (type === "location" ? "কোনো প্রাপ্তির স্থান" : type === "ref" ? "কোনো রেফারেন্স" : "কোনো ওয়ার্ড") + " পাওয়া যায়নি</p>";
   } else {
     box.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:4px 14px;">` + items.map(it =>
       `<label style="display:inline-flex;align-items:center;gap:5px;font-size:0.88rem;white-space:nowrap;"><input type="checkbox" value="${escMsgHtml(it.value)}" class="msgLocChk" checked onchange="updateMsgPreview()"> ${escMsgHtml(it.label)}</label>`
@@ -2030,12 +2096,17 @@ async function sendBulkMessage(){
 
   const type = document.getElementById("msgType").value;
   let locations = [];
-  if(type === "location" || type === "ward"){
+  if(type === "location" || type === "ward" || type === "ref"){
     locations = Array.from(document.querySelectorAll(".msgLocChk:checked")).map(el => el.value);
     if(locations.length === 0){
-      resultBox.className = "msg err"; resultBox.textContent = (type === "ward") ? "অন্তত একটি ওয়ার্ড সিলেক্ট করুন" : "অন্তত একটি প্রাপ্তির স্থান সিলেক্ট করুন";
+      resultBox.className = "msg err"; resultBox.textContent = (type === "ward") ? "অন্তত একটি ওয়ার্ড সিলেক্ট করুন" : (type === "ref") ? "অন্তত একটি রেফারেন্স সিলেক্ট করুন" : "অন্তত একটি প্রাপ্তির স্থান সিলেক্ট করুন";
       return;
     }
+  }
+  const aud = getMsgAudience();
+  if(aud.filtered && aud.list.length === 0){
+    resultBox.className = "msg err"; resultBox.textContent = "এই নির্বাচনে কোনো গ্রাহক নেই";
+    return;
   }
 
   const sendBtn = document.getElementById("msgSendBtn");
@@ -2045,7 +2116,7 @@ async function sendBulkMessage(){
 
   let res;
   try {
-    res = await apiCall("sendCustomerMessage", { fromMobile, message, type, locations, channel: getMsgChannel(), baseMessageId: window.__baseMsgId || "", requestId: "R" + Date.now() + Math.random().toString(36).slice(2,8) });
+    res = await apiCall("sendCustomerMessage", { fromMobile, message, type, locations, customerIds: aud.filtered ? aud.list.map(c => c["CustomerID"]) : undefined, audienceLabel: aud.filtered ? aud.statusText : "", channel: getMsgChannel(), baseMessageId: window.__baseMsgId || "", requestId: "R" + Date.now() + Math.random().toString(36).slice(2,8) });
   } finally {
     sendBtn.disabled = false;
   }
@@ -2712,7 +2783,7 @@ function printOfficialDealerForm(d){
       <div class="sign-box"><div class="sign-line">কর্তৃপক্ষের স্বাক্ষর ও তারিখ</div></div>
     </div>
 
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
@@ -4099,7 +4170,7 @@ function printSalesInvoiceById(invoiceNo){
       <div class="sign-box"><div class="sign-line">ডিপুর স্বাক্ষর</div></div>
     </div>
     <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
@@ -4721,7 +4792,7 @@ function printAboutA4(){
     <div class="box"><div class="title">নিয়মাবলি</div><div class="content">${a["নিয়মাবলি"]||""}</div></div>
     <div class="box"><div class="title">সংক্ষিপ্ত বিবরণ</div><div class="content">${a["সংক্ষিপ্ত বিবরণ"]||""}</div></div>
     ${managerBoxHtml}
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
@@ -4833,7 +4904,7 @@ function printPackagesOfficial(packages, subtitle){
     <div class="doc-subtitle"><span>${subtitle ? subtitle + " | " : ""}মোট প্যাকেজ: ${packages.length}</span><span>তারিখ: ${new Date().toLocaleDateString("bn-BD")}</span></div>
     ${sectionsHtml}
     <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
@@ -5175,18 +5246,25 @@ async function shareCardImage(specs, fileName){
         if(draw){ ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText(text, W / 2, y + sz); }
         y += sz + (gap || 8) * K;
       }
-      function rowBox(cells, widths, align, bg, bold){
+      function rowBox(cells, widths, align, bg, bold, oneLine){
         const sz = 16 * K, lh = 24 * K;
         const xs = []; let x = PAD;
         widths.forEach(function(wf){ xs.push(x); x += IW * wf; });
-        const wrapped = cells.map(function(c, i){ return wrap(c, IW * widths[i] - 20 * K, sz, bold ? "700" : "400"); });
+        const cfs = [];
+        const wrapped = cells.map(function(c, i){
+          const maxW = IW * widths[i] - 20 * K, t = String(c == null ? "" : c);
+          if(!oneLine){ cfs[i] = sz; return wrap(t, maxW, sz, bold ? "700" : "400"); }
+          let f = sz; setFont(f, bold ? "700" : "400");
+          while(f > sz * 0.4 && ctx.measureText(t).width > maxW){ f -= 0.5; setFont(f, bold ? "700" : "400"); }
+          cfs[i] = f; return [t];
+        });
         const h = Math.max.apply(null, wrapped.map(function(l){ return l.length; })) * lh + 14 * K;
         if(draw){
           cells.forEach(function(c, i){
             const cw = IW * widths[i];
             if(bg){ ctx.fillStyle = bg; ctx.fillRect(xs[i], y, cw, h); }
             ctx.strokeStyle = "#888"; ctx.lineWidth = 1; ctx.strokeRect(xs[i], y, cw, h);
-            setFont(sz, bold ? "700" : "400"); ctx.fillStyle = "#1c2b28"; ctx.textBaseline = "alphabetic";
+            setFont(cfs[i], bold ? "700" : "400"); ctx.fillStyle = "#1c2b28"; ctx.textBaseline = "alphabetic";
             const a = align && align[i] === "r" ? "right" : (align && align[i] === "c" ? "center" : "left");
             ctx.textAlign = a;
             const tx = a === "right" ? xs[i] + cw - 10 * K : (a === "center" ? xs[i] + cw / 2 : xs[i] + 10 * K);
@@ -5210,9 +5288,9 @@ async function shareCardImage(specs, fileName){
           b.rows.forEach(function(r){ rowBox([r[0], r[1]], [0.32, 0.68], ["l", "l"], null, false); });
         } else if(b.t === "table"){
           const wd = b.widths || b.head.map(function(){ return 1 / b.head.length; });
-          rowBox(b.head, wd, b.head.map(function(){ return "c"; }), "#eef0e9", true);
-          b.rows.forEach(function(r){ rowBox(r, wd, b.align, null, false); });
-          if(b.foot) rowBox(b.foot, wd, b.align, "#eef0e9", true);
+          rowBox(b.head, wd, b.head.map(function(){ return "c"; }), "#eef0e9", true, true);
+          b.rows.forEach(function(r){ rowBox(r, wd, b.align, null, false, true); });
+          if(b.foot) rowBox(b.foot, wd, b.align, "#eef0e9", true, true);
         }
         y += 12 * K;
       });
@@ -5226,7 +5304,7 @@ async function shareCardImage(specs, fileName){
       K *= 0.94; H = Math.ceil(run(false));
     }
     H = Math.max(H, spec.minHeight || 0);
-    const S = Math.min(2, 16000 / H);
+    const S = Math.min(3, Math.sqrt(16000000 / (W * H)));
     cv.width = Math.round(W * S); cv.height = Math.round(H * S);
     ctx.scale(S, S);
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
@@ -5299,7 +5377,7 @@ function customerListShareSpecs(grouped, total){
       cur.rows.push(it.row);
     });
     return {
-      width: 1754, minHeight: 1240, fs: 0.62, org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
+      width: 2480, minHeight: 1754, fs: 0.46, org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
       sub: "ডিলার: " + (state.dealerName || "") + " — " + grouped.desc + " — মোট গ্রাহক: " + total,
       title: "গ্রাহক তালিকা" + (pages.length > 1 ? " (পাতা " + (pi + 1) + "/" + pages.length + ")" : ""),
       blocks: blocks, footer: "@Powered by: AM Shahed: 01605721296"
@@ -5456,13 +5534,14 @@ function openPrintOpt(ctx){
   document.getElementById("poShareBtn").style.display = (ctx === "sales" || ctx === "salesinfo") ? "none" : "";
   if(poCustomers().length === 0){ alert("প্রিন্ট করার জন্য কোনো গ্রাহক নেই"); return; }
   // বিক্রয় তথ্য: নির্দিষ্ট গ্রাহক / সকল / ওয়ার্ড / রেফারেন্স ভিত্তিক
-  const modes = ctx === "salesinfo" ? [["one","নির্দিষ্ট গ্রাহক"],["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"],["ref","রেফারেন্স ভিত্তিক"]] : [["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]];
-  if(ctx === "sales") modes.push(["loc","প্রাপ্তির স্থান ভিত্তিক"]);
-  if(ctx !== "salesinfo") modes.push(["ref","রেফারেন্স ভিত্তিক"]);
+  const modes = ctx === "salesinfo" ? [["one","নির্দিষ্ট গ্রাহক"],["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]] : [["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]];
+  modes.push(["loc","প্রাপ্তির স্থান ভিত্তিক"]); modes.push(["ref","রেফারেন্স ভিত্তিক"]);
+  document.getElementById("poSoldWrap").style.display = ctx === "salesinfo" ? "" : "none";
   document.getElementById("poMode").innerHTML = modes.map(m => `<option value="${m[0]}">${m[1]}</option>`).join("");
   refreshPrintOptValues();
   document.getElementById("printOptModal").style.display = "flex";
 }
+function poLandscape(){ const e = document.getElementById("poOrient"); return !e || e.value !== "portrait"; }
 function closePrintOpt(){ document.getElementById("printOptModal").style.display = "none"; }
 
 /* নির্দিষ্ট গ্রাহক — সার্চ বক্সের লেখা (নাম/মোবাইল/NID) অনুযায়ী তালিকা ছোট করা */
@@ -5558,7 +5637,7 @@ function printCustomersOfficial(grouped, total){
     CUS_LIST_HEAD, rows, null,
     "@Powered by: AM Shahed: 01605721296",
     [2,3,6,7,9,10,12],
-    { landscape:true, shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
+    { landscape: poLandscape(), shareSpecs: customerListShareSpecs(grouped, total), shareName: "grahok-talika" }
   );
 }
 
@@ -5692,6 +5771,7 @@ async function loadSalesSetup(){
   allPackagesCache = res.success ? res.packages : [];
   allCustomersCache = res.success ? res.customers : [];
   allSalesCache = res.success ? res.sales : [];
+  window.__batches = res.success && res.batches ? res.batches : [];
   window.__deliveredQty = res.success && res.delivered ? res.delivered : null;   // প্যাকেজ → ডেলিভারি পাওয়া সংখ্যা
 
   const dateEl = document.getElementById("saleDate");
@@ -5703,10 +5783,12 @@ async function loadSalesSetup(){
 
   const locations = [...new Set(allCustomersCache.map(c => c["প্রাপ্তির স্থান"]).filter(Boolean))];
   const wards = uniqueWards(allCustomersCache);
+  const refs = [...new Set(allCustomersCache.map(c => String(c["রেফারেন্স"]||"").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b, "bn"));
   const locSel = document.getElementById("saleFilterLocation");
   locSel.innerHTML = "<option value=''>-- সকল --</option>" +
     (locations.length ? `<optgroup label="প্রাপ্তির স্থান">` + locations.map(l => `<option value="loc:${escMsgHtml(l)}">${escMsgHtml(l)}</option>`).join("") + `</optgroup>` : "") +
-    (wards.length ? `<optgroup label="ওয়ার্ড নং">` + wards.map(w => `<option value="ward:${escMsgHtml(w)}">${escMsgHtml(wardLabel(w))}</option>`).join("") + `</optgroup>` : "");
+    (wards.length ? `<optgroup label="ওয়ার্ড নং">` + wards.map(w => `<option value="ward:${escMsgHtml(w)}">${escMsgHtml(wardLabel(w))}</option>`).join("") + `</optgroup>` : "") +
+    (refs.length ? `<optgroup label="রেফারেন্স">` + refs.map(r => `<option value="ref:${escMsgHtml(r)}">${escMsgHtml(r)}</option>`).join("") + `</optgroup>` : "");
 
   renderSalesTable();
 }
@@ -5753,6 +5835,86 @@ function updateSalePackageStockLabels(){
   });
 }
 
+
+/*******************************************************
+ * স্টক ব্যাচ — প্রতিটি ডেলিভারি সম্পন্ন ইনভয়েসই একটি স্টক দফা।
+ * ব্যাচ ছাড়া পুরোনো বিক্রি (ব্যাচ কলাম ফাঁকা) পুরোনো ব্যাচ থেকে আগে কাটা হিসেবে ধরা হয়।
+ *******************************************************/
+function batchStats(pkgId){
+  const list = (window.__batches || []).filter(b => !pkgId || b.packageId === pkgId)
+    .slice().sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.batchId).localeCompare(String(b.batchId)))
+    .map(b => ({ batchId: b.batchId, packageId: b.packageId, date: b.date, qty: Number(b.qty) || 0, sales: [] }));
+  const sold = allSalesCache.filter(s => s["স্ট্যাটাস"] === "বিক্রিত" && (!pkgId || s["PackageID"] === pkgId))
+    .sort((a, b) => String(a["তারিখ"]).localeCompare(String(b["তারিখ"])));
+  const legacy = [];
+  sold.forEach(s => {
+    const b = list.find(x => x.batchId === s["ব্যাচ"] && x.packageId === s["PackageID"]);
+    if(b) b.sales.push(s); else legacy.push(s);
+  });
+  legacy.forEach(s => {
+    const b = list.find(x => x.packageId === s["PackageID"] && x.sales.length < x.qty);
+    if(b) b.sales.push(s);
+  });
+  list.forEach(b => { b.sold = b.sales.length; b.left = b.qty - b.sold; });
+  return list;
+}
+function fillSaleBatchOptions(){
+  const sel = document.getElementById("saleBatch");
+  if(!sel) return;
+  const pkgId = document.getElementById("saleFilterPackage").value;
+  const prev = sel.value;
+  const list = pkgId ? batchStats(pkgId) : [];
+  sel.innerHTML = '<option value="">অটো (পুরোনো ব্যাচ আগে)</option>' + list.map(b =>
+    `<option value="${escMsgHtml(b.batchId)}" ${b.left <= 0 ? "disabled" : ""}>${escMsgHtml(b.batchId)} — ${new Date(b.date).toLocaleDateString("en-GB")} — বাকি ${b.left}/${b.qty}</option>`).join("");
+  if([...sel.options].some(o => o.value === prev && !o.disabled)) sel.value = prev;
+}
+function currentSaleBatch(pkgId){
+  const chosen = document.getElementById("saleBatch").value;
+  if(chosen) return chosen;
+  const b = batchStats(pkgId).find(x => x.left > 0);
+  return b ? b.batchId : "";
+}
+function openBatchReport(){
+  const list = batchStats("");
+  if(list.length === 0){ alert("কোনো ডেলিভারি সম্পন্ন স্টক ব্যাচ পাওয়া যায়নি"); return; }
+  const pn = id => { const p = allPackagesCache.find(x => x["PackageID"] === id); return p ? p["নাম"] : id; };
+  document.getElementById("bmBatch").innerHTML = list.slice().reverse().map(b =>
+    `<option value="${escMsgHtml(b.packageId + "|" + b.batchId)}">${escMsgHtml(pn(b.packageId))} — ${escMsgHtml(b.batchId)} — ${new Date(b.date).toLocaleDateString("en-GB")} (${b.sold}/${b.qty})</option>`).join("");
+  document.getElementById("batchModal").style.display = "flex";
+  renderBatchReport();
+}
+function getBatchReportData(){
+  const v = document.getElementById("bmBatch").value.split("|");
+  const b = batchStats(v[0]).find(x => x.batchId === v[1]);
+  if(!b) return null;
+  const pkg = allPackagesCache.find(p => p["PackageID"] === b.packageId);
+  let sum = 0;
+  const rows = b.sales.map((s, i) => {
+    const c = allCustomersCache.find(x => x["CustomerID"] === s["CustomerID"]) || {};
+    const price = Number(s["মূল্য"]) || 0; sum += price;
+    const d = s["তারিখ"] ? new Date(s["তারিখ"]) : null;
+    return [i + 1, s["CustomerID"] || "", c["নাম"] || "", c["পিতার নাম"] || "", c["মোবাইল নং"] || "", c["ওয়ার্ড নং"] || "", c["প্রাপ্তির স্থান"] || "", d && !isNaN(d) ? d.toLocaleDateString("en-GB") : "", price];
+  });
+  return { b, pkg, rows, sum };
+}
+function renderBatchReport(){
+  const r = getBatchReportData(), box = document.getElementById("bmBody");
+  if(!r){ box.innerHTML = ""; return; }
+  const th = ["ক্রম","আইডি","নাম","পিতার নাম","মোবাইল","ওয়ার্ড","প্রাপ্তির স্থান","তারিখ","মূল্য"];
+  box.innerHTML = `<p><b>${escMsgHtml(r.pkg ? r.pkg["নাম"] : "")}</b> | ব্যাচ: ${escMsgHtml(r.b.batchId)} | মোট স্টক: ${r.b.qty} | বিক্রি: ${r.b.sold} | বাকি: ${r.b.left} | মোট বিক্রয় মূল্য: ${r.sum} ৳</p>
+    <table style="white-space:nowrap;"><thead><tr>${th.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
+    (r.rows.length ? r.rows.map(x => "<tr>" + x.map(v => `<td>${cusFit(escMsgHtml(v))}</td>`).join("") + "</tr>").join("") : `<tr><td colspan="9">এই ব্যাচে এখনো কোনো বিক্রি নেই</td></tr>`) + "</tbody></table>";
+}
+function printBatchReport(){
+  const r = getBatchReportData();
+  if(!r){ return; }
+  printOfficialTable("স্টক ব্যাচ — বিক্রি তথ্য",
+    (r.pkg ? "প্যাকেজ: " + r.pkg["নাম"] + " | " : "") + "ব্যাচ: " + r.b.batchId + " | মোট স্টক: " + r.b.qty + " | বিক্রি: " + r.b.sold + " | বাকি: " + r.b.left + " | ডিলার: " + (state.dealerName || ""),
+    ["ক্রম","আইডি","নাম","পিতার নাম","মোবাইল","ওয়ার্ড","প্রাপ্তির স্থান","তারিখ","মূল্য"],
+    r.rows.map(x => x.map((v, i) => [2,3,4,5,6].indexOf(i) !== -1 ? cusFit(escMsgHtml(v)) : v)),
+    [["","","সর্বমোট","","","","","",r.sum]], "@Powered by: AM Shahed: 01605721296", [2,3,6], { landscape: true });
+}
+
 async function loadSalesView(){
   // ফিল্টার পরিবর্তনের সময় নতুন করে সার্ভার কল না করে ক্যাশ থেকেই রেন্ডার করা (দ্রুত)
   renderSalesTable();
@@ -5768,6 +5930,10 @@ function getSalesViewData(){
     const loc = sel.slice(4);
     customers = customers.filter(c => c["প্রাপ্তির স্থান"] === loc);
     filterText = "প্রাপ্তির স্থান: " + loc;
+  } else if(sel.indexOf("ref:") === 0){
+    const rf = sel.slice(4);
+    customers = customers.filter(c => String(c["রেফারেন্স"]||"").trim() === rf);
+    filterText = "রেফারেন্স: " + rf;
   } else if(sel.indexOf("ward:") === 0){
     const w = sel.slice(5);
     customers = customers.filter(c => String(c["ওয়ার্ড নং"]==null?"":c["ওয়ার্ড নং"]).trim() === w);
@@ -5812,6 +5978,10 @@ function printSalesInfo(grouped, total){
   const dateKeys = Object.keys(dates).sort();
   if(dateKeys.length === 0){ alert("বিক্রয় তথ্য নেই — এই গ্রাহকদের কোনো বিক্রি পাওয়া যায়নি"); return; }
 
+  if(document.getElementById("poSoldMode").value === "sold"){
+    grouped = { desc: grouped.desc + " | শুধু বিক্রিত গ্রাহক", groups: grouped.groups.map(g => ({ label: g.label, items: g.items.filter(c => perCustomer[c["CustomerID"]]) })).filter(g => g.items.length) };
+    total = grouped.groups.reduce((n, g) => n + g.items.length, 0);
+  }
   const fmt = k => dates[k].toLocaleDateString("en-GB");
   const head = ["ক্রম", "আইডি", "নাম", "পিতার নাম"].concat(dateKeys.map(fmt)).concat(["মোট মূল্য"]);
   const rows = [];
@@ -5837,7 +6007,7 @@ function printSalesInfo(grouped, total){
     head, rows, [[""].concat(Array(head.length - 2).fill("")).concat([grandTotal]).map((v, i) => i === 2 ? "সর্বমোট" : v)],
     "@Powered by: AM Shahed: 01605721296",
     [2, 3],
-    { landscape: true }
+    { landscape: poLandscape() }
   );
 }
 
@@ -5863,12 +6033,13 @@ function printSalesOfficial(grouped, total){
     [["", "", "সাবটোটাল", "", "", "", "", sum, ""]],
     "@Powered by: AM Shahed: 01605721296",
     [2,3,6],
-    { landscape:true }
+    { landscape: poLandscape() }
   );
 }
 
 function renderSalesTable(){
   updateSalePackageStockLabels();
+  fillSaleBatchOptions();
   const pkgId = document.getElementById("saleFilterPackage").value;
   const table = document.getElementById("salesTable");
 
@@ -5983,10 +6154,11 @@ async function makeSale(customerId, packageId, priceInputId){
   const saleDay = saleSelectedDate();   // YYYY-MM-DD
   const dp = saleDay.split("-");
   const tempSale = { SaleID:"tmp-"+Date.now(), CustomerID:customerId, PackageID:packageId, "তারিখ": new Date(Date.UTC(+dp[0], +dp[1]-1, +dp[2], 12)).toISOString(), "মূল্য":price, "স্ট্যাটাস":"বিক্রিত" };
+  tempSale["ব্যাচ"] = currentSaleBatch(packageId);
   allSalesCache.push(tempSale);
   renderSalesTable();
 
-  const res = await apiCall("addSale", { customerId, packageId, price, date: saleDay });
+  const res = await apiCall("addSale", { customerId, packageId, price, date: saleDay, batchId: tempSale["ব্যাচ"] });
   document.getElementById("salesMsg").textContent = res.message;
   document.getElementById("salesMsg").className = "msg " + (res.success?"ok":"err");
 
@@ -6321,7 +6493,7 @@ function printDealerReport(){
     <div class="doc-subtitle"><span>ডিলার: ${state.dealerName || ""} | ${dealerReportSubtitle}</span><span>প্রিন্টের তারিখ: ${new Date().toLocaleDateString("bn-BD")}</span></div>
     ${secs}
     <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
-    <script>window.onload=function(){window.print();}<\/script>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
