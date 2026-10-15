@@ -6184,35 +6184,34 @@ function printThermalReceipt(c, packageId){
   const win = window.open("", "_blank", "width=820,height=1000");
   win.document.write(`<html><head><meta charset="utf-8"><title>বিক্রয় রশিদ</title>
     <style>
-      @page{ size:A5 portrait; margin:8mm; }
+      @page{ size:A5 portrait; margin:0.3in 8mm 5mm 8mm; }
       *{ box-sizing:border-box; }
-      body{ font-family:'Hind Siliguri','Noto Sans Bengali',sans-serif; color:#1c2b28; margin:0; font-size:12px; }
-      .rc{ border:2px solid #153f37; padding:10px 12px; position:relative; }
-      .head{ text-align:center; border-bottom:3px double #153f37; padding-bottom:6px; }
-      .head .org{ font-size:17px; font-weight:700; color:#153f37; margin:0; }
-      .head .tag{ font-size:10.5px; color:#b5502f; font-weight:600; margin:1px 0 4px; }
-      .head .dl{ font-size:13px; font-weight:700; margin:2px 0 0; }
-      .head .dd{ font-size:11px; color:#333; margin:1px 0 0; }
-      .title{ text-align:center; margin:8px 0 6px; }
-      .title span{ display:inline-block; background:#153f37; color:#fff; padding:3px 22px; border-radius:14px; font-weight:700; font-size:13px; letter-spacing:.5px; }
-      .meta{ display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px; }
-      .box{ border:1px solid #9aa7a2; border-radius:4px; padding:6px 8px; display:grid; grid-template-columns:1fr 1fr; column-gap:14px; row-gap:2px; }
-      .ir{ display:flex; font-size:11.5px; min-width:0; }
-      .ir.full{ grid-column:1 / -1; }
-      .il{ font-weight:700; white-space:nowrap; min-width:78px; }
+      body{ font-family:'Hind Siliguri','Noto Sans Bengali',sans-serif; color:#1c2b28; margin:0; font-size:11px; line-height:1.25; }
+      .rc{ padding:0; }
+      .head{ text-align:center; border-bottom:2px solid #153f37; padding-bottom:3px; }
+      .head .org{ font-size:15px; font-weight:700; color:#153f37; margin:0; }
+      .head .tag{ font-size:9.5px; color:#b5502f; font-weight:600; margin:0 0 2px; }
+      .head .dl{ font-size:12px; font-weight:700; margin:1px 0 0; }
+      .head .dd{ font-size:10px; color:#333; margin:0; }
+      .title{ text-align:center; margin:4px 0 3px; font-weight:700; font-size:12.5px; color:#153f37; letter-spacing:.5px; }
+      .meta{ display:flex; justify-content:space-between; font-size:10px; margin-bottom:3px; }
+      .box{ border:1px solid #9aa7a2; padding:3px 6px; display:grid; grid-template-columns:1fr 1fr; column-gap:12px; row-gap:0; }
+      .ir{ display:flex; font-size:10.5px; min-width:0; }
+      .il{ font-weight:700; white-space:nowrap; min-width:70px; }
       .iv{ white-space:nowrap; overflow:hidden; }
-      table{ width:100%; border-collapse:collapse; margin-top:8px; }
-      th,td{ border:1px solid #9aa7a2; padding:4px 6px; font-size:11.5px; white-space:nowrap; }
+      .pk{ margin:4px 0 0; font-weight:700; color:#153f37; font-size:10.5px; }
+      .tw{ position:relative; margin-top:2px; }
+      table{ width:100%; border-collapse:collapse; }
+      th,td{ border:1px solid #9aa7a2; padding:2px 5px; font-size:10.5px; white-space:nowrap; }
       th{ background:#e8efe9; color:#153f37; }
       td.c,th.c{ text-align:center; } td.r{ text-align:right; } td.l{ text-align:left; }
       tfoot td{ font-weight:700; background:#f4f7f4; }
-      tr.grand td{ background:#153f37; color:#fff; font-size:13px; }
-      .note{ margin-top:6px; font-size:11px; text-align:right; color:#b5502f; font-weight:700; }
-      .sign{ display:flex; justify-content:space-between; margin-top:34px; font-size:11px; }
-      .sign div{ border-top:1px solid #333; padding-top:3px; min-width:110px; text-align:center; }
-      .thanks{ text-align:center; margin-top:10px; font-weight:700; color:#153f37; }
-      .foot{ text-align:center; font-size:8.5px; color:#6b7570; margin-top:6px; }
-      .stamp{ position:absolute; right:14px; top:112px; border:2px solid ${sale ? "#1b7a4b" : "#b5502f"}; color:${sale ? "#1b7a4b" : "#b5502f"}; padding:1px 10px; font-weight:700; font-size:13px; transform:rotate(-8deg); border-radius:4px; }
+      tr.grand td{ background:#153f37; color:#fff; font-size:12px; }
+      .note{ margin-top:3px; font-size:10px; text-align:right; color:#b5502f; font-weight:700; }
+      .sign{ display:flex; justify-content:space-between; margin-top:20px; font-size:10px; }
+      .sign div{ border-top:1px solid #333; padding-top:2px; min-width:100px; text-align:center; }
+      .foot{ text-align:center; font-size:8px; color:#6b7570; margin-top:4px; }
+      .stamp{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) rotate(-14deg); border:3px double; border-radius:8px; padding:2px 22px; font-weight:700; font-size:30px; letter-spacing:2px; opacity:.16; pointer-events:none; color:${sale ? "#1b7a4b" : "#b5502f"}; border-color:${sale ? "#1b7a4b" : "#b5502f"}; }
     </style></head><body>
     <div class="rc">
       <div class="head">
@@ -6221,11 +6220,11 @@ function printThermalReceipt(c, packageId){
         <p class="dl">${e(state.dealerName || "")}</p>
         <p class="dd">${state.dealerUnion ? "ঠিকানা: " + e(state.dealerUnion) : ""}${state.dealerUnion && state.dealerMobile ? " | " : ""}${state.dealerMobile ? "মোবাইল: " + e(state.dealerMobile) : ""}</p>
       </div>
-      <div class="title"><span>বিক্রয় রশিদ</span></div>
-      <div class="stamp">${sale ? "বিক্রিত" : "অপেক্ষমান"}</div>
+      <div class="title">বিক্রয় রশিদ</div>
       <div class="meta"><span>রশিদ নং: <b>${e(rcpNo || "—")}</b>${batch ? " | ব্যাচ: <b>" + e(batch) + "</b>" : ""}</span><span>তারিখ: <b>${dtObj.toLocaleDateString("bn-BD")}</b></span></div>
       <div class="box">${infoHtml}</div>
-      <div style="margin-top:8px;font-weight:700;color:#153f37;">প্যাকেজ: ${e(pkg ? pkg["নাম"] : "")}</div>
+      <div class="pk">প্যাকেজ: ${e(pkg ? pkg["নাম"] : "")}</div>
+      <div class="tw"><div class="stamp">${sale ? "বিক্রিত" : "অপেক্ষমান"}</div>
       <table>
         <thead><tr><th class="c">ক্রম</th><th class="l">পণ্যের নাম</th><th class="r">বাজার মূল্য</th><th class="r">কম্বো মূল্য</th><th class="r">সাশ্রয়</th></tr></thead>
         <tbody>${itemsHtml}</tbody>
@@ -6234,10 +6233,9 @@ function printThermalReceipt(c, packageId){
           ${extra !== 0 ? `<tr><td colspan="4" class="r">${extra > 0 ? "অন্যান্য খরচ" : "ছাড়"}</td><td class="r">${bn(Math.abs(extra))}</td></tr>` : ""}
           <tr class="grand"><td colspan="4" class="r">সর্বমোট প্রদেয় (টাকা)</td><td class="r">৳ ${bn(payable)}</td></tr>
         </tfoot>
-      </table>
+      </table></div>
       ${sumSave > 0 ? `<div class="note">আপনি এই প্যাকেজে মোট ৳ ${bn(sumSave)} সাশ্রয় করেছেন</div>` : ""}
       <div class="sign"><div>গ্রাহকের স্বাক্ষর</div><div>বিক্রেতার স্বাক্ষর</div></div>
-      <p class="thanks">আমাদের সাথে থাকার জন্য ধন্যবাদ</p>
       <p class="foot">@Powered by: AM Shahed: 01605721296</p>
     </div>
     <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
