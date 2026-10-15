@@ -747,3 +747,274 @@ function authorizeExternalRequest() {
   UrlFetchApp.fetch("https://www.google.com", { muteHttpExceptions: true });
   Logger.log("অনুমতি সম্পন্ন");
 }
+
+
+/*******************************************************
+ * ===== বাল্ক মেসেজ: ধাপে ধাপে (চাঙ্ক) পাঠানো =====
+ *
+ * আগের সমস্যা: Send চাপলে সার্ভার সব গ্রাহকের কাছে একটানা পাঠাত,
+ * ব্রাউজার ১২ সেকেন্ডে টাইমআউট দেখিয়ে এরর দিত, কিন্তু সার্ভার তখনও
+ * পাঠাতে থাকত। ডিলার আবার Send চাপলে নতুন অনুরোধ হয়ে সবার কাছে
+ * দ্বিতীয়বার যেত — ফলে ফোনে একসাথে অনেক SMS জমে, কিছু গ্রাহকের কাছে
+ * যেত আর কিছুর কাছে যেত না।
+ *
+ * এখন: ১) prepareCustomerMessage — এক কলে প্রাপক-তালিকা ঠিক করে, মেসেজ
+ * লগ সংরক্ষণ করে এবং আগের মেসেজের স্ট্যাটাস মুছে দেয়।
+ * ২) sendMessageChunk — ক্লায়েন্ট প্রতিবার ২০ জন করে পাঠায় (প্রতিটি কল
+ * কয়েক সেকেন্ডের, কখনো টাইমআউট হয় না, আবার চাপলেও একই চাঙ্ক
+ * দুইবার যায় না)।
+ *******************************************************/
+const MSG_CHUNK_SIZE = 20;
+
+/* প্রাপক নির্বাচন (সকল / স্থান / ওয়ার্ড / রেফারেন্স + ব্যাচ-ফিল্টার আইডি তালিকা) */
+function selectMessageTargets_(data, customers) {
+  let targeted = customers;
+  let statusText = "সকল গ্রাহক";
+  const picked = (data.locations || []).map(function (x) { return String(x).trim(); });
+  if (data.type === "location" && picked.length) {
+    targeted = customers.filter(function (c) { return picked.indexOf(String(c["প্রাপ্তির স্থান"] || "").trim()) !== -1; });
+    statusText = picked.join(", ");
+  } else if (data.type === "ward" && picked.length) {
+    targeted = customers.filter(function (c) {
+      return picked.indexOf(String(c["ওয়ার্ড নং"] === undefined || c["ওয়ার্ড নং"] === null ? "" : c["ওয়ার্ড নং"]).trim()) !== -1;
+    });
+    statusText = "ওয়ার্ড: " + picked.join(", ");
+  } else if (data.type === "ref" && picked.length) {
+    targeted = customers.filter(function (c) { return picked.indexOf(String(c["রেফারেন্স"] || "").trim()) !== -1; });
+    statusText = "রেফারেন্স: " + picked.join(", ");
+  }
+  if (Array.isArray(data.customerIds)) {
+    const idSet = {};
+    data.customerIds.forEach(function (id) { idSet[String(id)] = true; });
+    targeted = targeted.filter(function (c) { return idSet[String(c["CustomerID"])]; });
+    if (data.audienceLabel) statusText = String(data.audienceLabel).slice(0, 200);
+  }
+  return { targeted: targeted, statusText: statusText };
+}
+
+/* নতুন বাল্ক মেসেজ গেলে, এই মেসেজের আইডি ছাড়া বাকি সব গ্রাহকের আগের
+   WhatsApp/SMS/তারিখ স্ট্যাটাস মুছে দেওয়া — তালিকায় শুধু সর্বশেষ মেসেজের অবস্থা থাকে */
+function clearOtherMessageStatus_(custSheet, msgId) {
+  const lastRow = custSheet.getLastRow();
+  if (lastRow < 2) return;
+  const headers = custSheet.getRange(1, 1, 1, custSheet.getLastColumn()).getValues()[0];
+  const iWa = headers.indexOf("WhatsApp"), iSms = headers.indexOf("SMS"), iMid = headers.indexOf("মেসেজ আইডি"), iDate = headers.indexOf("মেসেজ তারিখ");
+  if (iWa === -1 || iSms === -1 || iMid === -1) return;
+  const n = lastRow - 1;
+  const wa = custSheet.getRange(2, iWa + 1, n, 1).getValues();
+  const sms = custSheet.getRange(2, iSms + 1, n, 1).getValues();
+  const mid = custSheet.getRange(2, iMid + 1, n, 1).getValues();
+  const dt = iDate !== -1 ? custSheet.getRange(2, iDate + 1, n, 1).getValues() : null;
+  let changed = false;
+  for (let r = 0; r < n; r++) {
+    if (mid[r][0] === msgId) continue;
+    if (mid[r][0] !== "" || wa[r][0] !== "" || sms[r][0] !== "" || (dt && dt[r][0] !== "")) {
+      wa[r][0] = ""; sms[r][0] = ""; mid[r][0] = ""; if (dt) dt[r][0] = "";
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  custSheet.getRange(2, iWa + 1, n, 1).setValues(wa);
+  custSheet.getRange(2, iSms + 1, n, 1).setValues(sms);
+  custSheet.getRange(2, iMid + 1, n, 1).setValues(mid);
+  if (dt) custSheet.getRange(2, iDate + 1, n, 1).setNumberFormat("@").setValues(dt);
+}
+
+/*******************************************************
+ * ধাপ ১ — প্রস্তুতি (কাউকে মেসেজ পাঠায় না)
+ * data: sendCustomerMessage এর মতোই (type: all|location|ward|ref), requestId লাগে
+ * ফেরত: { success, jobId, messageId, total, invalid, units: [[customerId,...],...],
+ *          channel, chunkSize }
+ *******************************************************/
+function prepareCustomerMessage(data) {
+  const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
+  if (!perm.ok) return { success: false, message: perm.message };
+  if (!data.message || !String(data.message).trim()) return { success: false, message: "মেসেজ লিখুন" };
+
+  const dealerId = perm.payload.dealerId;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    const cache = CacheService.getScriptCache();
+    const key = "msgprep_" + dealerId + "_" + (data.requestId || "");
+    if (data.requestId) {
+      const hit = cache.get(key);
+      if (hit) { try { return JSON.parse(hit); } catch (e) { /* নতুন করে হবে */ } }
+    }
+    const res = prepareCustomerMessageInner_(data, dealerId);
+    if (data.requestId && res.success) { try { cache.put(key, JSON.stringify(res), 600); } catch (e) { /* বড় হলে বাদ */ } }
+    return res;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function prepareCustomerMessageInner_(data, dealerId) {
+  const config = getDealerMessagingConfigRaw(dealerId);
+  const providerType = getSmsProviderType(config);
+  if (!isSmsReady(config) && !isWhatsAppReady(config)) {
+    return { success: false, message: "এখনো কোনো SMS/WhatsApp সেটআপ করা হয়নি। গ্রাহক → মেসেজ → মেসেজ সেটাপ থেকে আগে সেটআপ করুন।" };
+  }
+  if (providerType === "url_template" && !data.fromMobile) {
+    return { success: false, message: "Sender ID / মোবাইল নং দিন" };
+  }
+  let channel = data.channel;
+  if (["whatsapp", "sms_all", "sms_nowa"].indexOf(channel) === -1) channel = isWhatsAppReady(config) ? "whatsapp" : "sms_all";
+  if (channel === "whatsapp" && !isWhatsAppReady(config)) {
+    return { success: false, message: "WhatsApp এখনো সেটআপ করা হয়নি। গ্রাহক → মেসেজ → মেসেজ সেটাপ থেকে সেটআপ করুন।" };
+  }
+  if (channel !== "whatsapp" && !isSmsReady(config)) {
+    return { success: false, message: "SMS এখনো সেটআপ করা হয়নি। গ্রাহক → মেসেজ → মেসেজ সেটাপ থেকে সেটআপ করুন।" };
+  }
+  const wantWA = channel === "whatsapp", wantSMS = !wantWA;
+
+  const ss = getDealerSpreadsheet(dealerId);
+  const custSheet = getSheet(ss, "Customers");
+  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ"]);
+  const customers = genericListRows(custSheet);
+
+  const sel = selectMessageTargets_(data, customers);
+  let targeted = sel.targeted;
+  const statusText = sel.statusText;
+  const mainText = String(data.message).trim();
+  const msgSheet = getMessagesSheet(ss);
+  const rec = resolveMessageRecord(msgSheet, mainText, data.type, statusText, data.baseMessageId);
+
+  if (channel === "sms_nowa") {
+    targeted = targeted.filter(function (c) { return !(c["মেসেজ আইডি"] === rec.id && c["WhatsApp"] === MSG_STATUS_OK); });
+    if (targeted.length === 0) {
+      return { success: true, total: 0, invalid: 0, units: [], jobId: "", messageId: rec.id, channel: channel,
+        message: "সবার কাছেই WhatsApp এ মেসেজ গেছে — SMS পাঠানোর কেউ নেই" };
+    }
+  }
+
+  // সর্বশেষ মেসেজ ছাড়া বাকিদের স্ট্যাটাস মুছে ফেলা
+  clearOtherMessageStatus_(custSheet, rec.id);
+
+  // নম্বর অনুযায়ী ইউনিক ইউনিট (একই নম্বরে একাধিক গ্রাহক = একটি মেসেজ), ভুল নম্বর আলাদা
+  const byNorm = {}, units = [], invalidCustomers = [], invalidIds = [];
+  targeted.forEach(function (c) {
+    const norm = normalizeMobileBD(c["মোবাইল নং"]);
+    if (!norm || !isValidBdMobile(norm)) { invalidCustomers.push(c); invalidIds.push(c["CustomerID"]); return; }
+    if (!byNorm[norm]) { byNorm[norm] = []; units.push(byNorm[norm]); }
+    byNorm[norm].push(c["CustomerID"]);
+  });
+  if (invalidCustomers.length) {
+    try {
+      updateCustomerMessageStatus(custSheet, rec.id, invalidCustomers,
+        { invalidIds: invalidIds, waByCustomer: {}, smsByCustomer: {} }, wantWA, wantSMS);
+    } catch (e) { /* বাদ */ }
+  }
+
+  // মেসেজ তালিকায় একটিই এন্ট্রি
+  try {
+    if (rec.rowNum) {
+      if (rec.viaBase) {
+        const idxTime = rec.headers.indexOf("তারিখ ও সময়");
+        if (idxTime !== -1) msgSheet.getRange(rec.rowNum, idxTime + 1).setValue(new Date());
+        const idxStatus = rec.headers.indexOf("স্ট্যাটাস");
+        if (idxStatus !== -1) {
+          const cell = msgSheet.getRange(rec.rowNum, idxStatus + 1);
+          const parts = String(cell.getValue()).split(" | ").filter(function (p) { return p; });
+          if (parts.indexOf(statusText) === -1) { parts.push(statusText); cell.setValue(parts.join(" | ")); }
+        }
+      }
+    } else {
+      genericAddRow(msgSheet, {
+        "MessageID": rec.id,
+        "মেসেজ": mainText,
+        "তারিখ ও সময়": new Date(),
+        "ধরন": data.type === "location" ? "প্রাপ্তির স্থান" : (data.type === "ward" ? "ওয়ার্ড" : (data.type === "ref" ? "রেফারেন্স" : "সকল গ্রাহক")),
+        "স্ট্যাটাস": statusText,
+        "মোট প্রাপক": units.length
+      });
+    }
+  } catch (e) { /* লগ ব্যর্থ হলে বাদ */ }
+
+  return {
+    success: true, jobId: "J" + Utilities.getUuid().replace(/-/g, "").substring(0, 12),
+    messageId: rec.id, total: units.length, invalid: invalidCustomers.length,
+    units: units, channel: channel, chunkSize: MSG_CHUNK_SIZE
+  };
+}
+
+/*******************************************************
+ * ধাপ ২ — একটি চাঙ্ক (সর্বোচ্চ ২০টি ইউনিট) পাঠানো
+ * data: { token, jobId, chunkIndex, units: [[customerId,...],...], message,
+ *         messageId, channel, fromMobile }
+ * একই jobId+chunkIndex আবার এলে (টাইমআউটের পর রিট্রাই) আগের ফলই ফেরত যায় —
+ * কখনো দুইবার পাঠানো হয় না
+ *******************************************************/
+function sendMessageChunk(data) {
+  const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
+  if (!perm.ok) return { success: false, message: perm.message };
+  if (!data.jobId || !Array.isArray(data.units) || !data.messageId) return { success: false, message: "অনুরোধ অসম্পূর্ণ" };
+  if (data.units.length > MSG_CHUNK_SIZE) return { success: false, message: "একবারে সর্বোচ্চ " + MSG_CHUNK_SIZE + " জন" };
+
+  const dealerId = perm.payload.dealerId;
+  const cache = CacheService.getScriptCache();
+  const key = "msgchunk_" + dealerId + "_" + data.jobId + "_" + data.chunkIndex;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const hit = cache.get(key);
+    if (hit) {
+      if (hit === "P") return { success: false, busy: true, message: "এই অংশ পাঠানো চলছে" };
+      try { return JSON.parse(hit); } catch (e) { /* নতুন করে */ }
+    }
+    cache.put(key, "P", 300);
+  } finally {
+    lock.releaseLock();
+  }
+
+  let result;
+  try {
+    result = sendMessageChunkInner_(data, dealerId);
+  } catch (e) {
+    cache.remove(key);
+    return { success: false, message: "পাঠাতে সমস্যা: " + e.toString() };
+  }
+  try { cache.put(key, JSON.stringify(result), 1800); } catch (e) { /* বাদ */ }
+  return result;
+}
+
+function sendMessageChunkInner_(data, dealerId) {
+  const config = getDealerMessagingConfigRaw(dealerId);
+  const channel = ["whatsapp", "sms_all", "sms_nowa"].indexOf(data.channel) !== -1 ? data.channel : "sms_all";
+  const wantWA = channel === "whatsapp", wantSMS = !wantWA;
+
+  const ss = getDealerSpreadsheet(dealerId);
+  const custSheet = getSheet(ss, "Customers");
+  const customers = genericListRows(custSheet);
+  const byId = {};
+  customers.forEach(function (c) { byId[c["CustomerID"]] = c; });
+
+  const targeted = [], recipients = [];
+  data.units.forEach(function (unit) {
+    (unit || []).forEach(function (id) {
+      const c = byId[id];
+      if (!c) return;
+      targeted.push(c);
+      recipients.push({ mobile: c["মোবাইল নং"], name: c["নাম"], customerId: id });
+    });
+  });
+
+  const result = sendBulkToRecipients(
+    config, data.fromMobile, String(data.message || "").trim(), recipients, null, false,
+    { sms: wantSMS, wa: wantWA }
+  );
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    updateCustomerMessageStatus(custSheet, data.messageId, targeted, result, result.waEnabled, result.smsEnabled);
+  } catch (e) { /* স্ট্যাটাস আপডেট ব্যর্থ হলেও পাঠানোর ফল ফেরত যাবে */ }
+  finally { lock.releaseLock(); }
+
+  return {
+    success: true, total: result.total,
+    smsEnabled: result.smsEnabled, smsSent: result.smsSent, smsFailed: result.smsFailed, smsLastError: result.smsLastError,
+    waEnabled: result.waEnabled, waSent: result.waSent, waFailed: result.waFailed, waLastError: result.waLastError
+  };
+}

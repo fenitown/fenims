@@ -1038,6 +1038,12 @@ function runAction(action, data) {
       case "sendCustomerMessage":
         result = sendCustomerMessage(data);
         break;
+      case "prepareCustomerMessage":
+        result = prepareCustomerMessage(data);
+        break;
+      case "sendMessageChunk":
+        result = sendMessageChunk(data);
+        break;
       case "listMessages":
         result = listMessages(data);
         break;

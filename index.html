@@ -2118,31 +2118,107 @@ async function sendBulkMessage(){
     return;
   }
 
+  if(window.__msgSending) return;   // একবার Send চাপার পর কাজ শেষ না হওয়া পর্যন্ত আবার চাপা যাবে না
   const sendBtn = document.getElementById("msgSendBtn");
+  window.__msgSending = true;
   sendBtn.disabled = true;
   resultBox.className = "msg";
-  resultBox.textContent = "পাঠানো হচ্ছে...";
+  resultBox.textContent = "প্রস্তুত হচ্ছে...";
 
-  let res;
-  try {
-    res = await apiCall("sendCustomerMessage", { fromMobile, message, type, locations, customerIds: aud.filtered ? aud.list.map(c => c["CustomerID"]) : undefined, audienceLabel: aud.filtered ? aud.statusText : "", channel: getMsgChannel(), baseMessageId: window.__baseMsgId || "", requestId: "R" + Date.now() + Math.random().toString(36).slice(2,8) });
-  } finally {
-    sendBtn.disabled = false;
+  // ধাপ ১: প্রাপক-তালিকা ঠিক করা (কাউকে পাঠায় না; একই requestId তে রিট্রাই করলেও একবারই হয়)
+  const prep = await msgCall("prepareCustomerMessage", { fromMobile, message, type, locations,
+    customerIds: aud.filtered ? aud.list.map(c => c["CustomerID"]) : undefined,
+    audienceLabel: aud.filtered ? aud.statusText : "", channel: getMsgChannel(),
+    baseMessageId: window.__baseMsgId || "", requestId: "R" + Date.now() + Math.random().toString(36).slice(2,8) }, 4, 30000);
+  if(!prep.success){
+    window.__msgSending = false; sendBtn.disabled = false;
+    resultBox.className = "msg err"; resultBox.textContent = prep.message; return;
   }
+  if(prep.total === 0){
+    window.__msgSending = false; sendBtn.disabled = false;
+    resultBox.className = "msg ok";
+    resultBox.textContent = (prep.message || "পাঠানোর মতো কোনো সঠিক নম্বর নেই") + (prep.invalid ? " (ভুল/অসম্পূর্ণ নম্বর: " + prep.invalid + ")" : "");
+    clearCache(); await loadMessagesList();
+    return;
+  }
+  if(prep.messageId) window.__baseMsgId = prep.messageId;
 
-  if(!res.success){ resultBox.className = "msg err"; resultBox.textContent = res.message; return; }
+  const chunks = [];
+  const sz = prep.chunkSize || 20;
+  for(let i = 0; i < prep.units.length; i += sz) chunks.push(prep.units.slice(i, i + sz));
+  window.__msgJob = { jobId: prep.jobId, messageId: prep.messageId, channel: prep.channel, message, fromMobile,
+    total: prep.total, invalid: prep.invalid, chunks, next: 0, done: 0,
+    sms: { en:false, ok:0, fail:0, err:"" }, wa: { en:false, ok:0, fail:0, err:"" } };
+  await runMsgJob();
+}
+
+/* সার্ভারে কল — টাইমআউট/নেটওয়ার্ক সমস্যায় একই অনুরোধ আবার পাঠায় (সার্ভার একই অংশ দুইবার পাঠায় না) */
+async function msgCall(action, data, tries, tmoMs){
+  data = data || {};
+  if(state.token && !data.token) data.token = state.token;
+  let last = "";
+  for(let a = 1; a <= tries; a++){
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), tmoMs);
+    try{
+      const res = await fetch(API_URL, { method:"POST", body: JSON.stringify({ action, data }), signal: ctrl.signal });
+      const text = fixOrgName(await res.text());
+      try{
+        const json = fixApiJson(JSON.parse(text));
+        if(json && json.busy){ last = "সার্ভার ব্যস্ত"; await new Promise(r => setTimeout(r, 3000)); continue; }
+        return json;
+      }catch(pe){ last = "সার্ভার থেকে সঠিক উত্তর আসেনি"; }
+    }catch(err){
+      last = (err && err.name === "AbortError") ? "সার্ভার সময়মতো সাড়া দেয়নি" : "নেটওয়ার্ক সমস্যা";
+    } finally { clearTimeout(timer); }
+    await new Promise(r => setTimeout(r, 1500 * a));
+  }
+  return { success:false, message: last };
+}
+
+/* ধাপ ২: ২০ জন করে পাঠানো, প্রগ্রেস দেখানো। মাঝপথে থামলে "বাকিগুলো পাঠান" বাটন */
+async function runMsgJob(){
+  const job = window.__msgJob;
+  const resultBox = document.getElementById("msgResult"), sendBtn = document.getElementById("msgSendBtn");
+  window.__msgSending = true; sendBtn.disabled = true;
+  window.onbeforeunload = () => "মেসেজ পাঠানো চলছে — পেজ বন্ধ করবেন না";
+  let stopped = false;
+  try{
+    while(job.next < job.chunks.length){
+      resultBox.className = "msg";
+      resultBox.textContent = "পাঠানো হচ্ছে... " + job.done + " / " + job.total + " জন (পেজ বন্ধ করবেন না)";
+      const chunk = job.chunks[job.next];
+      const r = await msgCall("sendMessageChunk", { jobId: job.jobId, chunkIndex: job.next, units: chunk,
+        message: job.message, messageId: job.messageId, channel: job.channel, fromMobile: job.fromMobile }, 8, 40000);
+      if(!r.success){
+        resultBox.className = "msg err";
+        resultBox.innerHTML = escMsgHtml(r.message || "পাঠানো যায়নি") + " — " + job.done + " / " + job.total + " জনের পর থেমেছে। "
+          + '<button class="btn small" onclick="runMsgJob()">বাকিগুলো পাঠান</button>';
+        stopped = true; break;
+      }
+      ["sms","wa"].forEach(k => {
+        if(r[k + "Enabled"]) job[k].en = true;
+        job[k].ok += r[k + "Sent"] || 0; job[k].fail += r[k + "Failed"] || 0;
+        const e = r[k + "LastError"]; if(e) job[k].err = e;
+      });
+      job.done += chunk.length; job.next++;
+    }
+  } finally {
+    window.onbeforeunload = null; window.__msgSending = false; sendBtn.disabled = false;
+  }
+  if(stopped) return;
 
   const lines = [];
-  lines.push("মোট প্রাপক: " + res.total + (res.invalid ? " (ভুল/অসম্পূর্ণ নম্বর বাদ: " + res.invalid + ")" : ""));
-  if(res.smsEnabled) lines.push("SMS গেটওয়েতে জমা হয়েছে: " + res.smsSent + " (ব্যর্থ: " + res.smsFailed + ")");
-  if(res.smsFailed > 0 && res.smsLastError){ lines.push("↳ SMS এরর বিস্তারিত: " + res.smsLastError); }
-  if(res.waEnabled) lines.push("WhatsApp গেটওয়েতে জমা হয়েছে: " + res.waSent + " (ব্যর্থ/নেই: " + res.waFailed + ")");
-  if(res.waFailed > 0 && res.waLastError){ lines.push("↳ WhatsApp এরর বিস্তারিত: " + res.waLastError); }
+  lines.push("মোট প্রাপক: " + job.total + (job.invalid ? " (ভুল/অসম্পূর্ণ নম্বর বাদ: " + job.invalid + ")" : ""));
+  if(job.sms.en) lines.push("SMS গেটওয়েতে জমা হয়েছে: " + job.sms.ok + " (ব্যর্থ: " + job.sms.fail + ")");
+  if(job.sms.fail > 0 && job.sms.err) lines.push("↳ SMS এরর বিস্তারিত: " + job.sms.err);
+  if(job.wa.en) lines.push("WhatsApp গেটওয়েতে জমা হয়েছে: " + job.wa.ok + " (ব্যর্থ/নেই: " + job.wa.fail + ")");
+  if(job.wa.fail > 0 && job.wa.err) lines.push("↳ WhatsApp এরর বিস্তারিত: " + job.wa.err);
   resultBox.className = "msg ok";
-  resultBox.innerHTML = (res.message && res.total === 0 ? res.message + "<br>" : "") + lines.join("<br>");
+  resultBox.innerHTML = lines.map(escMsgHtml).join("<br>");
+  window.__msgJob = null;
   // লেখা মুছি না — একই লেখা রেখে পরে SMS (যাদের WhatsApp যায়নি) পাঠানো যাবে
   clearCache();
-  if(res.messageId) window.__baseMsgId = res.messageId;   // পাঠানো মেসেজটিই তালিকায় সিলেক্ট থাকে (পরে SMS ফলো-আপের জন্য)
   await loadMessagesList();
   const cres = await cachedApiCall("listCustomers", {}, 60000);
   if(cres.success) window.__customersCache = cres.customers;
@@ -5940,7 +6016,7 @@ function renderBatchReport(){
   const th = ["ক্রম","আইডি","নাম","পিতার নাম","মোবাইল","ওয়ার্ড","প্রাপ্তির স্থান","তারিখ","মূল্য"];
   box.innerHTML = `<p><b>${escMsgHtml(r.pkg ? r.pkg["নাম"] : "")}</b> | ব্যাচ: ${escMsgHtml(r.b.batchId)} | মোট স্টক: ${r.b.qty} | বিক্রি: ${r.b.sold} | বাকি: ${r.b.left} | মোট বিক্রয় মূল্য: ${r.sum} ৳</p>
     <table style="white-space:nowrap;"><thead><tr>${th.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
-    (r.rows.length ? r.rows.map(x => "<tr>" + x.map((v, i) => `<td>${i === 4 ? telLink(v, cusFit(escMsgHtml(v))) : cusFit(escMsgHtml(v))}</td>`).join("") + "</tr>").join("") : `<tr><td colspan="9">এই ব্যাচে এখনো কোনো বিক্রি নেই</td></tr>`) + "</tbody></table>";
+    (r.rows.length ? r.rows.map(x => "<tr>" + x.map((v, i) => `<td${(i === 2 || i === 3) ? ' class="cell-left"' : ''}>${i === 4 ? telLink(v, cusFit(escMsgHtml(v))) : cusFit(escMsgHtml(v))}</td>`).join("") + "</tr>").join("") : `<tr><td colspan="9">এই ব্যাচে এখনো কোনো বিক্রি নেই</td></tr>`) + "</tbody></table>";
 }
 function printBatchReport(){
   const r = getBatchReportData();
