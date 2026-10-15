@@ -6146,46 +6146,101 @@ function printThermalReceipt(c, packageId){
   const pkg = allPackagesCache.find(p => p["PackageID"] === packageId);
   const sale = findSaleFor(c["CustomerID"], packageId);
   const selDay = saleSelectedDate().split("-");
-  const dt = sale && sale["তারিখ"] ? new Date(sale["তারিখ"]).toLocaleDateString("bn-BD") : new Date(+selDay[0], +selDay[1]-1, +selDay[2]).toLocaleDateString("bn-BD");
-  const dealerName = state.dealerName || "";
-  const dealerMobile = state.dealerMobile || "";
+  const dtObj = sale && sale["তারিখ"] ? new Date(sale["তারিখ"]) : new Date(+selDay[0], +selDay[1]-1, +selDay[2]);
+  const bn = n => (Number(n) || 0).toLocaleString("bn-BD");
+  const e = v => escMsgHtml(v == null ? "" : String(v));
 
-  const rows = [
-    ["Customer Name", c["নাম"]||""],
-    ["Mobile No", c["মোবাইল নং"]||""],
-    ["Collection Point", c["প্রাপ্তির স্থান"]||""],
-    ["Package", pkg ? pkg["নাম"] : ""],
-    ["Price", sale && sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? sale["মূল্য"] : (pkg ? (Number(pkg["সর্বমোট মূল্য"]) || 0) + saleOtherExpense() : "")],
-    ["Date", dt],
-    ["Status", sale ? "বিক্রিত" : "অপেক্ষমান"]
+  // পণ্যের সারি: নাম, বাজার মূল্য, কম্বো মূল্য, সাশ্রয়
+  let items = [], sumMarket = 0, sumCombo = 0, sumSave = 0;
+  if(pkg){
+    for(let k = 1; k <= 10; k++){
+      const nm = pkg["পণ্য" + k + " - নাম ও পরিমাণ"];
+      if(!nm || !String(nm).trim()) continue;
+      const m = Number(pkg["পণ্য" + k + " - বাজার মূল্য"]) || 0;
+      const cb = Number(pkg["পণ্য" + k + " - কম্বো মূল্য"]) || 0;
+      const sv = pkg["পণ্য" + k + " - সাশ্রয়"] !== "" && pkg["পণ্য" + k + " - সাশ্রয়"] != null ? Number(pkg["পণ্য" + k + " - সাশ্রয়"]) || 0 : m - cb;
+      items.push([nm, m, cb, sv]);
+      sumMarket += m; sumCombo += cb; sumSave += sv;
+    }
+    sumMarket = Number(pkg["সর্বমোট বাজার মূল্য"]) || sumMarket;
+    sumCombo = Number(pkg["সর্বমোট কম্বো মূল্য (সর্বমোট মূল্য)"]) || sumCombo;
+    sumSave = Number(pkg["সর্বমোট সাশ্রয়"]) || sumSave;
+  }
+  const payable = sale && sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? Number(sale["মূল্য"]) || 0 : sumCombo + saleOtherExpense();
+  const extra = payable - sumCombo;
+  const itemsHtml = items.map((r, i) => `<tr><td class="c">${bn(i + 1)}</td><td class="l">${e(r[0])}</td><td class="r">${bn(r[1])}</td><td class="r">${bn(r[2])}</td><td class="r">${bn(r[3])}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="c">পণ্যের তথ্য পাওয়া যায়নি</td></tr>`;
+  const addr = [c["বাড়ির নাম"], c["গ্রাম"], c["ওয়ার্ড নং"] ? "ওয়ার্ড " + c["ওয়ার্ড নং"] : "", c["ইউনিয়ন/পৌরসভা"]].filter(x => x && String(x).trim()).join(", ");
+  const batch = sale && sale["ব্যাচ"] ? sale["ব্যাচ"] : "";
+  const rcpNo = sale && sale["SaleID"] && String(sale["SaleID"]).indexOf("tmp-") !== 0 ? sale["SaleID"] : "";
+
+  const info = [
+    ["গ্রাহকের নাম", c["নাম"]], ["পিতার নাম", c["পিতার নাম"]],
+    ["মোবাইল নং", c["মোবাইল নং"]], ["গ্রাহক আইডি", c["CustomerID"]],
+    ["ঠিকানা", addr], ["প্রাপ্তির স্থান", c["প্রাপ্তির স্থান"]]
   ];
-  const rowsHtml = rows.map(r => `<tr><td class="lbl">${r[0]}</td><td class="colon">:</td><td>${r[1]}</td></tr>`).join("");
+  const infoHtml = info.map(r => `<div class="ir"><span class="il">${r[0]}</span><span class="iv">: ${e(r[1])}</span></div>`).join("");
 
-  const win = window.open("", "_blank", "width=340,height=520");
-  win.document.write(`<html><head><meta charset="utf-8"><title>রসিদ</title>
+  const win = window.open("", "_blank", "width=820,height=1000");
+  win.document.write(`<html><head><meta charset="utf-8"><title>বিক্রয় রশিদ</title>
     <style>
-      @page{ size:80mm auto; margin:0.5in; }
-      html{ margin:0; padding:0; }
-      body{ font-family:'Hind Siliguri',sans-serif; width:76mm; margin:0 auto; color:#000; font-size:12px; }
-      h2{ text-align:center; font-size:14px; margin:4px 0 0; }
-      .dealer-mobile{ text-align:center; font-size:10.5px; margin:0 0 4px; }
-      .line{ border-top:1px dashed #000; margin:6px 0; }
-      table{ width:100%; border-collapse:collapse; font-size:11.5px; }
-      td{ padding:2px 0; vertical-align:top; }
-      .lbl{ font-weight:600; white-space:nowrap; padding-right:1px; }
-      .colon{ width:5px; }
-      .center{ text-align:center; }
-      .footnote{ text-align:center; font-size:8.5px; color:#555; margin-top:8px; }
+      @page{ size:A5 portrait; margin:8mm; }
+      *{ box-sizing:border-box; }
+      body{ font-family:'Hind Siliguri','Noto Sans Bengali',sans-serif; color:#1c2b28; margin:0; font-size:12px; }
+      .rc{ border:2px solid #153f37; padding:10px 12px; position:relative; }
+      .head{ text-align:center; border-bottom:3px double #153f37; padding-bottom:6px; }
+      .head .org{ font-size:17px; font-weight:700; color:#153f37; margin:0; }
+      .head .tag{ font-size:10.5px; color:#b5502f; font-weight:600; margin:1px 0 4px; }
+      .head .dl{ font-size:13px; font-weight:700; margin:2px 0 0; }
+      .head .dd{ font-size:11px; color:#333; margin:1px 0 0; }
+      .title{ text-align:center; margin:8px 0 6px; }
+      .title span{ display:inline-block; background:#153f37; color:#fff; padding:3px 22px; border-radius:14px; font-weight:700; font-size:13px; letter-spacing:.5px; }
+      .meta{ display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px; }
+      .box{ border:1px solid #9aa7a2; border-radius:4px; padding:6px 8px; display:grid; grid-template-columns:1fr 1fr; column-gap:14px; row-gap:2px; }
+      .ir{ display:flex; font-size:11.5px; min-width:0; }
+      .ir.full{ grid-column:1 / -1; }
+      .il{ font-weight:700; white-space:nowrap; min-width:78px; }
+      .iv{ white-space:nowrap; overflow:hidden; }
+      table{ width:100%; border-collapse:collapse; margin-top:8px; }
+      th,td{ border:1px solid #9aa7a2; padding:4px 6px; font-size:11.5px; white-space:nowrap; }
+      th{ background:#e8efe9; color:#153f37; }
+      td.c,th.c{ text-align:center; } td.r{ text-align:right; } td.l{ text-align:left; }
+      tfoot td{ font-weight:700; background:#f4f7f4; }
+      tr.grand td{ background:#153f37; color:#fff; font-size:13px; }
+      .note{ margin-top:6px; font-size:11px; text-align:right; color:#b5502f; font-weight:700; }
+      .sign{ display:flex; justify-content:space-between; margin-top:34px; font-size:11px; }
+      .sign div{ border-top:1px solid #333; padding-top:3px; min-width:110px; text-align:center; }
+      .thanks{ text-align:center; margin-top:10px; font-weight:700; color:#153f37; }
+      .foot{ text-align:center; font-size:8.5px; color:#6b7570; margin-top:6px; }
+      .stamp{ position:absolute; right:14px; top:112px; border:2px solid ${sale ? "#1b7a4b" : "#b5502f"}; color:${sale ? "#1b7a4b" : "#b5502f"}; padding:1px 10px; font-weight:700; font-size:13px; transform:rotate(-8deg); border-radius:4px; }
     </style></head><body>
-    <h2>${dealerName}</h2>
-    <p class="dealer-mobile">${dealerMobile}</p>
-    <p class="center">বিক্রয় রসিদ</p>
-    <div class="line"></div>
-    <table>${rowsHtml}</table>
-    <div class="line"></div>
-    <p class="center">ধন্যবাদ</p>
-    <p class="footnote">@Powered by: AM Shahed: 01605721296</p>
-    <script>window.onload=function(){window.print();}<\/script>
+    <div class="rc">
+      <div class="head">
+        <p class="org">ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</p>
+        <p class="tag">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
+        <p class="dl">${e(state.dealerName || "")}</p>
+        <p class="dd">${state.dealerUnion ? "ঠিকানা: " + e(state.dealerUnion) : ""}${state.dealerUnion && state.dealerMobile ? " | " : ""}${state.dealerMobile ? "মোবাইল: " + e(state.dealerMobile) : ""}</p>
+      </div>
+      <div class="title"><span>বিক্রয় রশিদ</span></div>
+      <div class="stamp">${sale ? "বিক্রিত" : "অপেক্ষমান"}</div>
+      <div class="meta"><span>রশিদ নং: <b>${e(rcpNo || "—")}</b>${batch ? " | ব্যাচ: <b>" + e(batch) + "</b>" : ""}</span><span>তারিখ: <b>${dtObj.toLocaleDateString("bn-BD")}</b></span></div>
+      <div class="box">${infoHtml}</div>
+      <div style="margin-top:8px;font-weight:700;color:#153f37;">প্যাকেজ: ${e(pkg ? pkg["নাম"] : "")}</div>
+      <table>
+        <thead><tr><th class="c">ক্রম</th><th class="l">পণ্যের নাম</th><th class="r">বাজার মূল্য</th><th class="r">কম্বো মূল্য</th><th class="r">সাশ্রয়</th></tr></thead>
+        <tbody>${itemsHtml}</tbody>
+        <tfoot>
+          <tr><td colspan="2" class="r">সর্বমোট</td><td class="r">${bn(sumMarket)}</td><td class="r">${bn(sumCombo)}</td><td class="r">${bn(sumSave)}</td></tr>
+          ${extra !== 0 ? `<tr><td colspan="4" class="r">${extra > 0 ? "অন্যান্য খরচ" : "ছাড়"}</td><td class="r">${bn(Math.abs(extra))}</td></tr>` : ""}
+          <tr class="grand"><td colspan="4" class="r">সর্বমোট প্রদেয় (টাকা)</td><td class="r">৳ ${bn(payable)}</td></tr>
+        </tfoot>
+      </table>
+      ${sumSave > 0 ? `<div class="note">আপনি এই প্যাকেজে মোট ৳ ${bn(sumSave)} সাশ্রয় করেছেন</div>` : ""}
+      <div class="sign"><div>গ্রাহকের স্বাক্ষর</div><div>বিক্রেতার স্বাক্ষর</div></div>
+      <p class="thanks">আমাদের সাথে থাকার জন্য ধন্যবাদ</p>
+      <p class="foot">@Powered by: AM Shahed: 01605721296</p>
+    </div>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
