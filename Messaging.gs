@@ -172,7 +172,7 @@ function sendSmsViaGateway(config, fromMobile, toMobile, message) {
       .replace(/\{message\}/g, encodeURIComponent(message));
     const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     const code = resp.getResponseCode();
-    return { ok: code >= 200 && code < 300, response: resp.getContentText() };
+    return { ok: isGatewayAccepted(code, resp.getContentText()), response: resp.getContentText() };
   } catch (e) {
     return { ok: false, reason: e.toString() };
   }
@@ -199,7 +199,7 @@ function sendWhatsAppMessage(config, toMobile, message) {
       muteHttpExceptions: true
     });
     const code = resp.getResponseCode();
-    return { ok: code >= 200 && code < 300, response: resp.getContentText() };
+    return { ok: isGatewayAccepted(code, resp.getContentText()), response: resp.getContentText() };
   } catch (e) {
     return { ok: false, reason: e.toString() };
   }
@@ -222,7 +222,7 @@ function sendSmsViaTraccar(config, toMobile, message) {
       muteHttpExceptions: true
     });
     const code = resp.getResponseCode();
-    return { ok: code >= 200 && code < 300, response: resp.getContentText() };
+    return { ok: isGatewayAccepted(code, resp.getContentText()), response: resp.getContentText() };
   } catch (e) {
     return { ok: false, reason: e.toString() };
   }
@@ -385,6 +385,26 @@ function sendBulkToRecipients(config, fromMobile, mainText, recipients, dealerIn
  * UrlFetchApp.fetchAll দিয়ে প্যারালালে পাঠানো (২০টি করে ব্যাচ)।
  * ফেরত: প্রতিটি রিকোয়েস্টের জন্য { ok, response, reason }
  *******************************************************/
+/*******************************************************
+ * গেটওয়ে সত্যিই মেসেজ গ্রহণ করেছে কিনা — শুধু HTTP 200 যথেষ্ট নয়।
+ * অনেক গেটওয়ে ভুল API কী/ব্যালেন্স শেষ/ভুল নম্বরেও HTTP 200 দিয়ে বডিতে error লেখে
+ *******************************************************/
+function isGatewayAccepted(code, body) {
+  if (!(code >= 200 && code < 300)) return false;
+  const text = String(body || "").trim();
+  let obj = null;
+  try { obj = JSON.parse(text); } catch (e) { obj = null; }
+  if (obj && typeof obj === "object") {
+    if (obj.error) return false;
+    if (obj.messaging_product === "whatsapp") return !!(obj.messages && obj.messages[0] && obj.messages[0].id);
+    if (obj.response_code !== undefined) return String(obj.response_code) === "202";   // BulkSMSBD
+    if (obj.success === false || obj.status === "error" || obj.status === "failed" || obj.state === "Failed") return false;
+    return true;
+  }
+  if (/error|fail|invalid|insufficient|not allowed|unauthor/i.test(text)) return false;
+  return true;
+}
+
 function fetchAllSafe(requests) {
   const out = [];
   const CHUNK = 20;
@@ -394,7 +414,7 @@ function fetchAllSafe(requests) {
       const resps = UrlFetchApp.fetchAll(chunk);
       resps.forEach(function (resp) {
         const code = resp.getResponseCode();
-        out.push({ ok: code >= 200 && code < 300, response: resp.getContentText() });
+        out.push({ ok: isGatewayAccepted(code, resp.getContentText()), response: resp.getContentText() });
       });
     } catch (e) {
       // ব্যাচে কোনো একটা রিকোয়েস্ট ভুল হলে পুরো ব্যাচ ব্যর্থ হয় — একটা একটা করে আবার চেষ্টা
@@ -402,7 +422,7 @@ function fetchAllSafe(requests) {
         try {
           const resp = UrlFetchApp.fetch(req.url, req);
           const code = resp.getResponseCode();
-          out.push({ ok: code >= 200 && code < 300, response: resp.getContentText() });
+          out.push({ ok: isGatewayAccepted(code, resp.getContentText()), response: resp.getContentText() });
         } catch (e2) {
           out.push({ ok: false, reason: e2.toString() });
         }
@@ -467,7 +487,7 @@ function sendCustomerMessage(data) {
 
   const ss = getDealerSpreadsheet(dealerId);
   const custSheet = getSheet(ss, "Customers");
-  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি"]);
+  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ"]);
   const customers = genericListRows(custSheet);
 
   // তিন ধরনের মেসেজ: সকল গ্রাহক / প্রাপ্তির স্থান ভিত্তিক / ওয়ার্ড ভিত্তিক (+ নতুন গ্রাহকের একক মেসেজ)
@@ -646,7 +666,7 @@ function updateCustomerMessageStatus(custSheet, msgId, targeted, result, waAttem
   const lastCol = custSheet.getLastColumn();
   const headers = custSheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const iId = headers.indexOf("CustomerID");
-  const iWa = headers.indexOf("WhatsApp"), iSms = headers.indexOf("SMS"), iMid = headers.indexOf("মেসেজ আইডি");
+  const iWa = headers.indexOf("WhatsApp"), iSms = headers.indexOf("SMS"), iMid = headers.indexOf("মেসেজ আইডি"), iDate = headers.indexOf("মেসেজ তারিখ");
   if (iId === -1 || iWa === -1 || iSms === -1 || iMid === -1) return;
 
   const n = lastRow - 1;
@@ -654,6 +674,8 @@ function updateCustomerMessageStatus(custSheet, msgId, targeted, result, waAttem
   const waCol = custSheet.getRange(2, iWa + 1, n, 1).getValues();
   const smsCol = custSheet.getRange(2, iSms + 1, n, 1).getValues();
   const midCol = custSheet.getRange(2, iMid + 1, n, 1).getValues();
+  const dateCol = iDate !== -1 ? custSheet.getRange(2, iDate + 1, n, 1).getValues() : null;
+  const nowText = Utilities.formatDate(new Date(), "Asia/Dhaka", "dd/MM/yyyy hh:mm a");
 
   const target = {};
   targeted.forEach(function (c) { target[c["CustomerID"]] = true; });
@@ -663,14 +685,17 @@ function updateCustomerMessageStatus(custSheet, msgId, targeted, result, waAttem
   for (let r = 0; r < n; r++) {
     const cid = idCol[r][0];
     if (!target[cid]) continue;
-    if (midCol[r][0] !== msgId) { waCol[r][0] = ""; smsCol[r][0] = ""; midCol[r][0] = msgId; }
+    if (midCol[r][0] !== msgId) { waCol[r][0] = ""; smsCol[r][0] = ""; midCol[r][0] = msgId; if (dateCol) dateCol[r][0] = ""; }
     if (waAttempted) waCol[r][0] = (!bad[cid] && result.waByCustomer[cid] === true) ? MSG_STATUS_OK : MSG_STATUS_FAIL;
     if (smsAttempted) smsCol[r][0] = (!bad[cid] && result.smsByCustomer[cid] === true) ? MSG_STATUS_OK : MSG_STATUS_FAIL;
+    // সর্বশেষ কোন তারিখ/সময়ে মেসেজ গেটওয়ে গ্রহণ করেছে
+    if (dateCol && (waCol[r][0] === MSG_STATUS_OK || smsCol[r][0] === MSG_STATUS_OK)) dateCol[r][0] = nowText;
   }
 
   custSheet.getRange(2, iWa + 1, n, 1).setValues(waCol);
   custSheet.getRange(2, iSms + 1, n, 1).setValues(smsCol);
   custSheet.getRange(2, iMid + 1, n, 1).setValues(midCol);
+  if (dateCol) { custSheet.getRange(2, iDate + 1, n, 1).setNumberFormat("@").setValues(dateCol); }
 }
 
 /*******************************************************

@@ -806,6 +806,13 @@
       <div class="no-print" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;">
         <input id="cusSearch" type="search" placeholder="🔍 নাম / মোবাইল নং / NID নং দিয়ে খুঁজুন" oninput="onCusSearch()" autocomplete="off"
                style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #cfd8d3;">
+        <select id="cusFilterType" onchange="onCusFilterTypeChange()" style="padding:9px 10px;border:1px solid #cfd8d3;">
+          <option value="all">সকল গ্রাহক</option>
+          <option value="ward">ওয়ার্ড ভিত্তিক</option>
+          <option value="loc">প্রাপ্তিস্থান ভিত্তিক</option>
+          <option value="ref">রেফারেন্স ভিত্তিক</option>
+        </select>
+        <select id="cusFilterValue" onchange="renderCustomersTable(window.__customersCache || [])" style="display:none;padding:9px 10px;border:1px solid #cfd8d3;"></select>
         <span id="cusSearchInfo" style="font-size:0.85rem;color:var(--muted);"></span>
       </div>
       <div class="table-wrap"><table id="customersTable"><thead></thead><tbody></tbody></table></div>
@@ -961,7 +968,7 @@
       <div class="form-grid no-print">
         <div class="field"><label>প্যাকেজ সিলেক্ট করুন</label><select id="saleFilterPackage" onchange="loadSalesView()"></select></div>
         <div class="field"><label>প্রাপ্তির স্থান / ওয়ার্ড নং / রেফারেন্স</label><select id="saleFilterLocation" onchange="loadSalesView()"></select></div>
-        <div class="field"><label>স্টক ব্যাচ</label><select id="saleBatch"></select></div>
+        <div class="field"><label>স্টক ব্যাচ</label><select id="saleBatch" onchange="renderSalesTable()"></select></div>
         <div class="field"><label>বিক্রয়ের তারিখ</label><input type="date" id="saleDate" onchange="renderSalesTable()"></div>
         <div class="field"><label>অন্যান্য খরচ</label><input type="number" id="saleOtherExpense" min="0" value="0" oninput="onSaleOtherExpense()"></div>
         <div class="field"><label>সার্চ (নাম / মোবাইল / এনআইডি)</label><input type="search" id="saleSearch" placeholder="🔍 নাম / মোবাইল / এনআইডি নং" oninput="onSaleSearch()" autocomplete="off"></div>
@@ -5141,7 +5148,7 @@ function enqueueNewCustomer(data, msgBox){
 }
 
 function pendingCustomerRowsHtml(searchQ){
-  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -5496,18 +5503,34 @@ function cusFit(v){
   const sz = n <= 22 ? "0.88em" : n <= 30 ? "0.78em" : n <= 40 ? "0.68em" : "0.6em";
   return `<span class="fit" style="font-size:${sz}">${t}</span>`;
 }
+function cusFilterKey(){
+  const t = document.getElementById("cusFilterType");
+  return !t ? "" : t.value === "ward" ? "ওয়ার্ড নং" : t.value === "loc" ? "প্রাপ্তির স্থান" : t.value === "ref" ? "রেফারেন্স" : "";
+}
+function onCusFilterTypeChange(){
+  const key = cusFilterKey(), sel = document.getElementById("cusFilterValue");
+  if(!key){ sel.style.display = "none"; sel.innerHTML = ""; }
+  else {
+    const vals = Array.from(new Set((window.__customersCache || []).map(c => String(c[key] == null ? "" : c[key]).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "bn", { numeric: true }));
+    sel.innerHTML = '<option value="">— বাছুন —</option>' + vals.map(v => `<option value="${escMsgHtml(v)}">${escMsgHtml(v)}</option>`).join("");
+    sel.style.display = "";
+  }
+  renderCustomersTable(window.__customersCache || []);
+}
 function renderCustomersTable(customers){
   window.__customersCache = customers;   // পুরো তালিকা (সার্চ শুধু দেখানোয় ফিল্টার করে — প্রিন্ট/মেসেজে পুরো তালিকাই থাকে)
   const _q = cusSearchQuery();
-  const _list = _q ? customers.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], _q)) : customers;
+  const _fk = cusFilterKey(), _fvEl = document.getElementById("cusFilterValue"), _fv = _fvEl ? _fvEl.value : "";
+  const _base = (_fk && _fv) ? customers.filter(c => String(c[_fk] == null ? "" : c[_fk]).trim() === _fv) : customers;
+  const _list = _q ? _base.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], _q)) : _base;
   const _info = document.getElementById("cusSearchInfo");
-  if(_info) _info.textContent = _q ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
+  if(_info) _info.textContent = (_q || (_fk && _fv)) ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
   const table = document.getElementById("customersTable");
-  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
+  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
   const pendHtml = pendingCustomerRowsHtml(_q);
-  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(16, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(17, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
   const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
-      <td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
+      <td class="no-print" style="white-space:nowrap;">${escMsgHtml(c["মেসেজ তারিখ"] || "—")}</td><td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
         <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printCustomerRowById('${c['CustomerID']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
@@ -5814,7 +5837,11 @@ function saleDayOf(sale){
   return d && !isNaN(d) ? localDayKey(d) : "";
 }
 /* নির্বাচিত তারিখে এই গ্রাহকের এই প্যাকেজের বিক্রি (থাকলে) */
+let _saleBatchCtx = null;   // বিক্রি ফর্মে ব্যাচ বাছা থাকলে সেই ব্যাচ (সব তারিখের বিক্রি সহ)
 function findSaleFor(customerId, pkgId){
+  if(_saleBatchCtx && _saleBatchCtx.packageId === pkgId){
+    return _saleBatchCtx.sales.find(s => s["CustomerID"] === customerId);
+  }
   const day = saleSelectedDate();
   return allSalesCache.find(s => s["CustomerID"] === customerId && s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত" && saleDayOf(s) === day);
 }
@@ -5875,8 +5902,8 @@ function fillSaleBatchOptions(){
   const prev = sel.value;
   const list = pkgId ? batchStats(pkgId) : [];
   sel.innerHTML = '<option value="">অটো (পুরোনো ব্যাচ আগে)</option>' + list.map(b =>
-    `<option value="${escMsgHtml(b.batchId)}" ${b.left <= 0 ? "disabled" : ""}>${escMsgHtml(b.batchId)} — ${new Date(b.date).toLocaleDateString("en-GB")} — বাকি ${b.left}/${b.qty}</option>`).join("");
-  if([...sel.options].some(o => o.value === prev && !o.disabled)) sel.value = prev;
+    `<option value="${escMsgHtml(b.batchId)}" >${escMsgHtml(b.batchId)} — ${new Date(b.date).toLocaleDateString("en-GB")} — ${b.left <= 0 ? "শেষ" : "বাকি " + b.left}/${b.qty}</option>`).join("");
+  if([...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
 function currentSaleBatch(pkgId){
   const chosen = document.getElementById("saleBatch").value;
@@ -6063,6 +6090,7 @@ function renderSalesTable(){
   updateSalePackageStockLabels();
   fillSaleBatchOptions();
   const pkgId = document.getElementById("saleFilterPackage").value;
+  _saleBatchCtx = printBatchSales(pkgId);
   const table = document.getElementById("salesTable");
 
   const view = getSalesViewData();
@@ -6083,7 +6111,7 @@ function renderSalesTable(){
       <td>${ci + 1}</td><td>${escMsgHtml(c["CustomerID"]||"")}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td>
       <td><input type="number" class="price-input" id="${priceInputId}" value="${priceValue}" ${!pkgId?"disabled":""}
         ${sale ? `onchange="updateSalePriceHandler('${sale['SaleID']}', this.value)"` : ""}></td>
-      <td>${sale ? "বিক্রিত" : "—"}</td>
+      <td>${sale ? "বিক্রিত" + (sale["তারিখ"] && saleDayOf(sale) !== saleSelectedDate() ? " (" + new Date(sale["তারিখ"]).toLocaleDateString("en-GB") + ")" : "") : "—"}</td>
       <td class="no-print">
         ${!sale
           ? `<button class="btn icon small" ${!pkgId?"disabled":""} onclick="makeSale('${c['CustomerID']}','${pkgId}','${priceInputId}')" title="বিক্রয়" aria-label="বিক্রয়">${IC.sale}</button>`
