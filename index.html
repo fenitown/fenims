@@ -187,7 +187,7 @@
   fieldset.official-section legend{ background:var(--teal-soft); padding:2px 10px; border-radius:6px; }
 
   .dealer-thumb{
-    width:36px; height:36px; border-radius:8px; object-fit:cover;
+    width:36px; height:36px; border-radius:0; object-fit:cover;
     border:1px solid var(--line); background:#eee;
   }
 
@@ -4647,7 +4647,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     const wd = String(c["ওয়ার্ড নং"] == null ? "" : c["ওয়ার্ড নং"]).trim();
     const thikana = [String(c["বাড়ির নাম"]||"").trim(), wd ? wardLabel(wd) : ""].filter(Boolean).join(", ");
     const rows = [
-      ["নাম", c["নাম"]||""],
+      ["গ্রাহকের নাম", c["নাম"]||""],
       ["পিতার নাম", c["পিতার নাম"]||""],
       ["NID নং", c["NID/জন্মসনদ নং"]||""],
       ["মোবাইল নং", c["মোবাইল নং"]||""],
@@ -4721,11 +4721,11 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
         width:65%; max-height:80%; object-fit:contain; opacity:0.09; pointer-events:none; z-index:0;
       }
-      table.card-fields{ width:100%; border-collapse:collapse; font-size:10.5px; color:#000; position:relative; z-index:1; }
+      table.card-fields{ width:100%; table-layout:fixed; border-collapse:collapse; font-size:10.5px; color:#000; position:relative; z-index:1; }
       table.card-fields td{ padding:1.6px 0; vertical-align:top; color:#000; font-weight:700; line-height:1.35; }
-      .cf-label{ white-space:nowrap; padding-right:2px; width:34%; }
+      .cf-label{ white-space:nowrap; padding-right:2px; width:38%; }
       .cf-colon{ width:6px; }
-      .cf-value{ }
+      .cf-value{ white-space:nowrap; overflow:hidden; }
       .card-footer{
         background:#eef0e9; color:#153f37; font-size:9px; font-weight:600;
         padding:3px 10px 8px; text-align:center;
@@ -4733,7 +4733,21 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       }
     </style></head><body>
     <div class="cards-wrap">${cardsHtml}</div>
-    ${autoprint ? '<script>window.onload=function(){window.print();}<\/script>' : ''}
+    <script>
+    function fitCardValues(){
+      var els = document.querySelectorAll('.cf-value');
+      for(var i = 0; i < els.length; i++){
+        var el = els[i], fs = 10.5;
+        el.style.fontSize = fs + 'px';
+        while(el.scrollWidth > el.clientWidth && fs > 5){ fs -= 0.25; el.style.fontSize = fs + 'px'; }
+      }
+    }
+    window.onload = function(){
+      fitCardValues();
+      var go = function(){ fitCardValues(); ${autoprint ? 'window.print();' : ''} };
+      if(document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+    };
+    <\/script>
     </body></html>`;
 }
 
@@ -4744,7 +4758,7 @@ async function loadDashboard(){
     profileBox.style.display = "flex";
     profileBox.style.cssText = "display:flex;align-items:center;gap:12px;margin-bottom:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;";
     profileBox.innerHTML = `
-      <img src="${state.dealerPhotoUrl}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--teal);">
+      <img src="${state.dealerPhotoUrl}" style="width:64px;height:64px;border-radius:0;object-fit:cover;border:2px solid var(--teal);">
       <div><div style="font-weight:700;color:var(--teal-dark);">${state.dealerName||""}</div>
       <div style="font-size:0.85rem;color:var(--muted);">${state.name} (${state.role})</div></div>`;
   } else {
