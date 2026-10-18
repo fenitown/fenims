@@ -4507,15 +4507,21 @@ function onCcCategoryChange(){
   updateCcPreview();
 }
 
+function ccIdNum(c){ const m = String(c["CustomerID"] || "").match(/(\d+)\s*$/); return m ? Number(m[1]) : 0; }
 function renderCcSpecificList(){
   const box = document.getElementById("ccSpecificList");
   if(!box) return;
   const qEl = document.getElementById("ccSpecificSearch");
   const q = qEl ? cusNorm(qEl.value) : "";
-  const list = q ? ccCustomersCache.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q)) : ccCustomersCache;
-  box.innerHTML = list.length ? list.map(c => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:0.9rem;">
-      <input type="checkbox" ${ccPicked[c["CustomerID"]] ? "checked" : ""} onchange="onCcPick('${c["CustomerID"]}', this.checked)">
-      ${escMsgHtml(c["নাম"] || "")} (${escMsgHtml(c["মোবাইল নং"] || "")})${ccGiven(c) ? ' <span style="color:var(--muted);font-size:0.78rem;">— কার্ড দেওয়া হয়েছে</span>' : ""}</label>`).join("")
+  const list = (q ? ccCustomersCache.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q)) : ccCustomersCache.slice())
+    .sort((a, b) => ccIdNum(a) - ccIdNum(b));   // আইডি অনুযায়ী ক্রমানুসারে
+  box.innerHTML = list.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:0.9rem;"><tbody>` + list.map(c => `<tr>
+        <td style="width:28px;padding:3px 4px;text-align:center;"><input type="checkbox" ${ccPicked[c["CustomerID"]] ? "checked" : ""} onchange="onCcPick('${c["CustomerID"]}', this.checked)"></td>
+        <td style="width:62px;padding:3px 4px;white-space:nowrap;border:0;text-align:left;">${escMsgHtml(c["CustomerID"] || "")}</td>
+        <td style="padding:3px 4px;border:0;text-align:left;">${escMsgHtml(c["নাম"] || "")}</td>
+        <td style="padding:3px 4px;white-space:nowrap;border:0;text-align:left;">${escMsgHtml(c["মোবাইল নং"] || "")}</td>
+        <td style="padding:3px 4px;white-space:nowrap;border:0;text-align:left;color:var(--muted);font-size:0.78rem;">${ccGiven(c) ? "কার্ড দেওয়া হয়েছে" : ""}</td></tr>`).join("") + `</tbody></table>`
     : "<p style='color:var(--muted);font-size:0.85rem;margin:0;'>কোনো গ্রাহক পাওয়া যায়নি</p>";
 }
 function onCcPick(id, checked){
@@ -4564,7 +4570,7 @@ function renderCcControls(){
 /* বর্তমান নির্বাচন অনুযায়ী কোন কোন গ্রাহকের কার্ড দেখানো/প্রিন্ট হবে */
 function getCcSelectedCustomers(){
   const cs = ccCustomersCache;
-  if(ccCurrentCategory === "specific") return cs.filter(c => ccPicked[c["CustomerID"]]);
+  if(ccCurrentCategory === "specific") return cs.filter(c => ccPicked[c["CustomerID"]]).sort((a, b) => ccIdNum(a) - ccIdNum(b));
   let list = cs;
   if(ccCurrentCategory !== "all"){
     const sel = document.getElementById("ccGroupSelect");
@@ -4723,13 +4729,13 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       }
       table.card-fields{ width:100%; table-layout:fixed; border-collapse:collapse; font-size:10.5px; color:#000; position:relative; z-index:1; }
       table.card-fields td{ padding:1.6px 0; vertical-align:top; color:#000; font-weight:700; line-height:1.35; }
-      .cf-label{ white-space:nowrap; padding-right:2px; width:38%; }
+      .cf-label{ white-space:nowrap; padding-right:2px; width:27%; }
       .cf-colon{ width:6px; }
-      .cf-value{ white-space:nowrap; overflow:hidden; }
+      .cf-value{ white-space:nowrap; overflow:hidden; padding-left:5px !important; }
       .card-footer{
-        background:#eef0e9; color:#153f37; font-size:9px; font-weight:600;
+        background:linear-gradient(135deg,#1f5f52,#153f37); color:#fff; font-size:9px; font-weight:600;
         padding:3px 10px 8px; text-align:center;
-        border-top:1px solid #d8d2c2; flex-shrink:0;
+        flex-shrink:0;
       }
     </style></head><body>
     <div class="cards-wrap">${cardsHtml}</div>
