@@ -641,15 +641,20 @@
       <h2>গ্রাহক কার্ড</h2>
       <div class="form-grid no-print">
         <div class="field">
-          <label>ডিলার সিলেক্ট করুন</label>
-          <select id="ccDealerSelect" onchange="onCcDealerChange()"><option value="">-- সিলেক্ট করুন --</option></select>
-        </div>
-        <div class="field">
           <label>ধরন</label>
           <select id="ccCategorySelect" onchange="onCcCategoryChange()">
             <option value="specific">নির্দিষ্ট গ্রাহক</option>
             <option value="location">প্রাপ্তির স্থান ভিত্তিক</option>
+            <option value="ward">ওয়ার্ড ভিত্তিক</option>
+            <option value="ref">রেফারেন্স ভিত্তিক</option>
             <option value="all">সকল গ্রাহক</option>
+          </select>
+        </div>
+        <div class="field" id="ccKindField" style="display:none;">
+          <label>ক্যাটাগরি</label>
+          <select id="ccKindSelect" onchange="updateCcPreview()">
+            <option value="all">সকল</option>
+            <option value="new">নতুন গ্রাহক (যাদের কার্ড এখনো দেওয়া/প্রিন্ট হয়নি)</option>
           </select>
         </div>
       </div>
@@ -1046,7 +1051,7 @@ const _icp = {
 const IC = {};
 Object.keys(_icp).forEach(k => { IC[k] = '<svg viewBox="0 0 24 24" aria-hidden="true">' + _icp[k] + '</svg>'; });
 
-let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null, dealerUnion:"" };
+let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null, dealerUnion:"", dealerArea:"" };
 
 /* যেসব অনুরোধ ডাটা বদলায় (সংরক্ষণ/এডিট/ডিলিট) — এগুলোতে ইউনিক requestId যায়,
    যাতে নেটওয়ার্ক সমস্যায় আবার পাঠালেও সার্ভার দুইবার সংরক্ষণ না করে */
@@ -1508,6 +1513,7 @@ async function doLogin(){
   state.dealerPhotoUrl = res.dealerPhotoUrl || "";
   state.dealerMobile = res.dealerMobile || "";
   state.dealerUnion = res.dealerUnion || "";
+  state.dealerArea = res.dealerArea || "";
   state.dealerFacebookLink = res.dealerFacebookLink || "";
 
   // এজেন্সির লোগো/নাম আনার জন্য আর অপেক্ষা করা হয় না — অ্যাপ সাথে সাথে খুলে যায়,
@@ -1600,7 +1606,6 @@ function buildSideMenu(){
         <button class="menu-item sub" onclick="showSection('agencyExpense')">খরচ ভাউচার</button>
       </div>
       <button class="menu-item" onclick="showSection('agencyReports')">রিপোর্ট</button>
-      <button class="menu-item" onclick="showSection('customerCards')">গ্রাহক কার্ড</button>
       <button class="menu-item" onclick="doLogout()">লগআউট</button>`;
   } else {
     nav.innerHTML = `
@@ -1615,6 +1620,7 @@ function buildSideMenu(){
       </div>
       <button class="menu-item" onclick="showSection('salesInvoice')">অর্ডার ইনভয়েস</button>
       <button class="menu-item" onclick="showSection('sales')">বিক্রি</button>
+      <button class="menu-item" onclick="showSection('customerCards')">গ্রাহক কার্ড</button>
       <button class="menu-item" onclick="toggleSubMenu('incExpSubMenu', this)">আয়-ব্যয় ▾</button>
       <div class="menu-sub" id="incExpSubMenu" style="display:none;">
         <button class="menu-item sub" onclick="showSection('income')">আয় রশিদ</button>
@@ -2485,6 +2491,7 @@ async function submitRegister(){
       state.dealerName = selfData.dealerFields["নাম"] || state.dealerName;
       state.dealerMobile = selfData.dealerFields["মোবাইল"];
       state.dealerUnion = selfData.dealerFields["ইউনিয়ন/পৌরসভা"] || "";
+      if(selfData.dealerFields["এরিয়া"] !== undefined) state.dealerArea = selfData.dealerFields["এরিয়া"] || "";
       state.dealerFacebookLink = selfData.dealerFields["Facebook Link"];
       if(selfRes.dealerPhotoUrl) state.dealerPhotoUrl = selfRes.dealerPhotoUrl;
       if(selfData.adminName) state.name = selfData.adminName;
@@ -4464,190 +4471,209 @@ function printDealerReportTable(){
 }
 
 
-/* ================= এজেন্সি: গ্রাহক কার্ড ================= */
+/* ================= ডিলার: গ্রাহক কার্ড ================= */
 let ccCustomersCache = [];
 let ccCurrentCategory = "specific";
 let ccAgencyCache = null;
+let ccPicked = {};
+
+function ccGiven(c){ return String(c["কার্ড"] == null ? "" : c["কার্ড"]).trim() !== ""; }
+function ccDealerObj(){ return { "নাম": state.dealerName || "", "মোবাইল": state.dealerMobile || "", "এরিয়া": state.dealerArea || "" }; }
 
 async function loadCustomerCardsSetup(){
-  const res = await cachedApiCall("listDealers", {}, 60000);
-  const sel = document.getElementById("ccDealerSelect");
-  if(res.success){
-    dealerListCache = res.dealers; // শেয়ার্ড ক্যাশ, কমিশন ট্যাবেও ব্যবহৃত
-    sel.innerHTML = "<option value=''>-- সিলেক্ট করুন --</option>" +
-      res.dealers.map(d => `<option value="${d['DealerID']}">${d['নাম']}</option>`).join("");
-  }
   document.getElementById("ccCategorySelect").value = "specific";
+  document.getElementById("ccKindSelect").value = "all";
+  document.getElementById("ccKindField").style.display = "none";
   ccCurrentCategory = "specific";
-  ccCustomersCache = [];
-  document.getElementById("ccControls").innerHTML = "";
+  ccPicked = {};
   document.getElementById("ccMsg").textContent = "";
   document.getElementById("ccPreviewWrap").innerHTML = "";
-
-  const agencyRes = await cachedApiCall("getAgencyInfo", {}, 30000);
+  document.getElementById("ccControls").innerHTML = "<p style='color:var(--muted);font-size:0.85rem;'>লোড হচ্ছে...</p>";
+  const [agencyRes, custRes] = await Promise.all([
+    cachedApiCall("getAgencyInfo", {}, 30000),
+    cachedApiCall("listCustomers", {}, 60000)
+  ]);
   ccAgencyCache = agencyRes.success ? agencyRes.agency : { "নাম":"", "মোবাইল":"", "লোগো(URL)":"" };
-}
-
-async function onCcDealerChange(){
-  const dealerId = document.getElementById("ccDealerSelect").value;
-  document.getElementById("ccMsg").textContent = "";
-  if(!dealerId){
-    ccCustomersCache = [];
-    document.getElementById("ccControls").innerHTML = "";
-    document.getElementById("ccPreviewWrap").innerHTML = "";
-    return;
-  }
-
-  document.getElementById("ccControls").innerHTML = "লোড হচ্ছে...";
-  const res = await cachedApiCall("listCustomersForDealer", { dealerId }, 15000);
-  ccCustomersCache = res.success ? res.customers : [];
+  ccCustomersCache = custRes.success ? custRes.customers : [];
   renderCcControls();
   updateCcPreview();
 }
 
 function onCcCategoryChange(){
   ccCurrentCategory = document.getElementById("ccCategorySelect").value;
+  document.getElementById("ccKindField").style.display = (ccCurrentCategory === "specific") ? "none" : "";
+  ccPicked = {};
   renderCcControls();
   updateCcPreview();
 }
 
+function renderCcSpecificList(){
+  const box = document.getElementById("ccSpecificList");
+  if(!box) return;
+  const qEl = document.getElementById("ccSpecificSearch");
+  const q = qEl ? cusNorm(qEl.value) : "";
+  const list = q ? ccCustomersCache.filter(c => cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q)) : ccCustomersCache;
+  box.innerHTML = list.length ? list.map(c => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:0.9rem;">
+      <input type="checkbox" ${ccPicked[c["CustomerID"]] ? "checked" : ""} onchange="onCcPick('${c["CustomerID"]}', this.checked)">
+      ${escMsgHtml(c["নাম"] || "")} (${escMsgHtml(c["মোবাইল নং"] || "")})${ccGiven(c) ? ' <span style="color:var(--muted);font-size:0.78rem;">— কার্ড দেওয়া হয়েছে</span>' : ""}</label>`).join("")
+    : "<p style='color:var(--muted);font-size:0.85rem;margin:0;'>কোনো গ্রাহক পাওয়া যায়নি</p>";
+}
+function onCcPick(id, checked){
+  if(checked) ccPicked[id] = true; else delete ccPicked[id];
+  const n = Object.keys(ccPicked).length;
+  const info = document.getElementById("ccPickInfo"); if(info) info.textContent = n ? n + " জন নির্বাচিত" : "";
+  updateCcPreview();
+}
+function ccPickAllShown(on){
+  const q = cusNorm((document.getElementById("ccSpecificSearch") || {}).value || "");
+  ccCustomersCache.filter(c => !q || cusMatches(c["নাম"], c["মোবাইল নং"], c["NID/জন্মসনদ নং"], q)).forEach(c => {
+    if(on) ccPicked[c["CustomerID"]] = true; else delete ccPicked[c["CustomerID"]];
+  });
+  renderCcSpecificList(); onCcPick("", false);
+}
+
 function renderCcControls(){
   const box = document.getElementById("ccControls");
-  if(!document.getElementById("ccDealerSelect").value){
-    box.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">আগে একজন ডিলার সিলেক্ট করুন</p>`;
-    return;
-  }
-
+  const cs = ccCustomersCache;
   if(ccCurrentCategory === "specific"){
-    box.innerHTML = `<div class="field"><label>গ্রাহক সিলেক্ট করুন</label>
-      <select id="ccSpecificCustomerSelect" onchange="updateCcPreview()">
-      <option value="">-- সিলেক্ট করুন --</option>
-      ${ccCustomersCache.map(c => `<option value="${c['CustomerID']}">${c['নাম']} (${c['মোবাইল নং']||''})</option>`).join("")}
-      </select></div>`;
-  } else if(ccCurrentCategory === "location"){
-    const locations = [...new Set(ccCustomersCache.map(c => c["প্রাপ্তির স্থান"]).filter(Boolean))];
-    box.innerHTML = `<div class="field"><label>প্রাপ্তির স্থান সিলেক্ট করুন</label>
-      <select id="ccLocationSelect" onchange="updateCcPreview()"><option value="">-- সিলেক্ট করুন --</option>
-      ${locations.map(l => `<option value="${l}">${l}</option>`).join("")}</select></div>`;
+    box.innerHTML = `<div class="field" style="grid-column:1/-1;"><label>গ্রাহক সিলেক্ট করুন (এক বা একাধিক) <span id="ccPickInfo" style="color:var(--teal-dark);font-weight:600;"></span></label>
+      <input id="ccSpecificSearch" placeholder="নাম / মোবাইল দিয়ে খুঁজুন" oninput="renderCcSpecificList()" style="margin-bottom:6px;">
+      <div style="margin-bottom:6px;"><button class="btn secondary small" type="button" onclick="ccPickAllShown(true)">দেখানো সব বাছুন</button> <button class="btn secondary small" type="button" onclick="ccPickAllShown(false)">বাছাই মুছুন</button></div>
+      <div id="ccSpecificList" style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:#fff;"></div></div>`;
+    renderCcSpecificList();
+  } else if(ccCurrentCategory === "all"){
+    box.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;align-self:end;">মোট ${cs.length} জন গ্রাহক আছেন</p>`;
   } else {
-    box.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;align-self:end;">এই ডিলারের মোট ${ccCustomersCache.length} জন গ্রাহকের কার্ড দেখানো হবে</p>`;
+    let label, items;
+    if(ccCurrentCategory === "location"){
+      label = "প্রাপ্তির স্থান সিলেক্ট করুন";
+      items = [...new Set(cs.map(c => String(c["প্রাপ্তির স্থান"] || "").trim()).filter(Boolean))].map(v => ({ value:v, label:v }));
+    } else if(ccCurrentCategory === "ward"){
+      label = "ওয়ার্ড নং সিলেক্ট করুন";
+      items = uniqueWards(cs).map(w => ({ value:w, label:wardLabel(w) }));
+    } else {
+      label = "রেফারেন্স সিলেক্ট করুন";
+      items = [...new Set(cs.map(c => String(c["রেফারেন্স"] || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "bn")).map(v => ({ value:v, label:v }));
+    }
+    box.innerHTML = `<div class="field"><label>${label}</label>
+      <select id="ccGroupSelect" onchange="updateCcPreview()"><option value="">-- সিলেক্ট করুন --</option>
+      ${items.map(it => `<option value="${escMsgHtml(it.value)}">${escMsgHtml(it.label)}</option>`).join("")}</select></div>`;
   }
 }
 
-/*******************************************************
- * বর্তমান সিলেকশন অনুযায়ী কোন কোন গ্রাহকের কার্ড দেখানো/প্রিন্ট
- * হবে তা বের করা
- *******************************************************/
+/* বর্তমান নির্বাচন অনুযায়ী কোন কোন গ্রাহকের কার্ড দেখানো/প্রিন্ট হবে */
 function getCcSelectedCustomers(){
-  if(ccCurrentCategory === "specific"){
-    const sel = document.getElementById("ccSpecificCustomerSelect");
-    const id = sel ? sel.value : "";
-    if(!id) return [];
-    return ccCustomersCache.filter(c => c["CustomerID"] === id);
-  } else if(ccCurrentCategory === "location"){
-    const sel = document.getElementById("ccLocationSelect");
-    const loc = sel ? sel.value : "";
-    if(!loc) return [];
-    return ccCustomersCache.filter(c => c["প্রাপ্তির স্থান"] === loc);
+  const cs = ccCustomersCache;
+  if(ccCurrentCategory === "specific") return cs.filter(c => ccPicked[c["CustomerID"]]);
+  let list = cs;
+  if(ccCurrentCategory !== "all"){
+    const sel = document.getElementById("ccGroupSelect");
+    const v = sel ? sel.value : "";
+    if(!v) return [];
+    const key = ccCurrentCategory === "location" ? "প্রাপ্তির স্থান" : ccCurrentCategory === "ward" ? "ওয়ার্ড নং" : "রেফারেন্স";
+    list = cs.filter(c => String(c[key] == null ? "" : c[key]).trim() === v);
   }
-  return ccCustomersCache;
+  if(document.getElementById("ccKindSelect").value === "new") list = list.filter(c => !ccGiven(c));
+  return list;
 }
 
-/*******************************************************
- * ডিলার/ধরন/সাব-সিলেকশন বদলালেই সাথে সাথে কার্ডের প্রিভিউ দেখানো
- *******************************************************/
 function updateCcPreview(){
-  const dealerId = document.getElementById("ccDealerSelect").value;
   const previewWrap = document.getElementById("ccPreviewWrap");
-  const msgBox = document.getElementById("ccMsg");
-  msgBox.textContent = "";
-
-  if(!dealerId){ previewWrap.innerHTML = ""; return; }
+  document.getElementById("ccMsg").textContent = "";
   const customers = getCcSelectedCustomers();
   if(customers.length === 0){
-    previewWrap.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">প্রিভিউ দেখতে উপরে থেকে নির্বাচন করুন</p>`;
+    const needPick = ccCurrentCategory === "specific" || (ccCurrentCategory !== "all" && !(document.getElementById("ccGroupSelect") || {}).value);
+    previewWrap.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">${needPick ? "প্রিভিউ দেখতে উপরে থেকে নির্বাচন করুন" : "এই নির্বাচনে প্রিন্ট করার মতো কোনো গ্রাহক নেই"}</p>`;
     return;
   }
-
-  const dealer = (dealerListCache||[]).find(d => d["DealerID"] === dealerId) || { "নাম":"", "মোবাইল":"" };
-  const html = buildCardsDocument(ccAgencyCache, dealer, dealerId, customers, false);
-
-  previewWrap.innerHTML = `<div class="table-wrap" style="overflow-x:auto;"><iframe id="ccPreviewFrame" style="width:100%;min-height:260px;border:1px solid var(--line);border-radius:10px;background:#fff;"></iframe></div>`;
+  const html = buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, false);
+  previewWrap.innerHTML = `<p style="font-size:0.85rem;color:var(--muted);margin:0 0 6px;">${customers.length} জনের কার্ড</p><div class="table-wrap" style="overflow-x:auto;"><iframe id="ccPreviewFrame" style="width:100%;min-height:260px;border:1px solid var(--line);border-radius:10px;background:#fff;"></iframe></div>`;
   const frame = document.getElementById("ccPreviewFrame");
   frame.srcdoc = html;
-  frame.onload = () => {
-    try{
-      const doc = frame.contentDocument;
-      frame.style.height = (doc.body.scrollHeight + 20) + "px";
-    }catch(e){}
-  };
+  frame.onload = () => { try{ frame.style.height = (frame.contentDocument.body.scrollHeight + 20) + "px"; }catch(e){} };
 }
 
-function printCurrentCcPreview(){
-  const dealerId = document.getElementById("ccDealerSelect").value;
+async function printCurrentCcPreview(){
   const msgBox = document.getElementById("ccMsg");
-  if(!dealerId){ msgBox.textContent = "আগে ডিলার সিলেক্ট করুন"; msgBox.className = "msg err"; return; }
-
   const customers = getCcSelectedCustomers();
-  if(customers.length === 0){ msgBox.textContent = "প্রিন্ট করার জন্য অন্তত একটি নির্বাচন করুন"; msgBox.className = "msg err"; return; }
+  if(customers.length === 0){ msgBox.textContent = "প্রিন্ট করার জন্য অন্তত একজন গ্রাহক নির্বাচন করুন"; msgBox.className = "msg err"; return; }
   msgBox.textContent = "";
-
-  const dealer = (dealerListCache||[]).find(d => d["DealerID"] === dealerId) || { "নাম":"", "মোবাইল":"" };
   const win = window.open("", "_blank", "width=900,height=700");
-  const html = buildCardsDocument(ccAgencyCache, dealer, dealerId, customers, true);
-  win.document.write(html);
+  win.document.write(buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, true));
   win.document.close();
+
+  // প্রিন্টে পাঠানো গ্রাহকদের "কার্ড" ঘরে টিক পড়ে — পরে "নতুন গ্রাহক" ক্যাটাগরিতে এরা আর আসবে না
+  const todo = customers.filter(c => !ccGiven(c));
+  if(todo.length === 0) return;
+  const r = await apiCall("setCustomerCards", { customerIds: todo.map(c => c["CustomerID"]), given: true });
+  if(r.success){
+    todo.forEach(c => { c["কার্ড"] = "হ্যাঁ"; });
+    clearCache();
+    msgBox.className = "msg ok";
+    msgBox.textContent = todo.length + " জনের \"কার্ড\" ঘরে টিক দেওয়া হয়েছে (গ্রাহক তালিকায় দেখা যাবে)";
+    if(ccCurrentCategory === "specific") renderCcSpecificList();
+  } else {
+    msgBox.className = "msg err";
+    msgBox.textContent = "কার্ড প্রিন্ট হয়েছে, কিন্তু টিক দেওয়া যায়নি: " + (r.message || "");
+  }
+}
+
+/* গ্রাহক তালিকার "কার্ড" চেকবক্স */
+async function toggleCustomerCard(id, checked, el){
+  el.disabled = true;
+  const r = await apiCall("setCustomerCards", { customerIds: [id], given: checked });
+  el.disabled = false;
+  if(!r.success){ el.checked = !checked; alert(r.message || "আপডেট হয়নি"); return; }
+  [window.__customersCache, ccCustomersCache].forEach(arr => {
+    const c = (arr || []).find(x => x["CustomerID"] === id);
+    if(c) c["কার্ড"] = checked ? "হ্যাঁ" : "";
+  });
+  clearCache();
 }
 
 /*******************************************************
- * গ্রাহক আইডি কার্ড — ৩.২in x ২.২in, প্রফেশনাল ডিজাইন, QR সহ
- * (প্রিভিউ ও প্রিন্ট — দুই জায়গাতেই একই ফাংশন ব্যবহার হয়)
+ * গ্রাহক তথ্য কার্ড — ৩.২in x ২.২in, QR সহ
+ * হেডার: সংস্থার নাম + ডিলারের এরিয়া; ফুটার: ডিলারের নাম | মোবাইল নং
  *******************************************************/
 function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
   agency = agency || { "নাম":"", "মোবাইল":"", "লোগো(URL)":"" };
-  const logoImg = agency["লোগো(URL)"]
-    ? `<img src="${agency["লোগো(URL)"]}">`
-    : `<span>fenims</span>`;
+  const e = escMsgHtml;
+  const logoImg = agency["লোগো(URL)"] ? `<img src="${agency["লোগো(URL)"]}">` : `<span>fenims</span>`;
+  const footerText = [dealer["নাম"], dealer["মোবাইল"]].map(x => String(x || "").trim()).filter(Boolean).join(" | ");
 
   const cardsHtml = customers.map(c => {
     const qrData = encodeURIComponent(API_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
     const qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=" + qrData;
-    const thikana = [c["গ্রাম"]||"", c["ইউনিয়ন/পৌরসভা"]||""].filter(Boolean).join(", ");
-
+    const wd = String(c["ওয়ার্ড নং"] == null ? "" : c["ওয়ার্ড নং"]).trim();
+    const thikana = [String(c["বাড়ির নাম"]||"").trim(), wd ? wardLabel(wd) : ""].filter(Boolean).join(", ");
     const rows = [
-      ["Name", c["নাম"]||""],
-      ["Father's Name", c["পিতার নাম"]||""],
-      ["NID No", c["NID/জন্মসনদ নং"]||""],
-      ["Mobile No", c["মোবাইল নং"]||""],
-      ["Address", thikana],
-      ["Collection Point", c["প্রাপ্তির স্থান"]||""]
+      ["নাম", c["নাম"]||""],
+      ["পিতার নাম", c["পিতার নাম"]||""],
+      ["NID নং", c["NID/জন্মসনদ নং"]||""],
+      ["মোবাইল নং", c["মোবাইল নং"]||""],
+      ["ঠিকানা", thikana],
+      ["প্রাপ্তির স্থান", c["প্রাপ্তির স্থান"]||""]
     ];
-    const rowsHtml = rows.map(r => `
-      <tr><td class="cf-label">${r[0]}</td><td class="cf-colon">:</td><td class="cf-value">${r[1]}</td></tr>
-    `).join("");
-
+    const rowsHtml = rows.map(r => `<tr><td class="cf-label">${r[0]}</td><td class="cf-colon">:</td><td class="cf-value">${e(r[1])}</td></tr>`).join("");
     return `
       <div class="id-card">
         <div class="card-header">
           <div class="card-logo">${logoImg}</div>
           <div class="card-org">
-            <div class="org-name">${agency["নাম"]||""}</div>
-            <div class="org-tagline">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</div>
-            <div class="org-mobile">${agency["মোবাইল"]||""}</div>
+            <div class="org-name">${e(agency["নাম"]||"")}</div>
+            ${String(dealer["এরিয়া"]||"").trim() ? `<div class="org-area">${e(dealer["এরিয়া"])}</div>` : ""}
           </div>
           <div class="card-logo-spacer"></div>
         </div>
         <div class="card-title-row">
-          <div class="card-title">Customer information:</div>
+          <div class="card-title">গ্রাহক তথ্য</div>
           <div class="card-qr-badge"><img src="${qrImgUrl}"></div>
         </div>
         <div class="card-body">
           ${agency["লোগো(URL)"] ? `<img class="card-watermark" src="${agency["লোগো(URL)"]}">` : ''}
           <table class="card-fields"><tbody>${rowsHtml}</tbody></table>
         </div>
-        <div class="card-footer">
-          <span>${dealer["নাম"]||""}</span><span>${dealer["মোবাইল"]||""}</span>
-        </div>
+        <div class="card-footer">${e(footerText)}</div>
       </div>`;
   }).join("");
 
@@ -4667,7 +4693,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       }
       .card-header{
         background:linear-gradient(135deg,#1f5f52,#153f37);
-        color:#fff; padding:5px 8px;
+        color:#fff; padding:11px 8px 5px;
         display:flex; align-items:center; gap:6px;
       }
       .card-logo, .card-logo-spacer{
@@ -4678,32 +4704,31 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       .card-logo img{ width:100%; height:100%; object-fit:contain; border-radius:6px; background:#fff; }
       .card-org{ flex:1; text-align:center; }
       .org-name{ font-size:11px; font-weight:700; line-height:1.2; }
-      .org-tagline{ font-size:7.5px; opacity:0.95; margin-top:0.5px; }
-      .org-mobile{ font-size:8.5px; opacity:0.9; margin-top:1px; }
-      .card-title-row{ position:relative; padding:6px 10px 2px; flex-shrink:0; }
+      .org-area{ font-size:9px; opacity:0.95; margin-top:1px; }
+      .card-title-row{ position:relative; padding:5px 10px 1px; flex-shrink:0; }
       .card-title{
         text-align:center; font-size:9.5px; font-weight:700; color:#153f37;
         text-decoration:underline;
       }
       .card-qr-badge{
-        position:absolute; top:4px; right:8px;
+        position:absolute; top:3px; right:8px;
         width:40px; height:40px; background:#fff; border:1px solid #d8d2c2; border-radius:4px;
         padding:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15);
       }
       .card-qr-badge img{ width:100%; height:100%; object-fit:contain; }
-      .card-body{ display:flex; flex:1; padding:6px 12px 8px; align-items:center; position:relative; min-height:0; }
+      .card-body{ display:flex; flex:1; padding:2px 12px 2px; align-items:center; position:relative; min-height:0; }
       .card-watermark{
         position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
         width:65%; max-height:80%; object-fit:contain; opacity:0.09; pointer-events:none; z-index:0;
       }
-      table.card-fields{ width:100%; border-collapse:collapse; font-size:11px; color:#000; position:relative; z-index:1; }
-      table.card-fields td{ padding:2.6px 0; vertical-align:top; color:#000; font-weight:700; }
+      table.card-fields{ width:100%; border-collapse:collapse; font-size:10.5px; color:#000; position:relative; z-index:1; }
+      table.card-fields td{ padding:1.6px 0; vertical-align:top; color:#000; font-weight:700; line-height:1.35; }
       .cf-label{ white-space:nowrap; padding-right:2px; width:34%; }
       .cf-colon{ width:6px; }
       .cf-value{ }
       .card-footer{
         background:#eef0e9; color:#153f37; font-size:9px; font-weight:600;
-        padding:3px 10px; display:flex; justify-content:space-between;
+        padding:3px 10px 8px; text-align:center;
         border-top:1px solid #d8d2c2; flex-shrink:0;
       }
     </style></head><body>
@@ -5224,7 +5249,7 @@ function enqueueNewCustomer(data, msgBox){
 }
 
 function pendingCustomerRowsHtml(searchQ){
-  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -5602,10 +5627,11 @@ function renderCustomersTable(customers){
   const _info = document.getElementById("cusSearchInfo");
   if(_info) _info.textContent = (_q || (_fk && _fv)) ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
   const table = document.getElementById("customersTable");
-  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
+  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>কার্ড</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
   const pendHtml = pendingCustomerRowsHtml(_q);
-  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(17, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(18, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
   const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
+      <td class="no-print"><input type="checkbox" ${ccGiven(c) ? "checked" : ""} onchange="toggleCustomerCard('${c["CustomerID"]}', this.checked, this)" title="কার্ড দেওয়া হয়েছে"></td>
       <td class="no-print" style="white-space:nowrap;">${escMsgHtml(c["মেসেজ তারিখ"] || "—")}</td><td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
         <button class="btn icon small secondary" onclick="editCustomerRow('${c['CustomerID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>

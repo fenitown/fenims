@@ -1038,6 +1038,9 @@ function runAction(action, data) {
       case "sendCustomerMessage":
         result = sendCustomerMessage(data);
         break;
+      case "setCustomerCards":
+        result = setCustomerCards(data);
+        break;
       case "prepareCustomerMessage":
         result = prepareCustomerMessage(data);
         break;
