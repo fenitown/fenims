@@ -218,8 +218,11 @@ function updateAgencyInfo(data) {
   } else {
     sheet.getRange(2, 1, 1, headers.length).setValues([rowValues]);
   }
-  sheet.getRange(2, headers.indexOf("মোবাইল") + 1).setNumberFormat("@");
-  sheet.getRange(2, headers.indexOf("ব্যবস্থাপকের মোবাইল") + 1).setNumberFormat("@");
+  // যে কলাম শীটে নেই (indexOf = -1) তার ফরম্যাট সেট করতে গেলে "প্রথম কলামটি শিটের মধ্যে নেই" এরর হতো
+  ["মোবাইল", "ব্যবস্থাপকের মোবাইল"].forEach(function (h) {
+    const ci = headers.indexOf(h);
+    if (ci !== -1) sheet.getRange(2, ci + 1).setNumberFormat("@");
+  });
   invalidateAgencyCaches();
 
   return { success: true, message: "ডিপু তথ্য সংরক্ষিত হয়েছে" + photoWarning };
