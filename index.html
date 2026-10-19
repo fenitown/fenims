@@ -1033,6 +1033,10 @@ function fixApiJson(j){
 }
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxmseU_Vj8xwWzq9rxK6b8NN5ZPvb3GNlc-LNN-hgwa2kr3kS6lAe11ZWseK7qd9PuB-g/exec";
+/* গ্রাহক কার্ডের QR কোডের স্থায়ী ঠিকানা — এটি কখনো বদলাবেন না!
+   বদলালে আগে প্রিন্ট করা সব কার্ডের QR অকেজো হয়ে যাবে। API_URL বদলালেও এটি আলাদা থাকে।
+   এই ডিপ্লয়মেন্টটি Apps Script থেকে কখনো মুছবেন/আর্কাইভ করবেন না। */
+const CARD_QR_BASE_URL = "https://script.google.com/macros/s/AKfycbxmseU_Vj8xwWzq9rxK6b8NN5ZPvb3GNlc-LNN-hgwa2kr3kS6lAe11ZWseK7qd9PuB-g/exec";
 
 
 /* বাটনের আইকন (SVG) — তালিকার সব একশন বাটনে লেখার বদলে এগুলো বসে */
@@ -4648,7 +4652,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
   const footerText = [dealer["নাম"], dealer["মোবাইল"]].map(x => String(x || "").trim()).filter(Boolean).join(" | ");
 
   const cardsHtml = customers.map(c => {
-    const qrData = encodeURIComponent(API_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
+    const qrData = encodeURIComponent(CARD_QR_BASE_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
     const qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=" + qrData;
     const wd = String(c["ওয়ার্ড নং"] == null ? "" : c["ওয়ার্ড নং"]).trim();
     const thikana = [String(c["বাড়ির নাম"]||"").trim(), wd ? wardLabel(wd) : ""].filter(Boolean).join(", ");
@@ -4687,7 +4691,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     <style>
       @page{ margin:0.5in; }
       html, body{ margin:0; padding:0; }
-      *{ box-sizing:border-box; }
+      *{ box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
       body{ font-family:'Hind Siliguri',sans-serif; background:#fff; }
       .cards-wrap{ display:grid; grid-template-columns:repeat(auto-fill, 3.2in); gap:6mm; padding:4mm; page-break-after:avoid; }
       .id-card{
@@ -4698,7 +4702,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         page-break-inside:avoid;
       }
       .card-header{
-        background:linear-gradient(135deg,#1f5f52,#153f37);
+        background-color:#1a4f45; background-image:linear-gradient(135deg,#1f5f52,#153f37);
         color:#fff; padding:11px 8px 5px;
         display:flex; align-items:center; gap:6px;
       }
@@ -4733,8 +4737,8 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       .cf-colon{ width:6px; }
       .cf-value{ white-space:nowrap; overflow:hidden; padding-left:5px !important; }
       .card-footer{
-        background:linear-gradient(135deg,#1f5f52,#153f37); color:#fff; font-size:9px; font-weight:600;
-        padding:3px 10px 8px; text-align:center;
+        background-color:#1a4f45; background-image:linear-gradient(135deg,#1f5f52,#153f37); color:#fff; font-size:9px; font-weight:600;
+        padding:7px 10px 7px; text-align:center;
         flex-shrink:0;
       }
     </style></head><body>
