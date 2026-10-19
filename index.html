@@ -4688,11 +4688,13 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
   }).join("");
 
   return `<html><head><meta charset="utf-8"><title>গ্রাহক কার্ড</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@600;700&display=swap" rel="stylesheet">
     <style>
       @page{ margin:0.5in; }
       html, body{ margin:0; padding:0; }
       *{ box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
-      body{ font-family:'Hind Siliguri',sans-serif; background:#fff; }
+      body{ font-family:'Noto Sans Bengali','SolaimanLipi','Nikosh','Hind Siliguri',sans-serif; background:#fff; }
       .cards-wrap{ display:grid; grid-template-columns:repeat(auto-fill, 3.3in); gap:6mm; padding:4mm; page-break-after:avoid; }
       .id-card{
         width:3.3in; height:2.2in;
@@ -4755,7 +4757,9 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     window.onload = function(){
       fitCardValues();
       var go = function(){ fitCardValues(); ${autoprint ? 'window.print();' : ''} };
-      if(document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+      if(document.fonts && document.fonts.load){
+        Promise.all([document.fonts.load('600 12px "Noto Sans Bengali"', 'গ্রাহক'), document.fonts.load('700 12px "Noto Sans Bengali"', 'গ্রাহক')]).then(go, go);
+      } else go();
     };
     <\/script>
     </body></html>`;
