@@ -269,6 +269,9 @@
   }
   .photo-upload-box:hover{ background:var(--teal-soft); border-color:var(--teal-dark); }
   .photo-upload-box img{ width:100%; height:100%; object-fit:cover; }
+  /* স্বাক্ষরের বক্স চওড়া, ছবি কাটা পড়ে না (contain) */
+  .photo-upload-box:has(#rDealerSignPreview){ width:220px; }
+  #rDealerSignPreview{ object-fit:contain; background:#fff; }
   .photo-upload-placeholder{ font-size:0.72rem; color:var(--muted); text-align:center; line-height:1.4; padding:4px; }
 
   .pkg-click-row{ cursor:pointer; }
@@ -642,6 +645,7 @@
         <div class="field">
           <label>ধরন</label>
           <select id="ccCategorySelect" onchange="onCcCategoryChange()">
+            <option value="">-- সিলেক্ট করুন --</option>
             <option value="specific">নির্দিষ্ট গ্রাহক</option>
             <option value="location">প্রাপ্তির স্থান ভিত্তিক</option>
             <option value="ward">ওয়ার্ড ভিত্তিক</option>
@@ -4496,7 +4500,7 @@ function printDealerReportTable(){
 
 /* ================= ডিলার: গ্রাহক কার্ড ================= */
 let ccCustomersCache = [];
-let ccCurrentCategory = "specific";
+let ccCurrentCategory = "";
 let ccAgencyCache = null;
 let ccPicked = {};
 
@@ -4504,10 +4508,10 @@ function ccGiven(c){ return String(c["কার্ড"] == null ? "" : c["কা
 function ccDealerObj(){ return { "নাম": state.dealerName || "", "মোবাইল": state.dealerMobile || "", "এরিয়া": state.dealerArea || "", "স্বাক্ষর": state.dealerSignatureUrl || "" }; }
 
 async function loadCustomerCardsSetup(){
-  document.getElementById("ccCategorySelect").value = "specific";
+  document.getElementById("ccCategorySelect").value = "";
   document.getElementById("ccKindSelect").value = "all";
   document.getElementById("ccKindField").style.display = "none";
-  ccCurrentCategory = "specific";
+  ccCurrentCategory = "";
   ccPicked = {};
   document.getElementById("ccMsg").textContent = "";
   document.getElementById("ccPreviewWrap").innerHTML = "";
@@ -4524,7 +4528,7 @@ async function loadCustomerCardsSetup(){
 
 function onCcCategoryChange(){
   ccCurrentCategory = document.getElementById("ccCategorySelect").value;
-  document.getElementById("ccKindField").style.display = (ccCurrentCategory === "specific") ? "none" : "";
+  document.getElementById("ccKindField").style.display = (ccCurrentCategory === "specific" || !ccCurrentCategory) ? "none" : "";
   ccPicked = {};
   renderCcControls();
   updateCcPreview();
@@ -4564,7 +4568,9 @@ function ccPickAllShown(on){
 function renderCcControls(){
   const box = document.getElementById("ccControls");
   const cs = ccCustomersCache;
-  if(ccCurrentCategory === "specific"){
+  if(!ccCurrentCategory){
+    box.innerHTML = "";
+  } else if(ccCurrentCategory === "specific"){
     box.innerHTML = `<div class="field" style="grid-column:1/-1;"><label>গ্রাহক সিলেক্ট করুন (এক বা একাধিক) <span id="ccPickInfo" style="color:var(--teal-dark);font-weight:600;"></span></label>
       <input id="ccSpecificSearch" placeholder="নাম / মোবাইল দিয়ে খুঁজুন" oninput="renderCcSpecificList()" style="margin-bottom:6px;">
       <div style="margin-bottom:6px;"><button class="btn secondary small" type="button" onclick="ccPickAllShown(true)">দেখানো সব বাছুন</button> <button class="btn secondary small" type="button" onclick="ccPickAllShown(false)">বাছাই মুছুন</button></div>
@@ -4593,6 +4599,7 @@ function renderCcControls(){
 /* বর্তমান নির্বাচন অনুযায়ী কোন কোন গ্রাহকের কার্ড দেখানো/প্রিন্ট হবে */
 function getCcSelectedCustomers(){
   const cs = ccCustomersCache;
+  if(!ccCurrentCategory) return [];
   if(ccCurrentCategory === "specific") return cs.filter(c => ccPicked[c["CustomerID"]]).sort((a, b) => ccIdNum(a) - ccIdNum(b));
   let list = cs;
   if(ccCurrentCategory !== "all"){
@@ -4611,7 +4618,7 @@ function updateCcPreview(){
   document.getElementById("ccMsg").textContent = "";
   const customers = getCcSelectedCustomers();
   if(customers.length === 0){
-    const needPick = ccCurrentCategory === "specific" || (ccCurrentCategory !== "all" && !(document.getElementById("ccGroupSelect") || {}).value);
+    const needPick = !ccCurrentCategory || ccCurrentCategory === "specific" || (ccCurrentCategory !== "all" && !(document.getElementById("ccGroupSelect") || {}).value);
     previewWrap.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">${needPick ? "প্রিভিউ দেখতে উপরে থেকে নির্বাচন করুন" : "এই নির্বাচনে প্রিন্ট করার মতো কোনো গ্রাহক নেই"}</p>`;
     return;
   }
@@ -4686,7 +4693,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     const rowsHtml = rows.map((r, i) => {
       const head = `<td class="cf-label">${r[0]}</td><td class="cf-colon">:</td>`;
       // NID ও মোবাইল সারির ডান পাশে (দুই সারি জুড়ে) স্বাক্ষরের ছবি, তার নিচে রেখা ও লেখা — ঠিকানার সারি পুরো চওড়া
-      if(i === 3) return `<tr>${head}<td class="cf-value">${e(r[1])}</td><td class="cf-sign" rowspan="2"><div class="sign-img">${signImg}</div><div class="sign-line">ডিলারের স্বাক্ষর</div></td></tr>`;
+      if(i === 3) return `<tr>${head}<td class="cf-value">${e(r[1])}</td><td class="cf-sign" rowspan="2"><div class="sign-img">${signImg}</div><div class="sign-line">ডিস্ট্রিভিউটর</div></td></tr>`;
       if(i === 4) return `<tr>${head}<td class="cf-value">${e(r[1])}</td></tr>`;
       return `<tr>${head}<td class="cf-value" colspan="2">${e(r[1])}</td></tr>`;
     }).join("");
@@ -4706,7 +4713,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         </div>
         <div class="card-body">
           ${agency["লোগো(URL)"] ? `<img class="card-watermark" src="${agency["লোগো(URL)"]}">` : ''}
-          <table class="card-fields"><colgroup><col style="width:27%"><col style="width:6px"><col><col style="width:30%"></colgroup><tbody>${rowsHtml}</tbody></table>
+          <table class="card-fields"><colgroup><col style="width:23%"><col style="width:5px"><col><col style="width:30%"></colgroup><tbody>${rowsHtml}</tbody></table>
         </div>
         <div class="card-footer">${e(footerText)}</div>
       </div>`;
@@ -4730,15 +4737,15 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       }
       .card-header{
         background-color:#1a4f45; background-image:linear-gradient(135deg,#1f5f52,#153f37);
-        color:#fff; padding:11px 8px 5px;
+        color:#fff; padding:9px 8px 4px;
         display:flex; align-items:center; gap:6px;
       }
       .card-logo, .card-logo-spacer{
-        width:26px; height:26px; flex-shrink:0;
+        width:33px; height:33px; flex-shrink:0;
         display:flex; align-items:center; justify-content:center;
         font-size:7px; font-weight:800;
       }
-      .card-logo img{ width:100%; height:100%; object-fit:contain; border-radius:6px; background:#fff; }
+      .card-logo img{ width:100%; height:100%; object-fit:contain; border-radius:5px; background:#fff; padding:1px; box-sizing:border-box; image-rendering:auto; }
       .card-org{ flex:1; text-align:center; }
       .org-name{ font-size:11px; font-weight:700; line-height:1.2; }
       .org-area{ font-size:9px; opacity:0.95; margin-top:1px; }
@@ -4760,8 +4767,8 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       }
       table.card-fields{ width:100%; table-layout:fixed; border-collapse:collapse; font-size:10.5px; color:#000; position:relative; z-index:1; }
       table.card-fields td{ padding:1.6px 0; vertical-align:top; color:#000; font-weight:700; line-height:1.35; }
-      .cf-label{ white-space:nowrap; padding-right:2px; width:27%; }
-      .cf-colon{ width:6px; }
+      .cf-label{ white-space:nowrap; padding-left:5px !important; padding-right:0 !important; }
+      .cf-colon{ width:5px; padding-left:0 !important; padding-right:0 !important; }
       .cf-value{ white-space:nowrap; overflow:hidden; padding-left:5px !important; }
       .cf-sign{ vertical-align:bottom !important; padding:0 0 1px !important; }
       .cf-sign .sign-img{ height:19px; display:flex; align-items:flex-end; justify-content:center; }
