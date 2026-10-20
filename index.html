@@ -4677,7 +4677,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
   const logoImg = agency["লোগো(URL)"] ? `<img src="${agency["লোগো(URL)"]}">` : `<span>fenims</span>`;
   const footerText = [dealer["নাম"], dealer["মোবাইল"]].map(x => String(x || "").trim()).filter(Boolean).join(" | ");
 
-  const cardsHtml = customers.map(c => {
+  const cardList = customers.map(c => {
     const qrData = encodeURIComponent(CARD_QR_BASE_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
     const qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=" + qrData;
     const thikana = [String(c["বাড়ির নাম"]||"").trim(), String(c["গ্রাম"]||"").trim()].filter(Boolean).join(", ");
@@ -4717,7 +4717,13 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         </div>
         <div class="card-footer">${e(footerText)}</div>
       </div>`;
-  }).join("");
+  });
+  // প্রতি পেজে ৮টি (২ কলাম × ৪ সারি) — আলাদা পেজ বানানো, যাতে প্রিন্টে কার্ড পেজের ভাঁজে কেটে/হারিয়ে না যায়
+  const PER_PAGE = 8;
+  let cardsHtml = "";
+  for(let i = 0; i < cardList.length; i += PER_PAGE){
+    cardsHtml += `<div class="cards-page">${cardList.slice(i, i + PER_PAGE).join("")}</div>`;
+  }
 
   return `<html><head><meta charset="utf-8"><title>গ্রাহক কার্ড</title>
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -4727,7 +4733,10 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       html, body{ margin:0; padding:0; }
       *{ box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
       body{ font-family:'Noto Sans Bengali','SolaimanLipi','Nikosh','Hind Siliguri',sans-serif; background:#fff; }
-      .cards-wrap{ display:grid; grid-template-columns:repeat(auto-fill, 3.3in); gap:6mm; padding:4mm; page-break-after:avoid; }
+      .cards-wrap{ padding:0; }
+      .cards-page{ display:flex; flex-wrap:wrap; align-content:flex-start; gap:6mm; padding:3mm; width:7.1in; max-width:100%; margin:0 auto; break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always; }
+      .cards-page:last-child{ break-after:auto; page-break-after:auto; }
+      .id-card{ flex:0 0 auto; }
       .id-card{
         width:3.3in; height:2.2in;
         border:1px solid #b7c9c2; border-radius:10px; overflow:hidden;
@@ -4792,7 +4801,14 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     }
     window.onload = function(){
       fitCardValues();
-      var go = function(){ fitCardValues(); ${autoprint ? 'window.print();' : ''} };
+      var waitImages = function(){
+        var imgs = Array.prototype.slice.call(document.images);
+        return Promise.race([
+          Promise.all(imgs.map(function(im){ return im.complete ? 0 : new Promise(function(r){ im.onload = im.onerror = r; }); })),
+          new Promise(function(r){ setTimeout(r, 6000); })
+        ]);
+      };
+      var go = function(){ fitCardValues(); waitImages().then(function(){ fitCardValues(); ${autoprint ? 'window.print();' : ''} }); };
       if(document.fonts && document.fonts.load){
         Promise.all([document.fonts.load('600 12px "Noto Sans Bengali"', 'গ্রাহক'), document.fonts.load('700 12px "Noto Sans Bengali"', 'গ্রাহক')]).then(go, go);
       } else go();
