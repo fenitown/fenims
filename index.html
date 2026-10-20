@@ -653,6 +653,13 @@
             <option value="all">সকল গ্রাহক</option>
           </select>
         </div>
+        <div class="field">
+          <label>প্রিন্টের অবস্থান</label>
+          <select id="ccOrientSelect" onchange="updateCcPreview()">
+            <option value="portrait">Portrait (প্রতি পৃষ্ঠায় ৮টি)</option>
+            <option value="landscape">Landscape (প্রতি পৃষ্ঠায় ৯টি)</option>
+          </select>
+        </div>
         <div class="field" id="ccKindField" style="display:none;">
           <label>ক্যাটাগরি</label>
           <select id="ccKindSelect" onchange="updateCcPreview()">
@@ -4596,6 +4603,12 @@ function renderCcControls(){
   }
 }
 
+/* প্রিন্টের অবস্থান: "portrait" বা "landscape" */
+function ccOrient(){
+  const el = document.getElementById("ccOrientSelect");
+  return el && el.value === "landscape" ? "landscape" : "portrait";
+}
+
 /* বর্তমান নির্বাচন অনুযায়ী কোন কোন গ্রাহকের কার্ড দেখানো/প্রিন্ট হবে */
 function getCcSelectedCustomers(){
   const cs = ccCustomersCache;
@@ -4622,7 +4635,7 @@ function updateCcPreview(){
     previewWrap.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">${needPick ? "প্রিভিউ দেখতে উপরে থেকে নির্বাচন করুন" : "এই নির্বাচনে প্রিন্ট করার মতো কোনো গ্রাহক নেই"}</p>`;
     return;
   }
-  const html = buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, false);
+  const html = buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, false, ccOrient());
   previewWrap.innerHTML = `<p style="font-size:0.85rem;color:var(--muted);margin:0 0 6px;">${customers.length} জনের কার্ড</p><div class="table-wrap" style="overflow-x:auto;"><iframe id="ccPreviewFrame" style="width:100%;min-height:260px;border:1px solid var(--line);border-radius:10px;background:#fff;"></iframe></div>`;
   const frame = document.getElementById("ccPreviewFrame");
   frame.srcdoc = html;
@@ -4635,7 +4648,7 @@ async function printCurrentCcPreview(){
   if(customers.length === 0){ msgBox.textContent = "প্রিন্ট করার জন্য অন্তত একজন গ্রাহক নির্বাচন করুন"; msgBox.className = "msg err"; return; }
   msgBox.textContent = "";
   const win = window.open("", "_blank", "width=900,height=700");
-  win.document.write(buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, true));
+  win.document.write(buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, true, ccOrient()));
   win.document.close();
 
   // প্রিন্টে পাঠানো গ্রাহকদের "কার্ড" ঘরে টিক পড়ে — পরে "নতুন গ্রাহক" ক্যাটাগরিতে এরা আর আসবে না
@@ -4671,7 +4684,12 @@ async function toggleCustomerCard(id, checked, el){
  * গ্রাহক তথ্য কার্ড — ৩.২in x ২.২in, QR সহ
  * হেডার: সংস্থার নাম + ডিলারের এরিয়া; ফুটার: ডিলারের নাম | মোবাইল নং
  *******************************************************/
-function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
+function buildCardsDocument(agency, dealer, dealerId, customers, autoprint, orient){
+  orient = orient === "landscape" ? "landscape" : "portrait";
+  /* কার্ড ৩.৩in × ২.২in (সাইজ অপরিবর্তিত), মার্জিন ০.২in।
+     Portrait: ২ কলাম × ৪ সারি = ৮টি; Landscape: ৩ কলাম × ৩ সারি = ৯টি */
+  const COLS = orient === "landscape" ? 3 : 2;
+  const PER_PAGE = orient === "landscape" ? 9 : 8;
   agency = agency || { "নাম":"", "মোবাইল":"", "লোগো(URL)":"" };
   const e = escMsgHtml;
   const logoImg = agency["লোগো(URL)"] ? `<img src="${agency["লোগো(URL)"]}">` : `<span>fenims</span>`;
@@ -4679,7 +4697,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
 
   const cardList = customers.map(c => {
     const qrData = encodeURIComponent(CARD_QR_BASE_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
-    const qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=" + qrData;
+    const qrImgUrl = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + qrData;
     const thikana = [String(c["বাড়ির নাম"]||"").trim(), String(c["গ্রাম"]||"").trim()].filter(Boolean).join(", ");
     const rows = [
       ["গ্রাহক আইডি", c["CustomerID"]||""],
@@ -4693,6 +4711,8 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     const rowsHtml = rows.map((r, i) => {
       const head = `<td class="cf-label">${r[0]}</td><td class="cf-colon">:</td>`;
       // NID ও মোবাইল সারির ডান পাশে (দুই সারি জুড়ে) স্বাক্ষরের ছবি, তার নিচে রেখা ও লেখা — ঠিকানার সারি পুরো চওড়া
+      // প্রথম দুই সারির ডানে QR থাকে, তাই লেখা QR-এর নিচে ঢুকবে না
+      if(i === 0 || i === 1) return `<tr>${head}<td class="cf-value" colspan="2"><span class="qr-clear">${e(r[1])}</span></td></tr>`;
       if(i === 3) return `<tr>${head}<td class="cf-value">${e(r[1])}</td><td class="cf-sign" rowspan="2"><div class="sign-img">${signImg}</div><div class="sign-line">ডিস্ট্রিভিউটর</div></td></tr>`;
       if(i === 4) return `<tr>${head}<td class="cf-value">${e(r[1])}</td></tr>`;
       return `<tr>${head}<td class="cf-value" colspan="2">${e(r[1])}</td></tr>`;
@@ -4709,7 +4729,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         </div>
         <div class="card-title-row">
           <div class="card-title">গ্রাহক তথ্য</div>
-          <div class="card-qr-badge"><img src="${qrImgUrl}"></div>
+          <div class="card-qr-badge"><img src="${qrImgUrl}" width="50" height="50"></div>
         </div>
         <div class="card-body">
           ${agency["লোগো(URL)"] ? `<img class="card-watermark" src="${agency["লোগো(URL)"]}">` : ''}
@@ -4718,31 +4738,34 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         <div class="card-footer">${e(footerText)}</div>
       </div>`;
   });
-  // প্রতি পেজে ৮টি (২ কলাম × ৪ সারি) — আলাদা পেজ বানানো, যাতে প্রিন্টে কার্ড পেজের ভাঁজে কেটে/হারিয়ে না যায়
-  const PER_PAGE = 8;
   let cardsHtml = "";
   for(let i = 0; i < cardList.length; i += PER_PAGE){
-    cardsHtml += `<div class="cards-page">${cardList.slice(i, i + PER_PAGE).join("")}</div>`;
+    cardsHtml += `<div class="page">${cardList.slice(i, i + PER_PAGE).join("")}</div>`;
   }
 
   return `<html><head><meta charset="utf-8"><title>গ্রাহক কার্ড</title>
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@600;700&display=swap" rel="stylesheet">
     <style>
-      @page{ margin:0.5in; }
+      @page{ size:A4 ${orient}; margin:0.2in; }
       html, body{ margin:0; padding:0; }
       *{ box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
       body{ font-family:'Noto Sans Bengali','SolaimanLipi','Nikosh','Hind Siliguri',sans-serif; background:#fff; }
-      .cards-wrap{ padding:0; }
-      .cards-page{ display:flex; flex-wrap:wrap; align-content:flex-start; gap:6mm; padding:3mm; width:7.1in; max-width:100%; margin:0 auto; break-inside:avoid; page-break-inside:avoid; break-after:page; page-break-after:always; }
-      .cards-page:last-child{ break-after:auto; page-break-after:auto; }
-      .id-card{ flex:0 0 auto; }
+      /* কার্ডগুলো ইনলাইন-ব্লক হিসেবে পরপর বসে; A4 পেজে যতগুলো ধরে ততগুলো বসে, বাকিগুলো পরের পেজে যায় */
+      /* প্রতিটি পৃষ্ঠা = গ্রিড; কার্ডের মাঝে ফাঁক 8mm */
+      .page{ display:grid; grid-template-columns:repeat(${COLS}, 3.3in); gap:8mm; justify-content:center; align-content:start; page-break-after:always; break-after:page; }
+      .page:last-child{ page-break-after:auto; break-after:auto; }
+      @media screen{
+        body{ background:#e9eeec; padding:8px; }
+        .page{ background:#fff; width:max-content; margin:0 auto 12px; padding:0.2in; box-shadow:0 1px 4px rgba(0,0,0,0.2); }
+      }
       .id-card{
+        display:flex; margin:0; font-size:12px; line-height:normal;
         width:3.3in; height:2.2in;
         border:1px solid #b7c9c2; border-radius:10px; overflow:hidden;
-        display:flex; flex-direction:column;
+        flex-direction:column;
         box-shadow:0 1px 3px rgba(0,0,0,0.15);
-        page-break-inside:avoid;
+        break-inside:avoid; page-break-inside:avoid;
       }
       .card-header{
         background-color:#1a4f45; background-image:linear-gradient(135deg,#1f5f52,#153f37);
@@ -4763,12 +4786,9 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         text-align:center; font-size:13px; font-weight:700; color:#153f37;
         text-decoration:underline;
       }
-      .card-qr-badge{
-        position:absolute; top:3px; right:8px;
-        width:50px; height:50px; background:#fff; border:1px solid #d8d2c2; border-radius:4px;
-        padding:2px; box-shadow:0 1px 2px rgba(0,0,0,0.15);
-      }
-      .card-qr-badge img{ width:100%; height:100%; object-fit:contain; }
+      .card-qr-badge{ position:absolute; top:6px; right:8px; box-sizing:content-box; width:50px; height:50px; background:#fff; border:1px solid #555; border-radius:5px; overflow:hidden; z-index:2; }
+      .card-qr-badge img{ display:block; width:50px; height:50px; }
+      .qr-clear{ display:inline-block; white-space:nowrap; }
       .card-body{ display:flex; flex:1; padding:2px 12px 2px; align-items:center; position:relative; min-height:0; }
       .card-watermark{
         position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
@@ -4789,14 +4809,20 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
         flex-shrink:0;
       }
     </style></head><body>
-    <div class="cards-wrap">${cardsHtml}</div>
+    ${cardsHtml}
     <script>
     function fitCardValues(){
       var els = document.querySelectorAll('.cf-value');
       for(var i = 0; i < els.length; i++){
         var el = els[i], fs = 10.5;
         el.style.fontSize = fs + 'px';
-        while(el.scrollWidth > el.clientWidth && fs > 5){ fs -= 0.25; el.style.fontSize = fs + 'px'; }
+        var inner = el.querySelector('.qr-clear');
+        if(inner){
+          var limit = el.clientWidth - 5 - 54; /* QR (50px) + ডানের ফাঁক বাদে */
+          while(inner.offsetWidth > limit && fs > 5){ fs -= 0.25; el.style.fontSize = fs + 'px'; }
+        } else {
+          while(el.scrollWidth > el.clientWidth && fs > 5){ fs -= 0.25; el.style.fontSize = fs + 'px'; }
+        }
       }
     }
     window.onload = function(){
