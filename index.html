@@ -64,7 +64,6 @@
     color:#fff; display:flex; align-items:center; justify-content:center;
     font-weight:800; font-size:0.66rem; margin:0 auto 8px;
     letter-spacing:0; overflow:hidden;
-    box-shadow:0 6px 16px rgba(21,63,55,0.28);
   }
   .login-avatar img{ width:100%; height:100%; object-fit:contain; background:#fff; }
   .login-box h1{ font-size:1.15rem; margin:0 0 1px; color:var(--teal-dark); }
@@ -4686,8 +4685,9 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
     const signImg = dealer["স্বাক্ষর"] ? `<img src="${dealer["স্বাক্ষর"]}">` : "";
     const rowsHtml = rows.map((r, i) => {
       const head = `<td class="cf-label">${r[0]}</td><td class="cf-colon">:</td>`;
-      if(i === 4) return `<tr>${head}<td class="cf-value">${e(r[1])}</td><td class="cf-sign-img">${signImg}</td></tr>`;   // মোবাইল বরাবর স্বাক্ষর
-      if(i === 5) return `<tr>${head}<td class="cf-value">${e(r[1])}</td><td class="cf-sign-line">ডিলারের স্বাক্ষর</td></tr>`; // ঠিকানার উপরের রেখা
+      // NID ও মোবাইল সারির ডান পাশে (দুই সারি জুড়ে) স্বাক্ষরের ছবি, তার নিচে রেখা ও লেখা — ঠিকানার সারি পুরো চওড়া
+      if(i === 3) return `<tr>${head}<td class="cf-value">${e(r[1])}</td><td class="cf-sign" rowspan="2"><div class="sign-img">${signImg}</div><div class="sign-line">ডিলারের স্বাক্ষর</div></td></tr>`;
+      if(i === 4) return `<tr>${head}<td class="cf-value">${e(r[1])}</td></tr>`;
       return `<tr>${head}<td class="cf-value" colspan="2">${e(r[1])}</td></tr>`;
     }).join("");
     return `
@@ -4763,9 +4763,10 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       .cf-label{ white-space:nowrap; padding-right:2px; width:27%; }
       .cf-colon{ width:6px; }
       .cf-value{ white-space:nowrap; overflow:hidden; padding-left:5px !important; }
-      .cf-sign-img{ vertical-align:bottom !important; text-align:center; padding:0 !important; }
-      .cf-sign-img img{ display:block; max-height:22px; max-width:100%; margin:0 auto 1px; object-fit:contain; }
-      .cf-sign-line{ border-top:1px solid #000; text-align:center; font-size:8.5px !important; white-space:nowrap; padding:1px 0 0 !important; }
+      .cf-sign{ vertical-align:bottom !important; padding:0 0 1px !important; }
+      .cf-sign .sign-img{ height:19px; display:flex; align-items:flex-end; justify-content:center; }
+      .cf-sign .sign-img img{ max-height:19px; max-width:100%; object-fit:contain; }
+      .cf-sign .sign-line{ border-top:1px solid #000; text-align:center; font-size:8.5px; line-height:1.3; white-space:nowrap; padding-top:1px; }
       .card-footer{
         background-color:#1a4f45; background-image:linear-gradient(135deg,#1f5f52,#153f37); color:#fff; font-size:9px; font-weight:600;
         padding:7px 10px 7px; text-align:center;
@@ -4800,7 +4801,7 @@ async function loadDashboard(){
     profileBox.style.display = "flex";
     profileBox.style.cssText = "display:flex;align-items:center;gap:12px;margin-bottom:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;";
     profileBox.innerHTML = `
-      <img src="${state.dealerPhotoUrl}" style="width:64px;height:64px;border-radius:0;object-fit:cover;border:2px solid var(--teal);">
+      <img src="${state.dealerPhotoUrl}" style="width:64px;height:64px;border-radius:0;object-fit:cover;border:1px solid var(--teal);">
       <div><div style="font-weight:700;color:var(--teal-dark);">${state.dealerName||""}</div>
       <div style="font-size:0.85rem;color:var(--muted);">${state.name} (${state.role})</div></div>`;
   } else {
