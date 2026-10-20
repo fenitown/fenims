@@ -61,6 +61,7 @@ function loginUser(data) {
   let dealerFacebookLink = "";
   let dealerUnion = "";
   let dealerArea = "";
+  let dealerSignatureUrl = "";
   if (dealerId !== AGENCY_ID) {
     const dealerInfo = getDealerRow(dealersSheet, dealerId);
     if (!dealerInfo) {
@@ -75,6 +76,7 @@ function loginUser(data) {
     dealerFacebookLink = dealerInfo.facebookLink || "";
     dealerUnion = dealerInfo.union || "";
     dealerArea = dealerInfo.area || "";
+    dealerSignatureUrl = dealerInfo.signatureUrl || "";
   }
 
   const token = createToken({
@@ -95,7 +97,8 @@ function loginUser(data) {
     dealerMobile: dealerMobile,
     dealerFacebookLink: dealerFacebookLink,
     dealerUnion: dealerUnion,
-    dealerArea: dealerArea
+    dealerArea: dealerArea,
+    dealerSignatureUrl: dealerSignatureUrl
   };
 }
 
@@ -129,6 +132,7 @@ function getDealerRow(dealersSheet, dealerId) {
   const idxFacebook = headers.indexOf("Facebook Link");
   const idxUnion = headers.indexOf("ইউনিয়ন/পৌরসভা");
   const idxArea = headers.indexOf("এরিয়া");
+  const idxSign = headers.indexOf("ডিলারের স্বাক্ষর(URL)");
 
   return {
     name: row[idxName],
@@ -138,7 +142,8 @@ function getDealerRow(dealersSheet, dealerId) {
     mobile: idxMobile !== -1 ? row[idxMobile] : "",
     facebookLink: idxFacebook !== -1 ? row[idxFacebook] : "",
     union: idxUnion !== -1 ? row[idxUnion] : "",
-    area: idxArea !== -1 ? row[idxArea] : ""
+    area: idxArea !== -1 ? row[idxArea] : "",
+    signatureUrl: idxSign !== -1 ? row[idxSign] : ""
   };
 }
 

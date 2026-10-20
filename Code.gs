@@ -387,7 +387,13 @@ function registerDealer(data) {
   // ঠিকানার ৩ ঘর (ইউনিয়ন/পৌরসভা, উপজেলা, জেলা) — কলাম না থাকলে যোগ হয়, তারপর হেডার-নাম ধরে বসানো
   ensureDealerAddrCols(dealersSheet);
   const dHeaders = dealersSheet.getRange(1, 1, 1, dealersSheet.getLastColumn()).getValues()[0];
-  const addrVals = { "ইউনিয়ন/পৌরসভা": data.union || "", "উপজেলা": data.upozila || "", "জেলা": data.jela || "" };
+  let signProcessed = "";
+  if (data.dealerSignatureBase64) {
+    const ps = processImageForStorage(data.dealerSignatureBase64);
+    if (ps === null) { photoWarning += " (⚠️ ডিলারের স্বাক্ষরের ছবি খুব বড়, সেভ হয়নি)"; }
+    else { signProcessed = ps; }
+  }
+  const addrVals = { "ইউনিয়ন/পৌরসভা": data.union || "", "উপজেলা": data.upozila || "", "জেলা": data.jela || "", "ডিলারের স্বাক্ষর(URL)": signProcessed };
   Object.keys(addrVals).forEach(function (h) {
     const ci = dHeaders.indexOf(h);
     if (ci !== -1) dealersSheet.getRange(dealersSheet.getLastRow(), ci + 1).setValue(addrVals[h]);

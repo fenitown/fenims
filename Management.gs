@@ -109,17 +109,17 @@ function resetAgencyAdminLogin() {
  * ডিলারের ঠিকানা ৩ ঘরে (ইউনিয়ন/পৌরসভা, উপজেলা, জেলা) — Dealers ট্যাবে কলাম না থাকলে
  * নিজে থেকে যোগ হয় (আলাদা সেটআপ লাগে না)। "ঠিকানা" কলামে কমা দিয়ে জোড়া ঠিকানা থাকে (প্রিন্টের জন্য)
  *******************************************************/
-const DEALER_ADDR_COLS = ["ইউনিয়ন/পৌরসভা", "উপজেলা", "জেলা"];
+const DEALER_ADDR_COLS = ["ইউনিয়ন/পৌরসভা", "উপজেলা", "জেলা", "ডিলারের স্বাক্ষর(URL)"];
 function ensureDealerAddrCols(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get("dealer_addr_cols_v1")) return;
+  if (cache.get("dealer_addr_cols_v2")) return;
   const lastCol = sheet.getLastColumn();
   const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   let col = lastCol;
   DEALER_ADDR_COLS.forEach(function (h) {
     if (headers.indexOf(h) === -1) { col++; sheet.getRange(1, col).setValue(h); }
   });
-  try { cache.put("dealer_addr_cols_v1", "1", 21600); } catch (e) { /* বাদ */ }
+  try { cache.put("dealer_addr_cols_v2", "1", 21600); } catch (e) { /* বাদ */ }
 }
 
 /*******************************************************
@@ -416,6 +416,11 @@ function updateDealerFull(data) {
     if (processed === null) { photoWarning += " (⚠️ ডিলারের নতুন ছবি খুব বড়, সেভ হয়নি)"; }
     else { dealerFields["ডিলারের ছবি(URL)"] = processed; }
   }
+  if (data.dealerSignatureBase64) {
+    const processedS = processImageForStorage(data.dealerSignatureBase64);
+    if (processedS === null) { photoWarning += " (⚠️ ডিলারের স্বাক্ষরের ছবি খুব বড়, সেভ হয়নি)"; }
+    else { dealerFields["ডিলারের স্বাক্ষর(URL)"] = processedS; }
+  }
   if (data.nomineePhotoBase64) {
     const processedN = processImageForStorage(data.nomineePhotoBase64);
     if (processedN === null) { photoWarning += " (⚠️ নমিনির নতুন ছবি খুব বড়, সেভ হয়নি)"; }
@@ -576,6 +581,12 @@ function updateMyDealerFull(data) {
 
   let photoWarning = "";
   let newDealerPhoto = "";
+  let newDealerSign = "";
+  if (data.dealerSignatureBase64) {
+    const processedS = processImageForStorage(data.dealerSignatureBase64);
+    if (processedS === null) { photoWarning += " (⚠️ ডিলারের স্বাক্ষরের ছবি খুব বড়, সেভ হয়নি)"; }
+    else { dealerFields["ডিলারের স্বাক্ষর(URL)"] = processedS; newDealerSign = processedS; }
+  }
   if (data.dealerPhotoBase64) {
     const processed = processImageForStorage(data.dealerPhotoBase64);
     if (processed === null) { photoWarning += " (⚠️ ডিলারের নতুন ছবি খুব বড়, সেভ হয়নি)"; }
@@ -625,6 +636,7 @@ function updateMyDealerFull(data) {
     success: true,
     message: "আপনার তথ্য আপডেট হয়েছে" + photoWarning,
     token: newToken,
-    dealerPhotoUrl: newDealerPhoto
+    dealerPhotoUrl: newDealerPhoto,
+    dealerSignatureUrl: newDealerSign
   };
 }

@@ -1055,7 +1055,7 @@ const _icp = {
 const IC = {};
 Object.keys(_icp).forEach(k => { IC[k] = '<svg viewBox="0 0 24 24" aria-hidden="true">' + _icp[k] + '</svg>'; });
 
-let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null, dealerUnion:"", dealerArea:"" };
+let state = { token:null, role:null, dealerId:null, dealerName:null, name:null, dealerPhotoUrl:null, dealerMobile:null, dealerUnion:"", dealerArea:"", dealerSignatureUrl:"" };
 
 /* যেসব অনুরোধ ডাটা বদলায় (সংরক্ষণ/এডিট/ডিলিট) — এগুলোতে ইউনিক requestId যায়,
    যাতে নেটওয়ার্ক সমস্যায় আবার পাঠালেও সার্ভার দুইবার সংরক্ষণ না করে */
@@ -1518,6 +1518,7 @@ async function doLogin(){
   state.dealerMobile = res.dealerMobile || "";
   state.dealerUnion = res.dealerUnion || "";
   state.dealerArea = res.dealerArea || "";
+  state.dealerSignatureUrl = res.dealerSignatureUrl || "";
   state.dealerFacebookLink = res.dealerFacebookLink || "";
 
   // এজেন্সির লোগো/নাম আনার জন্য আর অপেক্ষা করা হয় না — অ্যাপ সাথে সাথে খুলে যায়,
@@ -2396,6 +2397,10 @@ function renderRegisterForm(box){
           <label>ডিলারের ছবি</label>
           ${photoUploadBoxHtml('rDealerPhoto', 'rDealerPhotoPreview', 'rDealerPhotoPlaceholder', '')}
         </div>
+        <div class="field">
+          <label>ডিলারের স্বাক্ষর (সাদা কাগজে সই করে ছবি তুলে দিন)</label>
+          ${photoUploadBoxHtml('rDealerSign', 'rDealerSignPreview', 'rDealerSignPlaceholder', '')}
+        </div>
       </div>
     </fieldset>
 
@@ -2462,6 +2467,7 @@ async function submitRegister(){
 
   const dealerPhotoBase64 = await fileToBase64Compressed(document.getElementById("rDealerPhoto"));
   const nomineePhotoBase64 = await fileToBase64Compressed(document.getElementById("rNomPhoto"));
+  const dealerSignatureBase64 = await fileToBase64Compressed(document.getElementById("rDealerSign"));
 
   if(editingDealerId === "SELF"){
     const selfData = {
@@ -2486,6 +2492,7 @@ async function submitRegister(){
       adminPassword: document.getElementById("rAdminPass").value,
       adminName: document.getElementById("rAdminName").value.trim(),
       dealerPhotoBase64: dealerPhotoBase64,
+      dealerSignatureBase64: dealerSignatureBase64,
       nomineePhotoBase64: nomineePhotoBase64
     };
     const selfRes = await apiCall("updateMyDealerFull", selfData);
@@ -2498,6 +2505,7 @@ async function submitRegister(){
       if(selfData.dealerFields["এরিয়া"] !== undefined) state.dealerArea = selfData.dealerFields["এরিয়া"] || "";
       state.dealerFacebookLink = selfData.dealerFields["Facebook Link"];
       if(selfRes.dealerPhotoUrl) state.dealerPhotoUrl = selfRes.dealerPhotoUrl;
+      if(selfRes.dealerSignatureUrl) state.dealerSignatureUrl = selfRes.dealerSignatureUrl;
       if(selfData.adminName) state.name = selfData.adminName;
       clearCache();
       loadFooterInfo();
@@ -2532,6 +2540,7 @@ async function submitRegister(){
       adminUsername: document.getElementById("rAdminUser").value.trim(),
       adminPassword: document.getElementById("rAdminPass").value,
       dealerPhotoBase64: dealerPhotoBase64,
+      dealerSignatureBase64: dealerSignatureBase64,
       nomineePhotoBase64: nomineePhotoBase64
     };
     const res = await apiCall("updateDealerFull", data);
@@ -2556,6 +2565,7 @@ async function submitRegister(){
     "thikana": dealerThikanaCombined(), "union": document.getElementById("rUnion").value.trim(), "upozila": document.getElementById("rUpozila").value.trim(), "jela": document.getElementById("rJela").value.trim(),
     "facebookLink": document.getElementById("rFacebook").value.trim(),
     "dealerPhotoBase64": dealerPhotoBase64,
+    "dealerSignatureBase64": dealerSignatureBase64,
     "adminUsername": document.getElementById("rAdminUser").value.trim(),
     "adminPassword": document.getElementById("rAdminPass").value,
     "adminName": document.getElementById("rAdminName").value.trim(),
@@ -2651,6 +2661,11 @@ async function editDealerRow(dealerId){
     document.getElementById("rDealerPhotoPreview").style.display = "block";
     document.getElementById("rDealerPhotoPlaceholder").style.display = "none";
   }
+  if(d["ডিলারের স্বাক্ষর(URL)"]){
+    document.getElementById("rDealerSignPreview").src = d["ডিলারের স্বাক্ষর(URL)"];
+    document.getElementById("rDealerSignPreview").style.display = "block";
+    document.getElementById("rDealerSignPlaceholder").style.display = "none";
+  }
 
   document.getElementById("rNomNaam").value = n["নমিনির নাম"] || "";
   document.getElementById("rNomNid").value = n["NID নং"] || "";
@@ -2733,6 +2748,11 @@ async function renderMyDealerForm(box){
     document.getElementById("rDealerPhotoPreview").src = d["ডিলারের ছবি(URL)"];
     document.getElementById("rDealerPhotoPreview").style.display = "block";
     document.getElementById("rDealerPhotoPlaceholder").style.display = "none";
+  }
+  if(d["ডিলারের স্বাক্ষর(URL)"]){
+    document.getElementById("rDealerSignPreview").src = d["ডিলারের স্বাক্ষর(URL)"];
+    document.getElementById("rDealerSignPreview").style.display = "block";
+    document.getElementById("rDealerSignPlaceholder").style.display = "none";
   }
 
   document.getElementById("rNomNaam").value = n["নমিনির নাম"] || "";
@@ -4482,7 +4502,7 @@ let ccAgencyCache = null;
 let ccPicked = {};
 
 function ccGiven(c){ return String(c["কার্ড"] == null ? "" : c["কার্ড"]).trim() !== ""; }
-function ccDealerObj(){ return { "নাম": state.dealerName || "", "মোবাইল": state.dealerMobile || "", "এরিয়া": state.dealerArea || "" }; }
+function ccDealerObj(){ return { "নাম": state.dealerName || "", "মোবাইল": state.dealerMobile || "", "এরিয়া": state.dealerArea || "", "স্বাক্ষর": state.dealerSignatureUrl || "" }; }
 
 async function loadCustomerCardsSetup(){
   document.getElementById("ccCategorySelect").value = "specific";
@@ -4683,6 +4703,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
           ${agency["লোগো(URL)"] ? `<img class="card-watermark" src="${agency["লোগো(URL)"]}">` : ''}
           <table class="card-fields"><tbody>${rowsHtml}</tbody></table>
         </div>
+        <div class="card-sign ${dealer["স্বাক্ষর"] ? 'has-sig' : ''}"><div class="sign-wrap">${dealer["স্বাক্ষর"] ? `<img class="sign-img" src="${dealer["স্বাক্ষর"]}">` : ""}<span>ডিলারের স্বাক্ষর</span></div></div>
         <div class="card-footer">${e(footerText)}</div>
       </div>`;
   }).join("");
@@ -4697,7 +4718,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       body{ font-family:'Noto Sans Bengali','SolaimanLipi','Nikosh','Hind Siliguri',sans-serif; background:#fff; }
       .cards-wrap{ display:grid; grid-template-columns:repeat(auto-fill, 3.3in); gap:6mm; padding:4mm; page-break-after:avoid; }
       .id-card{
-        width:3.3in; height:2.2in;
+        width:3.3in; height:2.5in;
         border:1px solid #b7c9c2; border-radius:10px; overflow:hidden;
         display:flex; flex-direction:column;
         box-shadow:0 1px 3px rgba(0,0,0,0.15);
@@ -4738,6 +4759,11 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint){
       .cf-label{ white-space:nowrap; padding-right:2px; width:27%; }
       .cf-colon{ width:6px; }
       .cf-value{ white-space:nowrap; overflow:hidden; padding-left:5px !important; }
+      .card-sign{ display:flex; justify-content:flex-end; padding:12px 12px 2px; flex-shrink:0; }
+      .card-sign.has-sig{ padding-top:3px; }
+      .sign-wrap{ min-width:36%; max-width:48%; }
+      .sign-img{ display:block; margin:0 auto 1px; max-height:24px; max-width:100%; object-fit:contain; }
+      .card-sign span{ display:block; border-top:1px solid #000; text-align:center; font-size:8.5px; font-weight:600; color:#000; padding-top:1px; }
       .card-footer{
         background-color:#1a4f45; background-image:linear-gradient(135deg,#1f5f52,#153f37); color:#fff; font-size:9px; font-weight:600;
         padding:7px 10px 7px; text-align:center;
