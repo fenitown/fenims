@@ -4610,7 +4610,15 @@ function ccOrient(){
 }
 
 /* বর্তমান নির্বাচন অনুযায়ী কোন কোন গ্রাহকের কার্ড দেখানো/প্রিন্ট হবে */
+/* মোবাইল নং না থাকলে কার্ড প্রিন্ট হবে না */
+function ccHasMobile(c){ return String(c["মোবাইল নং"] == null ? "" : c["মোবাইল নং"]).trim() !== ""; }
 function getCcSelectedCustomers(){
+  const all = getCcSelectedCustomersRaw();
+  const list = all.filter(ccHasMobile);
+  window.__ccSkippedNoMobile = all.length - list.length;
+  return list;
+}
+function getCcSelectedCustomersRaw(){
   const cs = ccCustomersCache;
   if(!ccCurrentCategory) return [];
   if(ccCurrentCategory === "specific") return cs.filter(c => ccPicked[c["CustomerID"]]).sort((a, b) => ccIdNum(a) - ccIdNum(b));
@@ -4632,11 +4640,11 @@ function updateCcPreview(){
   const customers = getCcSelectedCustomers();
   if(customers.length === 0){
     const needPick = !ccCurrentCategory || ccCurrentCategory === "specific" || (ccCurrentCategory !== "all" && !(document.getElementById("ccGroupSelect") || {}).value);
-    previewWrap.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">${needPick ? "প্রিভিউ দেখতে উপরে থেকে নির্বাচন করুন" : "এই নির্বাচনে প্রিন্ট করার মতো কোনো গ্রাহক নেই"}</p>`;
+    previewWrap.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">${needPick ? "প্রিভিউ দেখতে উপরে থেকে নির্বাচন করুন" : (window.__ccSkippedNoMobile ? "মোবাইল নং না থাকায় " + window.__ccSkippedNoMobile + " জনের কার্ড প্রিন্ট হবে না" : "এই নির্বাচনে প্রিন্ট করার মতো কোনো গ্রাহক নেই")}</p>`;
     return;
   }
   const html = buildCardsDocument(ccAgencyCache, ccDealerObj(), state.dealerId, customers, false, ccOrient());
-  previewWrap.innerHTML = `<p style="font-size:0.85rem;color:var(--muted);margin:0 0 6px;">${customers.length} জনের কার্ড</p><div class="table-wrap" style="overflow-x:auto;"><iframe id="ccPreviewFrame" style="width:100%;min-height:260px;border:1px solid var(--line);border-radius:10px;background:#fff;"></iframe></div>`;
+  previewWrap.innerHTML = `<p style="font-size:0.85rem;color:var(--muted);margin:0 0 6px;">${customers.length} জনের কার্ড${window.__ccSkippedNoMobile ? " (মোবাইল নং না থাকায় " + window.__ccSkippedNoMobile + " জন বাদ)" : ""}</p><div class="table-wrap" style="overflow-x:auto;"><iframe id="ccPreviewFrame" style="width:100%;min-height:260px;border:1px solid var(--line);border-radius:10px;background:#fff;"></iframe></div>`;
   const frame = document.getElementById("ccPreviewFrame");
   frame.srcdoc = html;
   frame.onload = () => { try{ frame.style.height = (frame.contentDocument.body.scrollHeight + 20) + "px"; }catch(e){} };
@@ -4779,15 +4787,15 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint, orie
       }
       .card-logo img{ width:100%; height:100%; object-fit:contain; border-radius:5px; background:#fff; padding:1px; box-sizing:border-box; image-rendering:auto; }
       .card-org{ flex:1; min-width:0; text-align:center; }
-      .org-name{ font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; }
-      .org-area{ font-size:10.5px; margin-top:1px; white-space:nowrap; overflow:hidden; color: #dfed1d; }
+      .org-name{ font-size:13px; font-weight:700; line-height:1.2; white-space:nowrap; overflow:hidden; }
+      .org-area{ font-size:10.5px; opacity:0.95; margin-top:1px; white-space:nowrap; overflow:hidden; }
       .card-title-row{ position:relative; padding:4px 10px 1px; flex-shrink:0; }
       .card-title{
         display:table; margin:0 auto; padding:3px 14px 1px; line-height:1.35;
         text-align:center; font-size:13px; font-weight:700; color:#153f37;
         border:1px solid #153f37; border-radius:6px; background:transparent;
       }
-      .card-qr-badge{ position:absolute; top:6px; right:8px; box-sizing:content-box; width:50px; height:50px; background:#fff; border:1px solid #b1acac; border-radius:5px; overflow:hidden; z-index:2; }
+      .card-qr-badge{ position:absolute; top:6px; right:8px; box-sizing:content-box; width:50px; height:50px; background:#fff; border:1px solid #555; border-radius:5px; overflow:hidden; z-index:2; }
       .card-qr-badge img{ display:block; width:50px; height:50px; }
       .qr-clear{ display:inline-block; white-space:nowrap; }
       .card-body{ display:flex; flex:1; padding:2px 12px 2px; align-items:center; position:relative; min-height:0; }
