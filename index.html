@@ -4757,6 +4757,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint, orie
     <style>
       @page{ size:A4 ${orient}; margin:0.2in; }
       html, body{ margin:0; padding:0; }
+      html{ -webkit-text-size-adjust:100%; text-size-adjust:100%; }
       *{ box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
       body{ font-family:'Noto Sans Bengali','SolaimanLipi','Nikosh','Hind Siliguri',sans-serif; background:#fff; }
       /* কার্ডগুলো ইনলাইন-ব্লক হিসেবে পরপর বসে; A4 পেজে যতগুলো ধরে ততগুলো বসে, বাকিগুলো পরের পেজে যায় */
@@ -4768,7 +4769,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint, orie
         .page{ background:#fff; width:max-content; margin:0 auto 12px; padding:0.2in; box-shadow:0 1px 4px rgba(0,0,0,0.2); }
       }
       .id-card{
-        display:flex; margin:0; font-size:12px; line-height:normal;
+        display:flex; margin:0; font-size:12px; -webkit-text-size-adjust:100%; text-size-adjust:100%;
         width:3.3in; height:2.2in;
         border:1px solid #b7c9c2; border-radius:10px; overflow:hidden;
         flex-direction:column;
@@ -4791,7 +4792,7 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint, orie
       .org-area{ font-size:10.5px; color:#e3ff0e; margin-top:1px; white-space:nowrap; overflow:hidden; }
       .card-title-row{ position:relative; padding:4px 10px 1px; flex-shrink:0; }
       .card-title{
-        display:table; margin:0 auto; padding:3px 14px 1px; line-height:1.35;
+        display:table; margin:0 auto; padding:3px 14px 1px;
         text-align:center; font-size:13px; font-weight:700; color:#153f37;
         border:1px solid #153f37; border-radius:6px; background:transparent;
       }
