@@ -817,7 +817,9 @@
         <div id="cusMsg" class="msg"></div>
       </fieldset>
       </div>
-      <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('customers')">🖨 প্রিন্ট</button></div>
+      <div class="toolbar no-print"><button class="btn secondary small" onclick="openPrintOpt('customers')">🖨 প্রিন্ট</button>
+        <button class="btn secondary small" onclick="exportCustomerContacts(true)" title="শেষবার ফাইল নেওয়ার পর যাদের যোগ করা হয়েছে শুধু তাদের">📇 নতুন গ্রাহক ফোনে সেভ</button>
+        <button class="btn secondary small" onclick="exportCustomerContacts(false)" title="সব গ্রাহকের নাম-ওয়ার্ড ও মোবাইল কন্টাক্ট ফাইলে">📇 সব গ্রাহক ফোনে সেভ</button></div>
       <div class="no-print" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;">
         <input id="cusSearch" type="search" placeholder="🔍 নাম / মোবাইল নং / NID নং দিয়ে খুঁজুন" oninput="onCusSearch()" autocomplete="off"
                style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #cfd8d3;">
@@ -5766,6 +5768,53 @@ function renderCustomersTable(customers){
         <button class="btn icon small secondary" ${String(c["মোবাইল নং"] || "").trim() ? "" : "disabled"} onclick="sendConfirmMsgRow('${c['CustomerID']}')" title="${String(c["মোবাইল নং"] || "").trim() ? "মেসেজ" : "মোবাইল নম্বর নেই"}" aria-label="মেসেজ">${IC.msg}</button>
       </div></td></tr>`);
   table.innerHTML = head + "<tbody>" + rows.join("") + pendHtml + "</tbody>";
+}
+
+/*******************************************************
+ * ফোনের কন্টাক্টে সেভ — গ্রাহকদের .vcf ফাইল বানিয়ে শেয়ার/ডাউনলোড
+ * কন্টাক্টের নাম: "গ্রাহকের নাম-ওয়ার্ড নং" (যেমন: আব্দুর রহিম-1) + মোবাইল নম্বর
+ * ফাইল খুললে ফোন নিজেই "কন্টাক্টে ইমপোর্ট" দেখায় — ডিলার নিজের Gmail/ফোন একাউন্টে সেভ করবে
+ * "নতুন" বাটন: এই ডিভাইসে শেষবার ফাইল নেওয়ার পর যোগ হওয়া গ্রাহকরাই শুধু আসে
+ *******************************************************/
+function vcfEsc(t){ return String(t == null ? "" : t).replace(/\\/g, "\\\\").replace(/\r?\n/g, " ").replace(/;/g, "\\;").replace(/,/g, "\\,"); }
+function vcfPhone(raw){ return toEnDigits(raw).replace(/[^\d+]/g, ""); }
+function vcfLastKey(){ return "cusVcfLast_" + (state.dealerId || ""); }
+function vcfGetLast(){ try{ return Number(localStorage.getItem(vcfLastKey())) || 0; }catch(e){ return 0; } }
+function vcfSetLast(ms){ try{ localStorage.setItem(vcfLastKey(), String(ms)); }catch(e){} }
+function cusTimeMs(c){ const t = new Date(c["তারিখ"]).getTime(); return isNaN(t) ? 0 : t; }
+function vcfNameWard(c){
+  const n = String(c["নাম"] == null ? "" : c["নাম"]).trim();
+  const w = toEnDigits(c["ওয়ার্ড নং"]).trim();
+  return w ? n + "-" + w : n;
+}
+function buildCustomersVcf(list){
+  return list.map(function(c){
+    const nm = vcfEsc(vcfNameWard(c));
+    return "BEGIN:VCARD\r\nVERSION:3.0\r\nN:" + nm + ";;;;\r\nFN:" + nm + "\r\nTEL;TYPE=CELL:" + vcfPhone(c["মোবাইল নং"]) + "\r\nEND:VCARD\r\n";
+  }).join("");
+}
+async function exportCustomerContacts(onlyNew){
+  const all = (window.__customersCache || []).filter(function(c){ return String(c["নাম"] || "").trim() && vcfPhone(c["মোবাইল নং"]).length >= 6; });
+  const last = onlyNew ? vcfGetLast() : 0;
+  const list = onlyNew ? all.filter(function(c){ return cusTimeMs(c) > last; }) : all;
+  if(list.length === 0){
+    alert(onlyNew ? "নতুন কোনো গ্রাহক নেই — সবাই আগেই কন্টাক্ট ফাইলে নেওয়া হয়েছে" : "মোবাইল নম্বরসহ কোনো গ্রাহক নেই");
+    return;
+  }
+  const maxMs = list.reduce(function(m, c){ return Math.max(m, cusTimeMs(c)); }, 0);
+  const d = new Date();
+  const fname = "গ্রাহক-কন্টাক্ট-" + d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate() + ".vcf";
+  const file = new File([buildCustomersVcf(list)], fname, { type: "text/vcard" });
+  if(navigator.canShare && navigator.canShare({ files: [file] })){
+    try{ await navigator.share({ files: [file], title: "গ্রাহক কন্টাক্ট" }); vcfSetLast(Math.max(maxMs, last)); return; }
+    catch(e){ if(e && e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file); a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 5000);
+  vcfSetLast(Math.max(maxMs, last));
+  alert(list.length + " জনের কন্টাক্ট ফাইল ডাউনলোড হয়েছে। ফাইলটি খুলে \"কন্টাক্টে সেভ/ইমপোর্ট\" দিন।");
 }
 
 /* সংরক্ষণ/এডিট/ডিলিটের পর সার্ভার থেকে পুরো তালিকা আবার না এনে হাতের তালিকাই আপডেট করা */
