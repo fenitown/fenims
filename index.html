@@ -4703,7 +4703,8 @@ function buildCardsDocument(agency, dealer, dealerId, customers, autoprint, orie
   agency = agency || { "নাম":"", "মোবাইল":"", "লোগো(URL)":"" };
   const e = escMsgHtml;
   const logoImg = agency["লোগো(URL)"] ? `<img src="${agency["লোগো(URL)"]}">` : `<span>fenims</span>`;
-  const footerText = [dealer["নাম"], dealer["মোবাইল"]].map(x => String(x || "").trim()).filter(Boolean).join(" | ");
+  const footerParts = [dealer["নাম"], dealer["মোবাইল"]].map(x => String(x || "").trim()).filter(Boolean).join(" | ");
+  const footerText = footerParts ? "যোগাযোগ: " + footerParts : "";
 
   const cardList = customers.map(c => {
     const qrData = encodeURIComponent(CARD_QR_BASE_URL + "?view=customer&dealerId=" + dealerId + "&customerId=" + c["CustomerID"]);
@@ -5361,13 +5362,26 @@ async function submitCustomerInner(data, msgBox){
  * নেটওয়ার্ক সমস্যায় একই requestId দিয়ে আবার চেষ্টা হয় — দুইবার সংরক্ষণ হয় না
  *******************************************************/
 const _cusQueue = [];
-let _cusWorking = false, _cusNeedReload = false, _cusSavedCount = 0, _cusLastErr = "";
+let _cusWorking = false, _cusNeedReload = false, _cusSavedCount = 0, _cusLastErr = "", _cusDupNames = [];
 const CUS_FORM_IDS = ["cusNaam","cusPitarNaam","cusMobile","cusNid","cusBariNaam","cusGram","cusWard","cusUnion","cusPraptirSthan","cusCardFee","cusReference"];
+
+function cusNidKey(v){ return toEnDigits(v).replace(/[\s\-]/g, "").toLowerCase(); }
 
 function enqueueNewCustomer(data, msgBox){
   if(!data["নাম"]){ msgBox.className = "msg err"; msgBox.textContent = "গ্রাহকের নাম দিন"; return; }
+  const nk = cusNidKey(data.nid);
+  if(nk){
+    const inList = (window.__customersCache || []).find(c => cusNidKey(c["NID/জন্মসনদ নং"]) === nk);
+    const inQueue = _cusQueue.find(q => cusNidKey(q.data.nid) === nk);
+    if(inList || inQueue){
+      msgBox.className = "msg err";
+      msgBox.textContent = "এই NID/জন্মসনদ নং দিয়ে গ্রাহক আগেই আছেন" + (inList ? ": " + (inList["নাম"] || "") + " (আইডি " + inList["CustomerID"] + ")" : " (সংরক্ষণের অপেক্ষায়)") + " — ডাবল এন্ট্রি হবে না";
+      return;
+    }
+  }
   const sig = JSON.stringify(data);
   if(_cusQueue.some(q => q.sig === sig)){ msgBox.className = "msg err"; msgBox.textContent = "এই গ্রাহক ইতিমধ্যে সংরক্ষণের অপেক্ষায় আছে"; return; }
+  _cusDupNames = [];
   _cusQueue.push({ data: data, sig: sig, status: "pending", fails: 0, batchId: "" });
   CUS_FORM_IDS.forEach(id => document.getElementById(id).value = "");
   fillDefaultCusUnion();
@@ -5390,8 +5404,10 @@ function refreshCusQueueUI(){
       box.innerHTML = failed + " টি গ্রাহক সংরক্ষণ হয়নি" + (_cusLastErr ? " (" + escMsgHtml(_cusLastErr) + ")" : "") + " <button class=\"btn small\" onclick=\"retryFailedCustomers()\">আবার চেষ্টা করুন</button>";
     } else if(pend){
       box.className = "msg"; box.textContent = "✓ জমা হয়েছে — পেছনে সংরক্ষণ হচ্ছে (বাকি " + pend + " টি)। পরের গ্রাহক লিখতে থাকুন";
-    } else if(_cusSavedCount){
-      box.className = "msg ok"; box.textContent = "✓ " + _cusSavedCount + " টি গ্রাহক সংরক্ষিত হয়েছে";
+    } else if(_cusSavedCount || _cusDupNames.length){
+      box.className = _cusDupNames.length ? "msg err" : "msg ok";
+      box.textContent = (_cusSavedCount ? "✓ " + _cusSavedCount + " টি গ্রাহক সংরক্ষিত হয়েছে। " : "") +
+        (_cusDupNames.length ? "একই NID আগে থেকে থাকায় সংরক্ষণ হয়নি: " + _cusDupNames.join(", ") : "");
     }
   }
   if(Array.isArray(window.__customersCache)) renderCustomersTable(window.__customersCache);
@@ -5418,8 +5434,15 @@ async function runCusQueue(){
       }
       const res = await apiCall("addCustomers", { customers: batch.map(q => q.data), requestId: first.batchId });
       if(res && res.success && Array.isArray(res.ids) && res.ids.length === batch.length){
-        const rows = batch.map((q, i) => ({
-          "CustomerID": res.ids[i], "তারিখ": new Date().toISOString(),
+        // সার্ভার যাদের আইডি "" দিয়েছে তারা একই NID থাকায় বাদ পড়েছে — ডাবল এন্ট্রি হয়নি
+        const skipped = batch.filter((q, i) => !res.ids[i]);
+        const okBatch = batch.filter((q, i) => !!res.ids[i]);
+        const okIds = res.ids.filter(x => !!x);
+        if(skipped.length){
+          _cusLastErr = ""; _cusDupNames = (_cusDupNames || []).concat(skipped.map(q => q.data["নাম"]));
+        }
+        const rows = okBatch.map((q, i) => ({
+          "CustomerID": okIds[i], "তারিখ": new Date().toISOString(),
           "নাম": q.data["নাম"], "পিতার নাম": q.data["পিতারনাম"], "মোবাইল নং": q.data["mobile"],
           "NID/জন্মসনদ নং": q.data["nid"], "বাড়ির নাম": q.data["বাড়িরনাম"], "গ্রাম": q.data["গ্রাম"],
           "ওয়ার্ড নং": q.data["ward"], "ইউনিয়ন/পৌরসভা": q.data["union"], "প্রাপ্তির স্থান": q.data["praptirsthan"],
@@ -5427,9 +5450,11 @@ async function runCusQueue(){
           "WhatsApp": "", "SMS": "", "মেসেজ আইডি": ""
         }));
         batch.forEach(q => { const k = _cusQueue.indexOf(q); if(k >= 0) _cusQueue.splice(k, 1); });
-        _cusSavedCount += batch.length; _cusLastErr = "";
-        if(Array.isArray(window.__customersCache)) applyCustomersLocally(window.__customersCache.concat(rows));
-        else _cusNeedReload = true;
+        _cusSavedCount += okBatch.length;
+        if(!skipped.length) _cusLastErr = "";
+        if(!Array.isArray(window.__customersCache)) _cusNeedReload = true;
+        else if(rows.length) applyCustomersLocally(window.__customersCache.concat(rows));
+        else refreshCusQueueUI();
       } else {
         _cusLastErr = (res && res.message) ? res.message : "সার্ভার থেকে সঠিক উত্তর আসেনি";
         batch.forEach(q => q.fails++);
@@ -6066,7 +6091,7 @@ async function deleteCustomerRow(id){
   if(!confirm("এই গ্রাহক ডিলিট করবেন?")) return;
   const res = await apiCall("deleteCustomer", { customerId:id });
   if(!res.success){ alert(res.message); return; }
-  // আইডি নতুন করে সাজানো হয়েছে — সার্ভারের পাঠানো নতুন তালিকাই সরাসরি দেখানো হয়
+  // অন্য গ্রাহকদের আইডি বদলায় না — সার্ভারের পাঠানো তালিকাই সরাসরি দেখানো হয়
   if(Array.isArray(res.customers)) applyCustomersLocally(res.customers);
   else { clearCache(); loadCustomers(); }
 }

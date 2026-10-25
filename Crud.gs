@@ -185,6 +185,33 @@ function enDigits(v) {
   return String(v).replace(/[০-৯]/g, function (ch) { return String("০১২৩৪৫৬৭৮৯".indexOf(ch)); });
 }
 
+/*******************************************************
+ * ডাবল এন্ট্রি ঠেকানো — একই NID/জন্মসনদ নং দিয়ে দ্বিতীয়বার গ্রাহক হবে না
+ * (NID খালি থাকলে যাচাই হয় না; বাংলা/ইংরেজি অঙ্ক, স্পেস ও হাইফেন উপেক্ষা করে মেলানো হয়)
+ *******************************************************/
+function nidKey(v) {
+  return String(enDigits(v) == null ? "" : enDigits(v)).replace(/[\s\-]/g, "").toLowerCase();
+}
+
+/* বিদ্যমান গ্রাহকদের { nidKey: {id, name, rowIndex} } — শীট একবারই পড়া হয় */
+function getNidMap(sheet) {
+  const map = {};
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return map;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const iId = headers.indexOf("CustomerID"), iNid = headers.indexOf("NID/জন্মসনদ নং"), iName = headers.indexOf("নাম");
+  if (iNid === -1) return map;
+  const n = lastRow - 1;
+  const ids = sheet.getRange(2, iId + 1, n, 1).getValues();
+  const nids = sheet.getRange(2, iNid + 1, n, 1).getValues();
+  const names = iName === -1 ? null : sheet.getRange(2, iName + 1, n, 1).getValues();
+  for (let r = 0; r < n; r++) {
+    const k = nidKey(nids[r][0]);
+    if (k !== "" && !map.hasOwnProperty(k)) map[k] = { id: String(ids[r][0]), name: names ? String(names[r][0]) : "", rowIndex: r + 2 };
+  }
+  return map;
+}
+
 function addCustomer(data) {
   const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
   if (!perm.ok) return { success: false, message: perm.message };
@@ -197,6 +224,11 @@ function addCustomer(data) {
   lock.waitLock(15000);
   let customerId;
   try {
+    const nk = nidKey(data.nid);
+    if (nk !== "") {
+      const dup = getNidMap(sheet)[nk];
+      if (dup) return { success: false, duplicate: true, message: "এই NID/জন্মসনদ নং দিয়ে গ্রাহক আগেই আছেন: " + dup.name + " (আইডি " + dup.id + ")" };
+    }
     customerId = generateId(sheet, "C");
     genericAddRow(sheet, {
       "CustomerID": customerId,
@@ -241,9 +273,12 @@ function addCustomers(data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   const ids = [];
+  const duplicates = [];
+  let rows = [];
   try {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const lastRow = sheet.getLastRow();
+    const nidMap = getNidMap(sheet);
     let max = 0;
     if (lastRow >= 2) {
       sheet.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function (r) {
@@ -252,9 +287,19 @@ function addCustomers(data) {
       });
     }
     const now = new Date();
-    const rows = list.map(function (d, i) {
-      const id = "C" + Utilities.formatString("%04d", max + 1 + i);
+    let seq = 0;
+    list.forEach(function (d, i) {
+      // একই NID আগে থেকে শীটে থাকলে বা এই ব্যাচেই আগে এলে — এই গ্রাহক বাদ (আইডি "" ফেরত যায়)
+      const nk = nidKey(d.nid);
+      if (nk !== "" && nidMap.hasOwnProperty(nk)) {
+        ids.push("");
+        duplicates.push({ index: i, existingId: nidMap[nk].id, existingName: nidMap[nk].name });
+        return;
+      }
+      seq++;
+      const id = "C" + Utilities.formatString("%04d", max + seq);
       ids.push(id);
+      if (nk !== "") nidMap[nk] = { id: id, name: String(d.নাম || ""), rowIndex: 0 };
       const obj = {
         "CustomerID": id, "তারিখ": now,
         "নাম": d.নাম, "পিতার নাম": d.পিতারনাম, "মোবাইল নং": enDigits(d.mobile),
@@ -262,12 +307,16 @@ function addCustomers(data) {
         "ওয়ার্ড নং": enDigits(d.ward), "ইউনিয়ন/পৌরসভা": d.union, "প্রাপ্তির স্থান": d.praptirsthan,
         "কার্ড ফি": d.cardFee || 0, "রেফারেন্স": d.reference || ""
       };
-      return headers.map(function (h) {
+      rows.push(headers.map(function (h) {
         let v = obj.hasOwnProperty(h) ? obj[h] : "";
         if (isTextColumnHeader(h) && v !== "" && v !== null && v !== undefined) v = String(v);
         return v;
-      });
+      }));
     });
+
+    if (rows.length === 0) {
+      return { success: true, ids: ids, duplicates: duplicates, message: "সব গ্রাহকই আগে থেকে আছে (NID মিলে গেছে) — নতুন কিছু যোগ হয়নি" };
+    }
 
     const start = lastRow + 1;
     const textCols = [];
@@ -280,7 +329,10 @@ function addCustomers(data) {
     lock.releaseLock();
   }
 
-  return { success: true, ids: ids, message: list.length + " জন গ্রাহক যোগ হয়েছে" };
+  return {
+    success: true, ids: ids, duplicates: duplicates,
+    message: rows.length + " জন গ্রাহক যোগ হয়েছে" + (duplicates.length ? " (" + duplicates.length + " জন বাদ — একই NID আগে থেকে আছে)" : "")
+  };
 }
 
 function listCustomers(data) {
@@ -314,6 +366,16 @@ function updateCustomer(data) {
   ["মোবাইল নং", "NID/জন্মসনদ নং", "ওয়ার্ড নং"].forEach(function (k) {
     if (fields.hasOwnProperty(k)) fields[k] = enDigits(fields[k]);
   });
+  // NID বদলালে — অন্য কোনো গ্রাহকের NID এর সাথে মিলে গেলে সংরক্ষণ হবে না
+  if (fields.hasOwnProperty("NID/জন্মসনদ নং")) {
+    const nk = nidKey(fields["NID/জন্মসনদ নং"]);
+    if (nk !== "") {
+      const dup = getNidMap(sheet)[nk];
+      if (dup && dup.id !== String(data.customerId)) {
+        return { success: false, duplicate: true, message: "এই NID/জন্মসনদ নং দিয়ে অন্য গ্রাহক আগেই আছেন: " + dup.name + " (আইডি " + dup.id + ")" };
+      }
+    }
+  }
   const ok = genericUpdateRow(sheet, "CustomerID", data.customerId, fields);
   return { success: ok, message: ok ? "আপডেট হয়েছে" : "গ্রাহক পাওয়া যায়নি" };
 }
@@ -323,58 +385,35 @@ function deleteCustomer(data) {
   if (!perm.ok) return { success: false, message: perm.message };
   const ss = getDealerSpreadsheet(perm.payload.dealerId);
   const sheet = getSheet(ss, "Customers");
-  // ডিলিট + আইডি পুনর্বিন্যাস একসাথে (নতুন গ্রাহক যোগের সাথে জট এড়াতে লকের ভেতরে)
+  // ডিলিট — অন্য কোনো গ্রাহকের আইডি বদলায় না (৪৫ নং ডিলিট হলে ৪৬ নং ৪৬-ই থাকে)
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   let ok;
   try {
     ok = genericDeleteRow(sheet, "CustomerID", data.customerId);
-    // বাকি গ্রাহকদের আইডি ১ থেকে ক্রমানুসারে নতুন করে সাজানো (বিক্রির রেকর্ডের আইডিও সাথে মিলিয়ে)
-    if (ok) renumberCustomerIds(ss, sheet);
+    if (ok) markSalesOfDeletedCustomer(ss, data.customerId);
   } finally {
     lock.releaseLock();
   }
   if (!ok) return { success: false, message: "গ্রাহক পাওয়া যায়নি" };
   return {
     success: true,
-    message: "ডিলিট হয়েছে — গ্রাহক আইডি ক্রমানুসারে সাজানো হয়েছে",
+    message: "ডিলিট হয়েছে",
     customers: genericListRows(sheet)      // ব্রাউজার আবার লোড না করে সরাসরি এটাই দেখাবে
   };
 }
 
 /*******************************************************
- * গ্রাহক আইডি ধারাবাহিক করা: সারির ক্রম অনুযায়ী C0001, C0002, ... (ডিলিটে ফাঁক পড়লে
- * পরের সবার আইডি এক ধাপ করে কমে যায়)।
+ * গ্রাহক ডিলিট হলে অন্য গ্রাহকদের আইডি আর বদলায় না (আগের মতো ১ থেকে নতুন করে
+ * সাজানো হয় না)।
  *
- * বিক্রি (Sales) শীটের CustomerID পুরনো → নতুন আইডিতে বদলে দেওয়া হয়, যাতে প্রতিটি
- * বিক্রি আগের গ্রাহকের সাথেই যুক্ত থাকে। যে বিক্রির গ্রাহক আর নেই (ডিলিট হয়েছে) সেই
- * রেকর্ড মুছে ফেলা হয় না (রিপোর্ট ও স্টকের হিসাব ঠিক থাকে) — শুধু আইডি "DELETED" করে
- * দেওয়া হয়, যাতে ওই পুরনো আইডি পরে অন্য কোনো গ্রাহকের সাথে ভুলে জুড়ে না যায়
+ * ডিলিট হওয়া গ্রাহকের বিক্রির রেকর্ড মুছে ফেলা হয় না (রিপোর্ট ও স্টকের হিসাব ঠিক
+ * থাকে) — শুধু ওই রেকর্ডের CustomerID "DELETED" করে দেওয়া হয়। এতে ডিলিট হওয়া
+ * আইডি (যেমন সর্বশেষ গ্রাহকের আইডি) পরে নতুন কোনো গ্রাহকের সাথে ভুলে জুড়ে যায় না
  *******************************************************/
 const DELETED_CUSTOMER_ID = "DELETED";
 
-function renumberCustomerIds(ss, sheet) {
-  const lastRow = sheet.getLastRow();
-  const lastCol = sheet.getLastColumn();
-  if (lastCol < 1) return;
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  const idx = headers.indexOf("CustomerID");
-  if (idx === -1) return;
-
-  const n = Math.max(lastRow - 1, 0);
-  const oldIds = n > 0 ? sheet.getRange(2, idx + 1, n, 1).getValues().map(function (r) { return String(r[0]); }) : [];
-
-  const map = {};          // পুরনো আইডি → নতুন আইডি (একই আইডি দুইবার থাকলে প্রথমটির)
-  let changed = false;
-  const newIds = oldIds.map(function (oldId, i) {
-    const nid = "C" + Utilities.formatString("%04d", i + 1);
-    if (!map.hasOwnProperty(oldId)) map[oldId] = nid;
-    if (oldId !== nid) changed = true;
-    return [nid];
-  });
-  if (changed) sheet.getRange(2, idx + 1, n, 1).setValues(newIds);
-
-  // বিক্রি শীটের CustomerID মেলানো
+function markSalesOfDeletedCustomer(ss, customerId) {
   const sales = ss.getSheetByName("Sales");
   if (!sales || sales.getLastRow() < 2) return;
   const sHeaders = sales.getRange(1, 1, 1, sales.getLastColumn()).getValues()[0];
@@ -382,15 +421,11 @@ function renumberCustomerIds(ss, sheet) {
   if (sIdx === -1) return;
   const m = sales.getLastRow() - 1;
   const col = sales.getRange(2, sIdx + 1, m, 1).getValues();
-  let sChanged = false;
-  const out = col.map(function (r) {
-    const v = String(r[0]);
-    if (v === "") return [r[0]];
-    const nv = map.hasOwnProperty(v) ? map[v] : DELETED_CUSTOMER_ID;
-    if (nv !== v) sChanged = true;
-    return [nv];
-  });
-  if (sChanged) sales.getRange(2, sIdx + 1, m, 1).setValues(out);
+  let changed = false;
+  for (let i = 0; i < m; i++) {
+    if (String(col[i][0]) === String(customerId)) { col[i][0] = DELETED_CUSTOMER_ID; changed = true; }
+  }
+  if (changed) sales.getRange(2, sIdx + 1, m, 1).setValues(col);
 }
 
 /*=========================================================
