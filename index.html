@@ -2171,7 +2171,7 @@ async function sendBulkMessage(){
   for(let i = 0; i < prep.units.length; i += sz) chunks.push(prep.units.slice(i, i + sz));
   window.__msgJob = { jobId: prep.jobId, messageId: prep.messageId, channel: prep.channel, message, fromMobile,
     total: prep.total, invalid: prep.invalid, chunks, next: 0, done: 0,
-    sms: { en:false, ok:0, fail:0, err:"" }, wa: { en:false, ok:0, fail:0, err:"" } };
+    sms: { en:false, ok:0, fail:0, err:"", sample:"" }, wa: { en:false, ok:0, fail:0, err:"", sample:"" } };
   await runMsgJob();
 }
 
@@ -2223,6 +2223,7 @@ async function runMsgJob(){
         if(r[k + "Enabled"]) job[k].en = true;
         job[k].ok += r[k + "Sent"] || 0; job[k].fail += r[k + "Failed"] || 0;
         const e = r[k + "LastError"]; if(e) job[k].err = e;
+        if(!job[k].sample && r[k + "Sample"]) job[k].sample = r[k + "Sample"];
       });
       job.done += chunk.length; job.next++;
     }
@@ -2235,6 +2236,7 @@ async function runMsgJob(){
   lines.push("মোট প্রাপক: " + job.total + (job.invalid ? " (ভুল/অসম্পূর্ণ নম্বর বাদ: " + job.invalid + ")" : ""));
   if(job.sms.en) lines.push("SMS গেটওয়েতে জমা হয়েছে: " + job.sms.ok + " (ব্যর্থ: " + job.sms.fail + ")");
   if(job.sms.fail > 0 && job.sms.err) lines.push("↳ SMS এরর বিস্তারিত: " + job.sms.err);
+  if(job.sms.en && job.sms.sample) lines.push("↳ গেটওয়ের উত্তর (প্রথম মেসেজের): " + job.sms.sample);
   if(job.wa.en) lines.push("WhatsApp গেটওয়েতে জমা হয়েছে: " + job.wa.ok + " (ব্যর্থ/নেই: " + job.wa.fail + ")");
   if(job.wa.fail > 0 && job.wa.err) lines.push("↳ WhatsApp এরর বিস্তারিত: " + job.wa.err);
   resultBox.className = "msg ok";

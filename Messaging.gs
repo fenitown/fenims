@@ -299,9 +299,18 @@ function buildSignature(info) {
  * প্রতিটি গ্রাহকের নাম আলাদা বলে প্রতি নম্বরে আলাদা মেসেজ তৈরি হয়।
  * recipients: [ { mobile, name }, ... ]
  *******************************************************/
+// গেটওয়ে একসাথে অনেক অনুরোধ পেলে অনেক সময় গ্রহণ ও চার্জ করে কিন্তু পৌঁছে দেয় না —
+// তাই বাল্কে অনুরোধগুলো ধীরে (ছোট ছোট ধাপে, বিরতি দিয়ে) পাঠানো হয়
+const SMS_TRACCAR_GAP_MS = 1500;   // Traccar (ফোনের সিম): একটার পর একটা, মাঝে বিরতি
+const SMS_URL_BATCH = 5;           // পেইড গেটওয়ে: একসাথে সর্বোচ্চ ৫টি
+const SMS_URL_GAP_MS = 400;
+const TRACCAR_CHUNK_SIZE = 8;      // Traccar এ প্রতি চাঙ্কে কম জন (প্রতি কলের সময় টাইমআউটের নিচে রাখতে)
+
 function sendBulkToRecipients(config, fromMobile, mainText, recipients, dealerInfo, prefixName, channels) {
   channels = channels || { sms: true, wa: true };
   const providerType = getSmsProviderType(config);
+  // সেটাপে সেভ করা Sender ID থাকলে সেটাই (ফরমের ঘরে ভুল/অন্য মান লিখলেও গেটওয়েতে একই ID যায়)
+  fromMobile = String(config.smsSenderId || "").trim() || fromMobile;
   const smsEnabled = !!channels.sms && isSmsReady(config);
   const waEnabled = !!channels.wa && isWhatsAppReady(config);
 
@@ -357,11 +366,16 @@ function sendBulkToRecipients(config, fromMobile, mainText, recipients, dealerIn
     }
   });
 
-  const smsRes = smsEnabled ? fetchAllSafe(smsReqs) : [];
-  const waRes = waEnabled ? fetchAllSafe(waReqs) : [];
+  const smsRes = smsEnabled
+    ? (providerType === "traccar" ? fetchAllSafe(smsReqs, { chunk: 1, gapMs: SMS_TRACCAR_GAP_MS })
+                                  : fetchAllSafe(smsReqs, { chunk: SMS_URL_BATCH, gapMs: SMS_URL_GAP_MS }))
+    : [];
+  const waRes = waEnabled ? fetchAllSafe(waReqs, { chunk: 10, gapMs: 300 }) : [];
 
   let smsSent = 0, smsFailed = 0, waSent = 0, waFailed = 0;
   let smsLastError = "", waLastError = "";
+  const smsSample = smsRes.length ? String(smsRes[0].response || smsRes[0].reason || "").substring(0, 200) : "";
+  const waSample = waRes.length ? String(waRes[0].response || waRes[0].reason || "").substring(0, 200) : "";
   const smsByCustomer = {}, waByCustomer = {};   // customerId → true/false (গেটওয়ে গ্রহণ করেছে কিনা)
   smsRes.forEach(function (r, i) {
     if (r.ok) smsSent++; else { smsFailed++; smsLastError = String(r.response || r.reason || "").substring(0, 300); }
@@ -375,8 +389,8 @@ function sendBulkToRecipients(config, fromMobile, mainText, recipients, dealerIn
   return {
     total: unique.length, invalid: invalid,
     firstNumber: unique.length ? unique[0].norm : "",
-    smsEnabled: smsEnabled, smsSent: smsSent, smsFailed: smsFailed, smsLastError: smsLastError,
-    waEnabled: waEnabled, waSent: waSent, waFailed: waFailed, waLastError: waLastError,
+    smsEnabled: smsEnabled, smsSent: smsSent, smsFailed: smsFailed, smsLastError: smsLastError, smsSample: smsSample,
+    waEnabled: waEnabled, waSent: waSent, waFailed: waFailed, waLastError: waLastError, waSample: waSample,
     smsByCustomer: smsByCustomer, waByCustomer: waByCustomer, invalidIds: invalidIds
   };
 }
@@ -405,10 +419,13 @@ function isGatewayAccepted(code, body) {
   return true;
 }
 
-function fetchAllSafe(requests) {
+function fetchAllSafe(requests, opts) {
+  opts = opts || {};
   const out = [];
-  const CHUNK = 20;
+  const CHUNK = opts.chunk || 20;
+  const GAP = opts.gapMs || 0;
   for (let i = 0; i < requests.length; i += CHUNK) {
+    if (i > 0 && GAP > 0) Utilities.sleep(GAP);
     const chunk = requests.slice(i, i + CHUNK);
     try {
       const resps = UrlFetchApp.fetchAll(chunk);
@@ -934,7 +951,8 @@ function prepareCustomerMessageInner_(data, dealerId) {
   return {
     success: true, jobId: "J" + Utilities.getUuid().replace(/-/g, "").substring(0, 12),
     messageId: rec.id, total: units.length, invalid: invalidCustomers.length,
-    units: units, channel: channel, chunkSize: MSG_CHUNK_SIZE
+    units: units, channel: channel,
+    chunkSize: (providerType === "traccar" && wantSMS) ? TRACCAR_CHUNK_SIZE : MSG_CHUNK_SIZE
   };
 }
 
@@ -1014,7 +1032,7 @@ function sendMessageChunkInner_(data, dealerId) {
 
   return {
     success: true, total: result.total,
-    smsEnabled: result.smsEnabled, smsSent: result.smsSent, smsFailed: result.smsFailed, smsLastError: result.smsLastError,
-    waEnabled: result.waEnabled, waSent: result.waSent, waFailed: result.waFailed, waLastError: result.waLastError
+    smsEnabled: result.smsEnabled, smsSent: result.smsSent, smsFailed: result.smsFailed, smsLastError: result.smsLastError, smsSample: result.smsSample,
+    waEnabled: result.waEnabled, waSent: result.waSent, waFailed: result.waFailed, waLastError: result.waLastError, waSample: result.waSample
   };
 }
