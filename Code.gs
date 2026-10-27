@@ -574,13 +574,13 @@ const CACHEABLE_READS = {
   listProducts:1, listStockVouchers:1, listExpenses:1, listExpenseVouchers:1,
   listIncomeReceipts:1, listCommissions:1, listCustomersForDealer:1,
   getAgencyInfo:1, getAbout:1, listSales:1,
-  dealerReport:1, agencySalesReport:1, depotReport:1, dailyReport:1, monthlyReport:1, totalReport:1
+  dealerReport:1, agencySalesReport:1, depotReport:1, getCurrentStock:1, dailyReport:1, monthlyReport:1, totalReport:1
 };
 const READ_CACHE_TTL = 300;
-const READ_CACHE_SALT = "r4";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
+const READ_CACHE_SALT = "r5";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-10-06.5";
+const BACKEND_VERSION = "2026-10-27.1";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {
@@ -996,6 +996,9 @@ function runAction(action, data) {
         break;
       case "depotReport":
         result = depotReport(data);
+        break;
+      case "getCurrentStock":
+        result = currentStockReport(data);
         break;
 
       // ---- খরচ ভাউচার (ডিলারের নিজস্ব) ----

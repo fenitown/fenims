@@ -568,6 +568,7 @@ function agencySalesReport(data) {
   const seenInvoices = {};
   let totalSale = 0, totalDiscount = 0, totalPaid = 0, totalDue = 0;
   let totalOrders = 0, totalDelivered = 0, totalPending = 0;
+  let totalCommission = 0;
   const byDealer = {};
 
   entries.forEach(function (e) {
@@ -578,7 +579,7 @@ function agencySalesReport(data) {
       byDealer[dealerKey] = {
         dealerId: dealerKey, dealerName: e["ডিলার নাম"],
         totalSale: 0, totalDiscount: 0, totalPaid: 0, totalDue: 0,
-        totalOrders: 0, totalDelivered: 0, totalPending: 0
+        totalOrders: 0, totalDelivered: 0, totalPending: 0, totalCommission: 0
       };
     }
     byDealer[dealerKey].totalSale += Number(e["মোট মূল্য"]) || 0;
@@ -602,9 +603,28 @@ function agencySalesReport(data) {
     }
   });
 
+  // ---- কমিশন: এজেন্সি থেকে ডিলারকে প্রদত্ত কমিশন (Commission ট্যাব), একই সময়/ডিলার ফিল্টারে ----
+  genericListRows(getSheet(masterSS, "Commission")).forEach(function (c) {
+    if (data.dealerId && c["DealerID"] !== data.dealerId) return;
+    if (!isInReportPeriod(c["তারিখ"], data.mode, data)) return;
+    const amt = Number(c["টাকার পরিমাণ"]) || 0;
+    const key = c["DealerID"];
+    if (!byDealer[key]) {
+      // কমিশন পেয়েছে কিন্তু এই সময়ে কোনো অর্ডার নেই — তবুও তালিকায় দেখাবে
+      byDealer[key] = {
+        dealerId: key, dealerName: c["ডিলারের নাম"],
+        totalSale: 0, totalDiscount: 0, totalPaid: 0, totalDue: 0,
+        totalOrders: 0, totalDelivered: 0, totalPending: 0, totalCommission: 0
+      };
+    }
+    byDealer[key].totalCommission += amt;
+    totalCommission += amt;
+  });
+
   return {
     success: true,
     report: {
+      totalCommission: totalCommission,
       totalInvoiceCount: Object.keys(seenInvoices).length,
       totalOrders: totalOrders,
       totalDelivered: totalDelivered,
@@ -650,6 +670,99 @@ function isInReportPeriod(dateVal, mode, data) {
   }
   if (mode === "yearly" && data.year) return d.getFullYear() === Number(data.year);
   return true;
+}
+
+/*=========================================================
+ *  বর্তমান স্টক (পণ্য + ব্র্যান্ড ভিত্তিক) — শুধু ডিপু (AGENCY)
+ *  মোট পরিমাণ = স্টক ভাউচারে মোট ক্রয় − বিক্রিত প্যাকেজে ব্যবহৃত পরিমাণ
+ *  (বিক্রি হিসাব depotReport এর মতোই: সব ইনভয়েস লাইন × সংখ্যা)
+ *  মোট মূল্য = বর্তমান পরিমাণ × গড় ক্রয় মূল্য
+ *  প্যাকেজের পণ্য ফ্রি-টেক্সট ("নাম ও পরিমাণ") তাই পণ্যের নাম/পরিমাণ/ব্র্যান্ড
+ *  লেখার সাথে মিলিয়ে চিহ্নিত করা হয়; যেটা মেলে না সেটা unmatched এ ফেরত যায়
+ *  data: { token }
+ *=======================================================*/
+function normStockText(v) {
+  const bn = "০১২৩৪৫৬৭৮৯";
+  return String(v == null ? "" : v)
+    .replace(/[০-৯]/g, function (d) { return String(bn.indexOf(d)); })
+    .toLowerCase()
+    .replace(/[\s.,;:\-_\/()]+/g, "");
+}
+
+function currentStockReport(data) {
+  const perm = checkAgencyPermission(data.token);
+  if (!perm.ok) return { success: false, message: perm.message };
+
+  const masterSS = getMasterSS();
+  const products = genericListRows(getSheet(masterSS, "Products"));
+  const vouchers = genericListRows(getSheet(masterSS, "StockInVoucher"));
+  const packages = genericListRows(getSheet(masterSS, "Packages"));
+  const sales = genericListRows(getSheet(masterSS, "SalesInvoice"));
+
+  // ---- পণ্য (ProductID ধরে) ----
+  const stock = {};
+  function ensure(id, name, brand, poriman) {
+    if (!stock[id]) {
+      stock[id] = { productId: id, name: name || "", brand: brand || "", poriman: poriman || "", qtyIn: 0, valueIn: 0, used: 0 };
+    }
+    return stock[id];
+  }
+  products.forEach(function (p) {
+    ensure(p["ProductID"], p["পণ্যের নাম"], p["ব্র্যান্ড"], p["পরিমাণ"]);
+  });
+  vouchers.forEach(function (v) {
+    const row = ensure(v["ProductID"], v["পণ্যের নাম"], v["ব্র্যান্ড"], "");
+    if (!row.name) row.name = v["পণ্যের নাম"] || "";
+    if (!row.brand && v["ব্র্যান্ড"]) row.brand = v["ব্র্যান্ড"];
+    row.qtyIn += Number(v["সংখ্যা"]) || 0;
+    row.valueIn += Number(v["মোট মূল্য"]) || 0;
+  });
+
+  // ---- প্যাকেজের প্রতিটি পণ্য-লাইন → সবচেয়ে মিলে যাওয়া পণ্য ----
+  const list = Object.keys(stock).map(function (k) {
+    const r = stock[k];
+    return { r: r, n: normStockText(r.name), pq: normStockText(r.poriman), b: normStockText(r.brand) };
+  }).filter(function (x) { return x.n !== ""; });
+
+  const unmatched = {};
+  const pkgItemProducts = {};   // PackageID → [পণ্যের stock রো, ...]
+  packages.forEach(function (pkg) {
+    const matched = [];
+    for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
+      const text = pkg["পণ্য" + i + " - নাম ও পরিমাণ"];
+      if (!text) continue;
+      const t = normStockText(text);
+      let best = null, bestScore = -1;
+      list.forEach(function (x) {
+        if (t.indexOf(x.n) === -1) return;
+        const score = x.n.length + (x.pq && t.indexOf(x.pq) !== -1 ? x.pq.length + 100 : 0) + (x.b && t.indexOf(x.b) !== -1 ? x.b.length + 50 : 0);
+        if (score > bestScore) { bestScore = score; best = x; }
+      });
+      if (best) matched.push(best.r); else unmatched[String(text).trim()] = true;
+    }
+    pkgItemProducts[pkg["PackageID"]] = matched;
+  });
+
+  // ---- বিক্রিত প্যাকেজ অনুযায়ী ব্যবহৃত পরিমাণ ----
+  sales.forEach(function (e) {
+    const qty = Number(e["সংখ্যা"]) || 0;
+    (pkgItemProducts[e["PackageID"]] || []).forEach(function (r) { r.used += qty; });
+  });
+
+  const rows = Object.keys(stock).map(function (k) {
+    const r = stock[k];
+    const qty = r.qtyIn - r.used;
+    const avg = r.qtyIn > 0 ? r.valueIn / r.qtyIn : 0;
+    return {
+      productId: r.productId, name: r.name, brand: r.brand,
+      qty: qty, value: Math.round(qty * avg * 100) / 100
+    };
+  }).filter(function (r) { return r.name !== ""; })
+    .sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name), "bn") || String(a.brand).localeCompare(String(b.brand), "bn");
+    });
+
+  return { success: true, rows: rows, unmatched: Object.keys(unmatched) };
 }
 
 function depotReport(data) {
