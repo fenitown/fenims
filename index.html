@@ -275,6 +275,7 @@
   .sv-foot{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:14px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
   .sv-sum{ display:flex; gap:10px; flex-wrap:wrap; }
   .sv-sum .sv-field{ width:130px; }
+  .sv-ro{ padding:7px 9px; font-size:0.95rem; font-weight:700; background:#f4f7f5; border-radius:8px; border:1px solid #e1e8e4; }
   .sv-sum .sv-ro{ padding:7px 9px; font-size:0.95rem; font-weight:700; background:#f4f7f5; border-radius:8px; border:1px solid #e1e8e4; }
   .sv-sum .sv-ro.due{ color:#b5502f; }
   @media (max-width:640px){
@@ -556,7 +557,7 @@
     <section class="section" id="sec-management">
       <h2>ব্যবস্থাপনা</h2>
       <div class="tabs no-print">
-        <button class="active" onclick="switchMgmtTab('agencyInfo', this)">ডিপু সেটাপ</button>
+        <button onclick="switchMgmtTab('agencyInfo', this)">ডিপু সেটাপ</button>
         <button onclick="switchMgmtTab('aboutInfo', this)">সংস্থার তথ্য</button>
       </div>
       <div id="mgmtContent"></div>
@@ -566,7 +567,7 @@
     <section class="section" id="sec-dealerMgmt">
       <h2>ডিলার</h2>
       <div class="tabs no-print" id="dealerMgmtTabs">
-        <button class="active" onclick="switchDealerMgmtTab('register', this)">ডিলার রেজিস্ট্রেশন</button>
+        <button onclick="switchDealerMgmtTab('register', this)">ডিলার রেজিস্ট্রেশন</button>
         <button onclick="switchDealerMgmtTab('dealerList', this)">ডিলার লিস্ট</button>
       </div>
       <div id="dealerMgmtContent"></div>
@@ -605,6 +606,8 @@
 
     <section class="section" id="sec-agencyExpense">
       <h2>খরচ ভাউচার</h2>
+      <div class="toolbar no-print"><button class="btn secondary" id="expToggleBtn" onclick="toggleFormBox('expFormBox','expToggleBtn')">খরচ ভাউচার ফরম</button></div>
+      <div id="expFormBox" style="display:none;">
       <fieldset class="no-print">
         <legend>নতুন খরচ ভাউচার (একাধিক সারি যোগ করা যাবে)</legend>
         <div class="form-grid">
@@ -619,6 +622,7 @@
         <div class="btn-row"><button class="btn" onclick="submitAgencyExpense()">সংরক্ষণ করুন</button></div>
         <div id="agencyExpenseMsg" class="msg"></div>
       </fieldset>
+      </div>
       <div class="toolbar no-print">
         <input type="text" id="agencyExpSearchBox" placeholder="🔍 সার্চ করুন (বিবরণ/ভাউচার নং)" oninput="renderAgencyExpenseTable()" style="flex:1;min-width:160px;">
         <button class="btn secondary small" onclick="printAgencyExpensesListOfficial()">🖨 প্রিন্ট করুন</button>
@@ -629,6 +633,8 @@
     <!-- ================= আয় রশিদ (ডিপু ও ডিলার — দুই সাইটেই) ================= -->
     <section class="section" id="sec-income">
       <h2>আয় রশিদ</h2>
+      <div class="toolbar no-print"><button class="btn secondary" id="incToggleBtn" onclick="toggleFormBox('incFormBox','incToggleBtn')">আয় রশিদ ফরম</button></div>
+      <div id="incFormBox" style="display:none;">
       <fieldset class="no-print">
         <legend>নতুন আয় রশিদ (একাধিক সারি যোগ করা যাবে)</legend>
         <div class="form-grid">
@@ -646,6 +652,7 @@
         <div class="btn-row"><button class="btn" id="incSaveBtn" onclick="submitIncomeReceipt()">সংরক্ষণ করুন</button></div>
         <div id="incMsg" class="msg"></div>
       </fieldset>
+      </div>
       <div class="toolbar no-print">
         <input type="text" id="incSearchBox" placeholder="🔍 সার্চ করুন (বিবরণ/রশিদ নং)" oninput="renderIncomeTable()" style="flex:1;min-width:160px;">
         <button class="btn secondary small" onclick="printIncomeListOfficial()">🖨 প্রিন্ট</button>
@@ -696,6 +703,7 @@
       <div class="toolbar no-print">
         <button class="btn secondary" id="stockBtnProducts" onclick="switchStockTab('products', this)">পণ্য তালিকা</button>
         <button class="btn secondary" id="stockBtnStockIn" onclick="switchStockTab('stockIn', this)">স্টক ভাউচার</button>
+        <button class="btn secondary" id="stockBtnCurrent" onclick="switchStockTab('current', this)">বর্তমান স্টক</button>
       </div>
       <div id="stockTabContent"></div>
     </section>
@@ -2271,7 +2279,7 @@ function showSection(name){
   closeAllSubMenus();              // সেকশনে গেলে (বা অন্য মেনুতে ক্লিক করলে) সব সাবমেনু বন্ধ
 
   if(name === "agencyDashboard") loadAgencyDashboard();
-  if(name === "management") switchMgmtTab("agencyInfo", document.querySelector("#sec-management .tabs button"));
+  if(name === "management") closeMgmt();
   if(name === "dealerMgmt") openDealerMgmt();
   if(name === "agencyPackages") loadAgencyPackages();
   if(name === "agencyExpense") loadAgencyExpenses();
@@ -2363,8 +2371,19 @@ function fitAgencyCards(){
 window.addEventListener("resize", function(){ clearTimeout(window.__fitCardsT); window.__fitCardsT = setTimeout(fitAgencyCards, 200); });
 
 /* ================= এজেন্সি: ব্যবস্থাপনা ================= */
-function switchMgmtTab(tab, btn){
+let mgmtOpenTab = "";
+function closeMgmt(){
+  mgmtOpenTab = "";
   document.querySelectorAll("#sec-management .tabs button").forEach(b => b.classList.remove("active"));
+  const box = document.getElementById("mgmtContent");
+  if(box) box.innerHTML = "";
+}
+/* ডিপু সেটাপ / সংস্থার তথ্য — বাটনে ক্লিকে ফরম দেখায়, আবার ক্লিকে বন্ধ */
+function switchMgmtTab(tab, btn){
+  const wasOpen = (mgmtOpenTab === tab);
+  closeMgmt();
+  if(wasOpen) return;
+  mgmtOpenTab = tab;
   if(btn) btn.classList.add("active");
   const box = document.getElementById("mgmtContent");
   if(tab === "aboutInfo") renderAboutInfoEdit(box);
@@ -2372,10 +2391,16 @@ function switchMgmtTab(tab, btn){
 }
 
 /* ================= এজেন্সি: ডিলার (রেজিস্ট্রেশন + লিস্ট) ================= */
+let dealerMgmtTab = "";
+function markDealerMgmtTab(tab){
+  dealerMgmtTab = tab;
+  const bs = document.querySelectorAll("#dealerMgmtTabs button");
+  if(bs.length >= 2){ bs[0].classList.toggle("active", tab === "register"); bs[1].classList.toggle("active", tab === "dealerList"); }
+}
 function switchDealerMgmtTab(tab, btn){
-  document.querySelectorAll("#sec-dealerMgmt .tabs button").forEach(b => b.classList.remove("active"));
-  if(btn) btn.classList.add("active");
   const box = document.getElementById("dealerMgmtContent");
+  // রেজিস্ট্রেশন ফরম খোলা থাকলে বাটনে আবার ক্লিক = ফরম বন্ধ (ডিলার লিস্টে ফিরে যায়)
+  if(tab === "register" && dealerMgmtTab === "register") tab = "dealerList";
   if(tab === "dealerList") renderDealersList(box);
   else renderRegisterForm(box);
 }
@@ -2415,6 +2440,7 @@ async function saveAboutInfo(){
 
 function renderRegisterForm(box){
   editingDealerId = null;
+  if(box && box.id === "dealerMgmtContent") markDealerMgmtTab("register");
   box.innerHTML = `
     <div class="official-letterhead">
       <div class="ol-title">ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</div>
@@ -2632,6 +2658,7 @@ async function submitRegister(){
 }
 
 async function renderDealersList(box){
+  if(box && box.id === "dealerMgmtContent") markDealerMgmtTab("dealerList");
   box.innerHTML = "লোড হচ্ছে...";
   const res = await cachedApiCall("listDealers", {}, 60000);
   if(!res.success){ box.innerHTML = "<p>"+res.message+"</p>"; return; }
@@ -2742,7 +2769,8 @@ function openDealerMgmt(){
   const box = document.getElementById("dealerMgmtContent");
   if(state.dealerId === "AGENCY"){
     tabs.style.display = "";
-    switchDealerMgmtTab("register", tabs.querySelector("button"));
+    dealerMgmtTab = "";
+    switchDealerMgmtTab("dealerList", null);      // শুরুতে ডিলার লিস্ট; "ডিলার রেজিস্ট্রেশন" বাটনে ফরম খোলে/বন্ধ হয়
   } else {
     tabs.style.display = "none";
     box.innerHTML = `
@@ -3535,12 +3563,23 @@ let stockFormOpen = false;          // বাটনে ক্লিকে ফর
 let productsCache = [];
 let stockVouchersCache = [];
 
+/* ফরম বাটনে: ক্লিকে দেখায়, আবার ক্লিকে বন্ধ */
+function toggleFormBox(boxId, btnId){
+  const box = document.getElementById(boxId), btn = document.getElementById(btnId);
+  if(!box) return;
+  const open = box.style.display === "none";
+  box.style.display = open ? "block" : "none";
+  if(btn) btn.className = "btn" + (open ? "" : " secondary");
+}
+
 function openStockSection(){
   stockCurrentTab = "products"; stockFormOpen = false;
   renderStockTab();
 }
 function renderStockTab(){
-  if(stockCurrentTab === "products") renderProductsTab(); else renderStockInTab();
+  if(stockCurrentTab === "products") renderProductsTab();
+  else if(stockCurrentTab === "current") renderCurrentStockTab();
+  else renderStockInTab();
   applyStockFormState();
 }
 function applyStockFormState(){
@@ -3549,6 +3588,8 @@ function applyStockFormState(){
   const bp = document.getElementById("stockBtnProducts"), bs = document.getElementById("stockBtnStockIn");
   if(bp) bp.className = "btn" + ((stockCurrentTab === "products" && stockFormOpen) ? "" : " secondary");
   if(bs) bs.className = "btn" + ((stockCurrentTab === "stockIn" && stockFormOpen) ? "" : " secondary");
+  const bc = document.getElementById("stockBtnCurrent");
+  if(bc) bc.className = "btn" + ((stockCurrentTab === "current" && stockFormOpen) ? "" : " secondary");
 }
 function switchStockTab(tab, btn){
   if(tab === stockCurrentTab){ stockFormOpen = !stockFormOpen; applyStockFormState(); return; }
@@ -3676,6 +3717,101 @@ function printProductsListOfficial(){
   const headers = ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "পরিমাণ"];
   const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["পরিমাণ"]||""]);
   printOfficialTable("পণ্য তালিকা", "মোট পণ্য: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [1,2]);
+}
+
+/* ================= এজেন্সি: বর্তমান স্টক ================= */
+let currentStockRows = [], currentStockUnmatched = [];
+
+function renderCurrentStockTab(){
+  const box = document.getElementById("stockTabContent");
+  box.innerHTML = `
+    <div id="stockFormWrap" style="display:none;">
+    <fieldset class="no-print sv-form">
+      <legend>বর্তমান স্টক</legend>
+      <div class="sv-head" style="border:0;margin:0;padding:0;">
+        <div class="sv-field" style="width:230px;"><label>পণ্যের নাম</label><select id="csName" onchange="onCsNameChange()"></select></div>
+        <div class="sv-field" style="width:200px;"><label>ব্র্যান্ড</label><select id="csBrand" onchange="renderCurrentStockTable()"></select></div>
+        <div class="sv-field" style="width:140px;"><label>মোট পরিমাণ</label><div class="sv-ro" id="csQty">0</div></div>
+        <div class="sv-field" style="width:160px;"><label>মোট মূল্য</label><div class="sv-ro" id="csVal">0</div></div>
+      </div>
+    </fieldset>
+    </div>
+    <div class="toolbar no-print">
+      <button class="btn secondary small" onclick="printCurrentStock()">🖨 প্রিন্ট করুন</button>
+    </div>
+    <div class="table-wrap"><table id="currentStockTable"><thead></thead><tbody></tbody></table></div>
+    <div id="csNote" style="font-size:0.8rem;color:var(--muted);margin-top:6px;"></div>`;
+  loadCurrentStock();
+}
+
+async function loadCurrentStock(){
+  const res = await apiCall("currentStockReport", {});
+  currentStockRows = res.success ? res.rows : [];
+  currentStockUnmatched = res.success ? (res.unmatched || []) : [];
+  if(!document.getElementById("csName")) return;
+  const names = [...new Set(currentStockRows.map(r => r.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "bn"));
+  document.getElementById("csName").innerHTML = '<option value="">সকল</option>' + names.map(n => `<option value="${escAttr(n)}">${escAttr(n)}</option>`).join("");
+  fillCsBrands();
+  renderCurrentStockTable();
+}
+
+/* পণ্য বাছলে ব্র্যান্ডের তালিকা শুধু সেই পণ্যের ব্র্যান্ডে সীমিত হয় */
+function fillCsBrands(){
+  const name = document.getElementById("csName").value;
+  const brands = [...new Set(currentStockRows.filter(r => !name || r.name === name).map(r => r.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, "bn"));
+  const sel = document.getElementById("csBrand");
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">সকল</option>' + brands.map(b => `<option value="${escAttr(b)}">${escAttr(b)}</option>`).join("");
+  if(brands.indexOf(keep) !== -1) sel.value = keep;
+}
+function onCsNameChange(){ fillCsBrands(); renderCurrentStockTable(); }
+
+function currentStockFiltered(){
+  const name = document.getElementById("csName") ? document.getElementById("csName").value : "";
+  const brand = document.getElementById("csBrand") ? document.getElementById("csBrand").value : "";
+  return currentStockRows.filter(r => (!name || r.name === name) && (!brand || r.brand === brand));
+}
+
+function renderCurrentStockTable(){
+  const table = document.getElementById("currentStockTable");
+  if(!table) return;
+  const list = currentStockFiltered();
+  let qty = 0, val = 0;
+  list.forEach(r => { qty += Number(r.qty) || 0; val += Number(r.value) || 0; });
+  document.getElementById("csQty").textContent = qty;
+  document.getElementById("csVal").textContent = val;
+  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>মোট পরিমাণ</th><th>মোট মূল্য</th></tr></thead><tbody></tbody>";
+  const tbody = table.querySelector("tbody");
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(5, "কোনো তথ্য পাওয়া যায়নি"); }
+  else {
+    list.forEach((r, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${escAttr(r.name)}</td><td class="cell-left">${escAttr(r.brand)}</td><td>${r.qty}</td><td>${r.value}</td>`;
+      tbody.appendChild(tr);
+    });
+    const tf = document.createElement("tr");
+    tf.style.fontWeight = "700"; tf.style.background = "#eef0e9";
+    tf.innerHTML = `<td></td><td class="cell-left">সর্বমোট</td><td></td><td>${qty}</td><td>${val}</td>`;
+    tbody.appendChild(tf);
+  }
+  const note = document.getElementById("csNote");
+  if(note) note.textContent = currentStockUnmatched.length
+    ? "নোট: প্যাকেজের কিছু পণ্য-লাইন পণ্য তালিকার কোনো নামের সাথে মেলেনি, তাই সেগুলো বিক্রি হিসাবে ধরা হয়নি: " + currentStockUnmatched.join("; ")
+    : "";
+}
+
+/* A4 পোর্ট্রেটে প্রিন্ট */
+function printCurrentStock(){
+  const list = currentStockFiltered();
+  if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো তথ্য নেই"); return; }
+  const name = document.getElementById("csName").value || "সকল";
+  const brand = document.getElementById("csBrand").value || "সকল";
+  let qty = 0, val = 0;
+  list.forEach(r => { qty += Number(r.qty) || 0; val += Number(r.value) || 0; });
+  const rows = list.map((r, i) => [i+1, r.name, r.brand, r.qty, r.value]);
+  printOfficialTable("বর্তমান স্টক", "পণ্য: " + name + " | ব্র্যান্ড: " + brand + " | তারিখ: " + new Date().toLocaleDateString("bn-BD"),
+    ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "মোট পরিমাণ", "মোট মূল্য"], rows,
+    [["সর্বমোট", "", "", qty, val]], "@Powered by: AM Shahed: 01605721296", [1,2]);
 }
 
 /* ================= এজেন্সি: স্টক ভাউচার ================= */
@@ -4593,12 +4729,12 @@ async function runAgencyReport(){
   dealerReportCache = res.report;
 
   const r = res.report;
-  let html = `<div class="table-wrap"><table><thead><tr><th class="cell-left">ডিলার</th><th>অর্ডার</th><th>ডেলিভারী</th><th>পেন্ডিং</th><th>মোট মূল্য</th><th>পরিশোধ</th><th>বকেয়া</th></tr></thead><tbody>`;
+  let html = `<div class="table-wrap"><table><thead><tr><th class="cell-left">ডিলার</th><th>অর্ডার</th><th>ডেলিভারী</th><th>পেন্ডিং</th><th>মোট মূল্য</th><th>পরিশোধ</th><th>বকেয়া</th><th>কমিশন</th></tr></thead><tbody>`;
   r.byDealer.forEach(d => {
-    html += `<tr><td class="cell-left">${d.dealerName}</td><td>${d.totalOrders}</td><td>${d.totalDelivered}</td><td>${d.totalPending}</td><td>${d.totalSale}</td><td>${d.totalPaid}</td><td>${d.totalDue}</td></tr>`;
+    html += `<tr><td class="cell-left">${d.dealerName}</td><td>${d.totalOrders}</td><td>${d.totalDelivered}</td><td>${d.totalPending}</td><td>${d.totalSale}</td><td>${d.totalPaid}</td><td>${d.totalDue}</td><td>${Math.round(d.totalCommission||0)}</td></tr>`;
   });
-  if(r.byDealer.length === 0) html += emptyRowHtml(7, "এই সময়ে কোনো বিক্রি নেই");
-  html += `<tr style="font-weight:700;"><td class="cell-left">সর্বমোট</td><td>${r.totalOrders}</td><td>${r.totalDelivered}</td><td>${r.totalPending}</td><td>${r.totalSale}</td><td>${r.totalPaid}</td><td>${r.totalDue}</td></tr>`;
+  if(r.byDealer.length === 0) html += emptyRowHtml(8, "এই সময়ে কোনো বিক্রি নেই");
+  html += `<tr style="font-weight:700;"><td class="cell-left">সর্বমোট</td><td>${r.totalOrders}</td><td>${r.totalDelivered}</td><td>${r.totalPending}</td><td>${r.totalSale}</td><td>${r.totalPaid}</td><td>${r.totalDue}</td><td>${Math.round(r.totalCommission||0)}</td></tr>`;
   html += `</tbody></table></div>`;
   box.innerHTML = html;
 }
@@ -4611,10 +4747,10 @@ function printDealerReportTable(){
   else if(agencyReportCurrentTab === "monthly"){ data.year = document.getElementById("arYear").value; data.month = document.getElementById("arMonth").value; }
   else if(agencyReportCurrentTab === "yearly"){ data.year = document.getElementById("arYear").value; }
 
-  const headers = ["ডিলার", "অর্ডার", "ডেলিভারী", "পেন্ডিং", "মোট মূল্য", "পরিশোধ", "বকেয়া"];
-  const rows = r.byDealer.map(d => [d.dealerName, d.totalOrders, d.totalDelivered, d.totalPending, d.totalSale, d.totalPaid, d.totalDue]);
+  const headers = ["ডিলার", "অর্ডার", "ডেলিভারী", "পেন্ডিং", "মোট মূল্য", "পরিশোধ", "বকেয়া", "কমিশন"];
+  const rows = r.byDealer.map(d => [d.dealerName, d.totalOrders, d.totalDelivered, d.totalPending, d.totalSale, d.totalPaid, d.totalDue, Math.round(d.totalCommission||0)]);
   printOfficialTable("ডিলার রিপোর্ট", periodSubtitle(agencyReportCurrentTab, data), headers, rows,
-    [["সর্বমোট", r.totalOrders, r.totalDelivered, r.totalPending, r.totalSale, r.totalPaid, r.totalDue]],
+    [["সর্বমোট", r.totalOrders, r.totalDelivered, r.totalPending, r.totalSale, r.totalPaid, r.totalDue, Math.round(r.totalCommission||0)]],
     "@Powered by: AM Shahed: 01605721296", [0]);
 }
 
