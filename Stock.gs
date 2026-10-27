@@ -17,17 +17,14 @@ function addProduct(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "Products");
+  ensureSheetColumns(sheet, ["পরিমাণ"]);   // পুরনো শীটে "পরিমাণ" কলাম না থাকলে নিজে যোগ হয়
   const productId = generateId(sheet, "PR");
-  const marketPrice = Number(data.marketPrice) || 0;
-  const comboPrice = Number(data.comboPrice) || 0;
 
   genericAddRow(sheet, {
     "ProductID": productId,
     "পণ্যের নাম": data.নাম,
     "ব্র্যান্ড": data.brand,
-    "বাজার মূল্য": marketPrice,
-    "কম্বো মূল্য": comboPrice,
-    "সাশ্রয়ী": marketPrice - comboPrice
+    "পরিমাণ": data.poriman || ""
   });
 
   invalidateAgencyCaches();
@@ -56,6 +53,7 @@ function updateProduct(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "Products");
+  ensureSheetColumns(sheet, ["পরিমাণ"]);
   const ok = genericUpdateRow(sheet, "ProductID", data.productId, data.fields || {});
   invalidateProductCache();
   return { success: ok, message: ok ? "পণ্য আপডেট হয়েছে" : "পণ্য পাওয়া যায়নি" };
@@ -85,17 +83,17 @@ function addStockVoucher(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "StockInVoucher");
+  ensureSheetColumns(sheet, ["ব্র্যান্ড", "ক্রয় মূল্য"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
   const voucherNo = "SV" + Utilities.formatString("%06d", Math.floor(Math.random() * 900000) + 100000);
   const now = data.date ? new Date(data.date) : new Date();
 
   const items = data.items || [];
   let grandTotal = 0;
   const lineData = items.map(function (item) {
-    const marketPrice = Number(item.marketPrice) || 0;
-    const comboPrice = Number(item.comboPrice) || 0;
-    const total = (Number(item.quantity) || 0) * comboPrice;
+    const purchasePrice = Number(item.purchasePrice) || 0;
+    const total = (Number(item.quantity) || 0) * purchasePrice;
     grandTotal += total;
-    return { item: item, marketPrice: marketPrice, comboPrice: comboPrice, total: total };
+    return { item: item, purchasePrice: purchasePrice, total: total };
   });
   const paid = Number(data.paid) || 0;
   const due = grandTotal - paid;
@@ -106,9 +104,8 @@ function addStockVoucher(data) {
       "তারিখ": now,
       "ProductID": ld.item.productId,
       "পণ্যের নাম": ld.item.productName || "",
-      "বাজার মূল্য": ld.marketPrice,
-      "কম্বো মূল্য": ld.comboPrice,
-      "সাশ্রয়ী": ld.marketPrice - ld.comboPrice,
+      "ব্র্যান্ড": ld.item.brand || "",
+      "ক্রয় মূল্য": ld.purchasePrice,
       "সংখ্যা": ld.item.quantity,
       "মোট মূল্য": ld.total,
       "সর্বমোট": grandTotal,
@@ -119,7 +116,7 @@ function addStockVoucher(data) {
 
   batchAppendRows(sheet, rows, "SVE", "EntryID");
 
-  return { success: true, voucherNo: voucherNo, total: grandTotal, paid: paid, due: due, message: "স্টক ইন ভাউচার যোগ হয়েছে" };
+  return { success: true, voucherNo: voucherNo, total: grandTotal, paid: paid, due: due, message: "স্টক ভাউচার যোগ হয়েছে" };
 }
 
 function listStockVouchers(data) {
@@ -137,6 +134,7 @@ function updateStockVoucherEntry(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "StockInVoucher");
+  ensureSheetColumns(sheet, ["ব্র্যান্ড", "ক্রয় মূল্য"]);
   const ok = genericUpdateRow(sheet, "EntryID", data.entryId, data.fields || {});
   return { success: ok, message: ok ? "আপডেট হয়েছে" : "এন্ট্রি পাওয়া যায়নি" };
 }

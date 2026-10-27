@@ -171,6 +171,12 @@
   .card{ background:var(--card); border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:14px; padding:14px; }
   .card .num{ font-size:1.6rem; font-weight:700; color:var(--teal-dark); }
   .card .label{ font-size:0.82rem; color:var(--muted); margin-top:2px; }
+  /* ডিপু ড্যাশবোর্ড — কার্ড আগের চেয়ে চওড়া, সবগুলো সমান সাইজ; লেখা বড় হলে JS ছোট করে কার্ডের ভেতরেই বসায় */
+  #agencyDashboardCards{ grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); grid-auto-rows:118px; gap:12px; }
+  #agencyDashboardCards .card{ display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; padding:10px 14px; box-sizing:border-box; }
+  #agencyDashboardCards .card .num{ line-height:1.15; white-space:nowrap; }
+  #agencyDashboardCards .card .label{ line-height:1.3; overflow-wrap:anywhere; }
+  @media (max-width:640px){ #agencyDashboardCards{ grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:128px; gap:10px; } }
 
   /* ---------- অফিসিয়াল ফরম্যাট (ডিলার রেজিস্ট্রেশন) ---------- */
   .official-letterhead{
@@ -246,12 +252,11 @@
   .si-totals-col .field{ width:100%; margin-bottom:0; }
   .si-totals-col .field label{ font-size:0.78rem; }
   .si-totals-col .field input{ padding:6px 8px; font-size:0.88rem; }
-  /* স্টক ইন ভাউচার — পণ্য তালিকা বক্স নির্দিষ্ট Width, মূল্য/সংখ্যার বক্স ছোট */
+  /* স্টক ভাউচার — পণ্যের নাম বক্স নির্দিষ্ট Width, ব্র্যান্ড মাঝারি, মূল্য/সংখ্যার বক্স ছোট */
   #stockInItems .item-row-v2 > select.stockInProduct{ flex:0 0 200px; width:200px; }
-  #stockInItems .item-row-v2 > input.itemBazar,
-  #stockInItems .item-row-v2 > input.itemCombo,
-  #stockInItems .item-row-v2 > input.itemSashroy,
-  #stockInItems .item-row-v2 > input.stockInQty{ flex:0 0 78px; width:78px; }
+  #stockInItems .item-row-v2 > input.stockInBrand{ flex:0 0 140px; width:140px; }
+  #stockInItems .item-row-v2 > input.stockInPrice,
+  #stockInItems .item-row-v2 > input.stockInQty{ flex:0 0 92px; width:92px; }
   .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
   .msg{ font-size:0.88rem; margin-top:8px; }
   .msg.ok{ color:var(--teal); }
@@ -569,25 +574,6 @@
       <div class="table-wrap"><table id="agencyPackagesTable"><thead></thead><tbody></tbody></table></div>
     </section>
 
-    <section class="section" id="sec-commission">
-      <h2>কমিশন</h2>
-      <fieldset class="no-print">
-        <legend>নতুন কমিশন এন্ট্রি</legend>
-        <div class="form-grid">
-          <div class="field"><label>ডিলারের নাম</label><select id="commDealerSelect" onchange="onCommissionDealerChange()"></select></div>
-          <div class="field"><label>মোবাইল নং (অটো)</label><input id="commMobile" readonly></div>
-          <div class="field"><label>ঠিকানা (অটো)</label><input id="commThikana" readonly></div>
-          <div class="field"><label>টাকার পরিমাণ</label><input id="commAmount" type="number" min="0"></div>
-        </div>
-        <div class="btn-row"><button class="btn" onclick="submitCommission()">সংরক্ষণ করুন</button></div>
-        <div id="commMsg" class="msg"></div>
-      </fieldset>
-      <div class="toolbar no-print">
-        <input type="text" id="commSearchBox" placeholder="🔍 সার্চ করুন (ডিলারের নাম)" oninput="loadCommissionList()" style="flex:1;min-width:160px;">
-        <button class="btn secondary small" onclick="window.print()">🖨 প্রিন্ট করুন</button>
-      </div>
-      <div class="table-wrap"><table id="commissionTable"><thead></thead><tbody></tbody></table></div>
-    </section>
 
     <section class="section" id="sec-agencyExpense">
       <h2>খরচ ভাউচার</h2>
@@ -679,9 +665,9 @@
     <!-- ================= স্টক ================= -->
     <section class="section" id="sec-stock">
       <h2>স্টক</h2>
-      <div class="tabs no-print">
-        <button class="active" onclick="switchStockTab('products', this)">পণ্য তালিকা</button>
-        <button onclick="switchStockTab('stockIn', this)">স্টক ইন ভাউচার</button>
+      <div class="toolbar no-print">
+        <button class="btn secondary" id="stockBtnProducts" onclick="switchStockTab('products', this)">পণ্য তালিকা</button>
+        <button class="btn secondary" id="stockBtnStockIn" onclick="switchStockTab('stockIn', this)">স্টক ভাউচার</button>
       </div>
       <div id="stockTabContent"></div>
     </section>
@@ -1616,7 +1602,6 @@ function buildSideMenu(){
       <button class="menu-item" onclick="showSection('agencyPackages')">প্যাকেজ</button>
       <button class="menu-item" onclick="showSection('stock')">স্টক</button>
       <button class="menu-item" onclick="showSection('salesInvoice')">অর্ডার ইনভয়েস</button>
-      <button class="menu-item" onclick="showSection('commission')">কমিশন</button>
       <button class="menu-item" onclick="toggleSubMenu('incExpSubMenu', this)">আয়-ব্যয় ▾</button>
       <div class="menu-sub" id="incExpSubMenu" style="display:none;">
         <button class="menu-item sub" onclick="showSection('income')">আয় রশিদ</button>
@@ -2261,10 +2246,9 @@ function showSection(name){
   if(name === "management") switchMgmtTab("agencyInfo", document.querySelector("#sec-management .tabs button"));
   if(name === "dealerMgmt") openDealerMgmt();
   if(name === "agencyPackages") loadAgencyPackages();
-  if(name === "commission") loadCommissionSetup();
   if(name === "agencyExpense") loadAgencyExpenses();
   if(name === "customerCards") loadCustomerCardsSetup();
-  if(name === "stock") switchStockTab("products", document.querySelector("#sec-stock .tabs button"));
+  if(name === "stock") openStockSection();
   if(name === "salesInvoice") loadSalesInvoiceSetup();
   if(name === "agencyReports") openReportsSection();
 
@@ -2331,7 +2315,24 @@ async function loadAgencyDashboard(){
     <div class="card"><div class="num">${r.totalPending}</div><div class="label">বর্তমান পেন্ডিং</div></div>
     <div class="card"><div class="num">${r.totalSalesAmount}</div><div class="label">মোট বিক্রি মূল্য</div></div>
     <div class="card"><div class="num">${r.totalDueFromDealers}</div><div class="label">মোট বকেয়া (ডিলারদের কাছে)</div></div>`;
+  fitAgencyCards();
 }
+
+/* কার্ডের লেখা বড় হলে ফন্ট ধাপে ধাপে ছোট করে কার্ডের মাপের ভেতরে বসানো (সব কার্ডের সাইজ সমানই থাকে) */
+function fitAgencyCards(){
+  document.querySelectorAll("#agencyDashboardCards .card").forEach(function(c){
+    const num = c.querySelector(".num"), lab = c.querySelector(".label");
+    if(!num || !lab || c.clientHeight === 0) return;
+    num.style.fontSize = ""; lab.style.fontSize = "";
+    let nf = parseFloat(getComputedStyle(num).fontSize), lf = parseFloat(getComputedStyle(lab).fontSize), guard = 0;
+    while((c.scrollHeight > c.clientHeight + 1 || num.scrollWidth > c.clientWidth - 28) && guard++ < 40){
+      if(lf > 9){ lf -= 0.5; lab.style.fontSize = lf + "px"; }
+      else if(nf > 14){ nf -= 1; num.style.fontSize = nf + "px"; }
+      else break;
+    }
+  });
+}
+window.addEventListener("resize", function(){ clearTimeout(window.__fitCardsT); window.__fitCardsT = setTimeout(fitAgencyCards, 200); });
 
 /* ================= এজেন্সি: ব্যবস্থাপনা ================= */
 function switchMgmtTab(tab, btn){
@@ -3500,30 +3501,43 @@ function printIncomeListOfficial(){
   );
 }
 
-/* ================= এজেন্সি: স্টক — পণ্য তালিকা ================= */
+/* ================= এজেন্সি: স্টক — পণ্য তালিকা ও স্টক ভাউচার ================= */
 let stockCurrentTab = "products";
+let stockFormOpen = false;          // বাটনে ক্লিকে ফরম খোলে, আবার ক্লিকে বন্ধ হয়
 let productsCache = [];
 let stockVouchersCache = [];
 
+function openStockSection(){
+  stockCurrentTab = "products"; stockFormOpen = false;
+  renderStockTab();
+}
+function renderStockTab(){
+  if(stockCurrentTab === "products") renderProductsTab(); else renderStockInTab();
+  applyStockFormState();
+}
+function applyStockFormState(){
+  const w = document.getElementById("stockFormWrap");
+  if(w) w.style.display = stockFormOpen ? "block" : "none";
+  const bp = document.getElementById("stockBtnProducts"), bs = document.getElementById("stockBtnStockIn");
+  if(bp) bp.className = "btn" + ((stockCurrentTab === "products" && stockFormOpen) ? "" : " secondary");
+  if(bs) bs.className = "btn" + ((stockCurrentTab === "stockIn" && stockFormOpen) ? "" : " secondary");
+}
 function switchStockTab(tab, btn){
-  stockCurrentTab = tab;
-  document.querySelectorAll("#sec-stock .tabs button").forEach(b => b.classList.remove("active"));
-  if(btn) btn.classList.add("active");
-  if(tab === "products") renderProductsTab();
-  else renderStockInTab();
+  if(tab === stockCurrentTab){ stockFormOpen = !stockFormOpen; applyStockFormState(); return; }
+  stockCurrentTab = tab; stockFormOpen = true;
+  renderStockTab();
 }
 
 function renderProductsTab(){
   const box = document.getElementById("stockTabContent");
   box.innerHTML = `
+    <div id="stockFormWrap" style="display:none;">
     <fieldset class="no-print">
       <legend id="prodFormLegend">নতুন পণ্য</legend>
       <div class="form-grid">
         <div class="field"><label>পণ্যের নাম</label><input id="prodNaam"></div>
         <div class="field"><label>ব্র্যান্ড</label><input id="prodBrand"></div>
-        <div class="field"><label>বাজার মূল্য</label><input id="prodBazar" type="number" min="0" oninput="updateProductSaving()"></div>
-        <div class="field"><label>কম্বো মূল্য</label><input id="prodCombo" type="number" min="0" oninput="updateProductSaving()"></div>
-        <div class="field"><label>সাশ্রয়ী</label><input id="prodSashroy" type="number" readonly></div>
+        <div class="field"><label>পরিমাণ</label><input id="prodPoriman" placeholder="যেমন: ১ কেজি / ৫০০ গ্রাম"></div>
       </div>
       <div class="btn-row">
         <button class="btn" id="prodSubmitBtn" onclick="submitProduct()">সংরক্ষণ করুন</button>
@@ -3531,6 +3545,7 @@ function renderProductsTab(){
       </div>
       <div id="prodMsg" class="msg"></div>
     </fieldset>
+    </div>
     <div class="toolbar no-print">
       <input type="text" id="prodSearchBox" placeholder="🔍 সার্চ করুন (নাম/ব্র্যান্ড)" oninput="renderProductsTable()" style="flex:1;min-width:160px;">
       <button class="btn secondary small" onclick="printProductsListOfficial()">🖨 প্রিন্ট করুন</button>
@@ -3554,12 +3569,12 @@ function renderProductsTable(){
   let list = productsCache;
   if(q) list = list.filter(p => (p["পণ্যের নাম"]||"").toLowerCase().includes(q) || (p["ব্র্যান্ড"]||"").toLowerCase().includes(q));
 
-  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>বাজার মূল্য</th><th>কম্বো মূল্য</th><th>সাশ্রয়ী</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>পরিমাণ</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
   const tbody = table.querySelector("tbody");
-  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(7, "এখনো কোনো পণ্য যোগ করা হয়নি"); return; }
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(5, "এখনো কোনো পণ্য যোগ করা হয়নি"); return; }
   list.forEach((p, i) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["বাজার মূল্য"]||0}</td><td>${p["কম্বো মূল্য"]||0}</td><td>${p["সাশ্রয়ী"]||0}</td>
+    tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["পরিমাণ"]||""}</td>
       <td class="no-print">
         <button class="btn icon small secondary" onclick="editProductRow('${p['ProductID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small danger" onclick="deleteProductRow('${p['ProductID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
@@ -3568,37 +3583,28 @@ function renderProductsTable(){
   });
 }
 
-function updateProductSaving(){
-  const bazar = Number(document.getElementById("prodBazar").value) || 0;
-  const combo = Number(document.getElementById("prodCombo").value) || 0;
-  document.getElementById("prodSashroy").value = bazar - combo;
-}
-
 async function submitProduct(){
   const msgBox = document.getElementById("prodMsg");
-  markSaving("prodMsg");
   const naam = document.getElementById("prodNaam").value.trim();
   const brand = document.getElementById("prodBrand").value.trim();
-  const bazar = document.getElementById("prodBazar").value;
-  const combo = document.getElementById("prodCombo").value;
-  const sashroy = (Number(bazar)||0) - (Number(combo)||0);
+  const poriman = document.getElementById("prodPoriman").value.trim();
+  if(!naam){ msgBox.textContent = "পণ্যের নাম দিন"; msgBox.className = "msg err"; return; }
+  markSaving("prodMsg");
 
   if(editingProductId){
-    const res = await apiCall("updateProduct", { productId: editingProductId, fields:{ "পণ্যের নাম":naam, "ব্র্যান্ড":brand, "বাজার মূল্য":bazar, "কম্বো মূল্য":combo, "সাশ্রয়ী":sashroy } });
+    const res = await apiCall("updateProduct", { productId: editingProductId, fields:{ "পণ্যের নাম":naam, "ব্র্যান্ড":brand, "পরিমাণ":poriman } });
     msgBox.textContent = res.message; msgBox.className = "msg " + (res.success?"ok":"err");
     if(res.success){ clearCache(); cancelProductEdit(); loadProducts(); }
     return;
   }
 
-  const res = await apiCall("addProduct", { "নাম":naam, brand, marketPrice:bazar, comboPrice:combo });
+  const res = await apiCall("addProduct", { "নাম":naam, brand, poriman });
   msgBox.textContent = res.message; msgBox.className = "msg " + (res.success?"ok":"err");
   if(res.success){
     clearCache();
     document.getElementById("prodNaam").value = "";
     document.getElementById("prodBrand").value = "";
-    document.getElementById("prodBazar").value = "";
-    document.getElementById("prodCombo").value = "";
-    document.getElementById("prodSashroy").value = "";
+    document.getElementById("prodPoriman").value = "";
     loadProducts();
   }
 }
@@ -3607,14 +3613,14 @@ function editProductRow(productId){
   const p = productsCache.find(x => x["ProductID"] === productId);
   if(!p) return;
   editingProductId = productId;
+  stockFormOpen = true; applyStockFormState();
   document.getElementById("prodFormLegend").textContent = "পণ্য এডিট — " + p["পণ্যের নাম"];
   document.getElementById("prodSubmitBtn").textContent = "আপডেট করুন";
   document.getElementById("prodCancelBtn").style.display = "inline-block";
   document.getElementById("prodNaam").value = p["পণ্যের নাম"] || "";
   document.getElementById("prodBrand").value = p["ব্র্যান্ড"] || "";
-  document.getElementById("prodBazar").value = p["বাজার মূল্য"] || "";
-  document.getElementById("prodCombo").value = p["কম্বো মূল্য"] || "";
-  updateProductSaving();
+  document.getElementById("prodPoriman").value = p["পরিমাণ"] || "";
+  document.getElementById("prodNaam").scrollIntoView({ behavior:"smooth", block:"center" });
 }
 
 function cancelProductEdit(){
@@ -3624,9 +3630,7 @@ function cancelProductEdit(){
   document.getElementById("prodCancelBtn").style.display = "none";
   document.getElementById("prodNaam").value = "";
   document.getElementById("prodBrand").value = "";
-  document.getElementById("prodBazar").value = "";
-  document.getElementById("prodCombo").value = "";
-  document.getElementById("prodSashroy").value = "";
+  document.getElementById("prodPoriman").value = "";
   document.getElementById("prodMsg").textContent = "";
 }
 
@@ -3641,17 +3645,27 @@ function printProductsListOfficial(){
   let list = productsCache;
   if(q) list = list.filter(p => (p["পণ্যের নাম"]||"").toLowerCase().includes(q) || (p["ব্র্যান্ড"]||"").toLowerCase().includes(q));
   if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো পণ্য নেই"); return; }
-  const headers = ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "বাজার মূল্য", "কম্বো মূল্য", "সাশ্রয়ী"];
-  const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["বাজার মূল্য"]||0, p["কম্বো মূল্য"]||0, p["সাশ্রয়ী"]||0]);
+  const headers = ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "পরিমাণ"];
+  const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["পরিমাণ"]||""]);
   printOfficialTable("পণ্য তালিকা", "মোট পণ্য: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [1,2]);
 }
 
-/* ================= এজেন্সি: স্টক ইন ভাউচার ================= */
+/* ================= এজেন্সি: স্টক ভাউচার ================= */
+/* পুরনো ভাউচারে "ক্রয় মূল্য" কলাম ছিল না — তখন কম্বো মূল্যই ক্রয় মূল্য ছিল (মোট = কম্বো × সংখ্যা) */
+function stkPrice(e){ const v = e["ক্রয় মূল্য"]; return (v !== undefined && v !== null && v !== "") ? v : (e["কম্বো মূল্য"] || 0); }
+function stkBrand(e){
+  if(e["ব্র্যান্ড"]) return e["ব্র্যান্ড"];
+  const p = productsCache.find(x => x["ProductID"] === e["ProductID"]);
+  return p ? (p["ব্র্যান্ড"] || "") : "";
+}
+function stkDate(e){ return e["তারিখ"] ? new Date(e["তারিখ"]).toLocaleDateString("bn-BD") : ""; }
+
 function renderStockInTab(){
   const box = document.getElementById("stockTabContent");
   box.innerHTML = `
+    <div id="stockFormWrap" style="display:none;">
     <fieldset class="no-print">
-      <legend>নতুন স্টক ইন ভাউচার (একাধিক পণ্য যোগ করা যাবে)</legend>
+      <legend>নতুন স্টক ভাউচার (একাধিক পণ্য যোগ করা যাবে)</legend>
       <div class="form-grid">
         <div class="field"><label>তারিখ</label><input id="stockInDate" type="date"></div>
       </div>
@@ -3664,6 +3678,7 @@ function renderStockInTab(){
       <div class="btn-row"><button class="btn" onclick="submitStockVoucher()">সংরক্ষণ করুন</button></div>
       <div id="stockInMsg" class="msg"></div>
     </fieldset>
+    </div>
     <div class="toolbar no-print">
       <input type="text" id="stockInSearchBox" placeholder="🔍 সার্চ করুন (ভাউচার নং/পণ্যের নাম)" oninput="renderStockInTable()" style="flex:1;min-width:160px;">
       <button class="btn secondary small" onclick="printStockVouchersListOfficial()">🖨 প্রিন্ট করুন</button>
@@ -3677,6 +3692,7 @@ async function loadStockVouchersSetup(){
     const res = await cachedApiCall("listProducts", {}, 20000);
     productsCache = res.success ? res.products : [];
   }
+  if(!document.getElementById("stockInDate")) return;     // ইতিমধ্যে অন্য ট্যাবে চলে গেলে
   if(!document.getElementById("stockInDate").value) document.getElementById("stockInDate").value = new Date().toISOString().slice(0,10);
   if(document.getElementById("stockInItems").children.length === 0) addStockInItemRow();
   updateStockInTotalsPreview();
@@ -3688,10 +3704,9 @@ function addStockInItemRow(){
   const row = document.createElement("div");
   row.className = "item-row-v2";
   row.innerHTML = `
-    <select class="stockInProduct" onchange="onStockInProductChange(this)">${productsCache.map(p => `<option value="${p['ProductID']}" data-bazar="${p['বাজার মূল্য']||0}" data-combo="${p['কম্বো মূল্য']||0}">${p['পণ্যের নাম']}</option>`).join("")}</select>
-    <input placeholder="বাজার মূল্য" type="number" min="0" class="itemBazar" oninput="updateItemSaving(this); updateStockInTotalsPreview();">
-    <input placeholder="কম্বো মূল্য" type="number" min="0" class="itemCombo" oninput="updateItemSaving(this); updateStockInTotalsPreview();">
-    <input placeholder="সাশ্রয়" type="number" class="itemSashroy" readonly>
+    <select class="stockInProduct" onchange="onStockInProductChange(this)">${productsCache.map(p => `<option value="${p['ProductID']}" data-brand="${String(p['ব্র্যান্ড']||'').replace(/"/g,'&quot;')}">${p['পণ্যের নাম']}</option>`).join("")}</select>
+    <input placeholder="ব্র্যান্ড" class="stockInBrand">
+    <input placeholder="ক্রয় মূল্য" type="number" min="0" class="stockInPrice" oninput="updateStockInTotalsPreview()">
     <input placeholder="সংখ্যা" type="number" min="1" class="stockInQty" oninput="updateStockInTotalsPreview()">
     <button type="button" class="btn secondary small" onclick="this.parentElement.remove(); updateStockInTotalsPreview();">✕</button>`;
   wrap.appendChild(row);
@@ -3701,11 +3716,7 @@ function addStockInItemRow(){
 function onStockInProductChange(sel){
   const row = sel.closest(".item-row-v2");
   const opt = sel.options[sel.selectedIndex];
-  if(opt){
-    row.querySelector(".itemBazar").value = opt.dataset.bazar || 0;
-    row.querySelector(".itemCombo").value = opt.dataset.combo || 0;
-    updateItemSaving(row.querySelector(".itemCombo"));
-  }
+  if(opt) row.querySelector(".stockInBrand").value = opt.dataset.brand || "";
   updateStockInTotalsPreview();
 }
 
@@ -3713,9 +3724,9 @@ function updateStockInTotalsPreview(){
   const rows = [...document.querySelectorAll("#stockInItems .item-row-v2")];
   let total = 0;
   rows.forEach(r => {
-    const combo = Number(r.querySelector(".itemCombo").value) || 0;
+    const price = Number(r.querySelector(".stockInPrice").value) || 0;
     const qty = Number(r.querySelector(".stockInQty").value) || 0;
-    total += combo * qty;
+    total += price * qty;
   });
   const paid = Number(document.getElementById("stockInPaid").value) || 0;
   const due = total - paid;
@@ -3730,8 +3741,8 @@ async function submitStockVoucher(){
     return {
       productId: sel.value,
       productName: opt ? opt.textContent : "",
-      marketPrice: r.querySelector(".itemBazar").value,
-      comboPrice: r.querySelector(".itemCombo").value,
+      brand: r.querySelector(".stockInBrand").value.trim(),
+      purchasePrice: r.querySelector(".stockInPrice").value,
       quantity: r.querySelector(".stockInQty").value
     };
   }).filter(i => i.productId && i.quantity);
@@ -3769,13 +3780,12 @@ function renderStockInTable(){
   let list = stockVouchersCache;
   if(q) list = list.filter(e => (e["ভাউচার নং"]||"").toLowerCase().includes(q) || (e["পণ্যের নাম"]||"").toLowerCase().includes(q));
 
-  table.innerHTML = "<thead><tr><th>ভাউচার নং</th><th>তারিখ</th><th class='cell-left'>পণ্যের নাম</th><th>বাজার মূল্য</th><th>কম্বো মূল্য</th><th>সাশ্রয়ী</th><th>সংখ্যা</th><th>মোট মূল্য</th><th>সর্বমোট</th><th>পরিশোধ</th><th>বকেয়া</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  table.innerHTML = "<thead><tr><th>ভাউচার নং</th><th>তারিখ</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>ক্রয় মূল্য</th><th>সংখ্যা</th><th>মোট মূল্য</th><th>সর্বমোট</th><th>পরিশোধ</th><th>বকেয়া</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
   const tbody = table.querySelector("tbody");
-  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(12, "এখনো কোনো স্টক ইন ভাউচার নেই"); return; }
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(11, "এখনো কোনো স্টক ভাউচার নেই"); return; }
   list.forEach(e => {
-    const dt = e["তারিখ"] ? new Date(e["তারিখ"]).toLocaleDateString("bn-BD") : "";
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${dt}</td><td class="cell-left">${e["পণ্যের নাম"]}</td><td>${e["বাজার মূল্য"]}</td><td>${e["কম্বো মূল্য"]}</td><td>${e["সাশ্রয়ী"]}</td><td>${e["সংখ্যা"]}</td><td>${e["মোট মূল্য"]}</td><td>${e["সর্বমোট"]||0}</td><td>${e["পরিশোধ"]||0}</td><td>${e["বকেয়া"]||0}</td>
+    tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${stkDate(e)}</td><td class="cell-left">${e["পণ্যের নাম"]}</td><td class="cell-left">${stkBrand(e)}</td><td>${stkPrice(e)}</td><td>${e["সংখ্যা"]}</td><td>${e["মোট মূল্য"]}</td><td>${e["সর্বমোট"]||0}</td><td>${e["পরিশোধ"]||0}</td><td>${e["বকেয়া"]||0}</td>
       <td class="no-print">
         <button class="btn icon small secondary" onclick="editStockEntryRow('${e['EntryID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printStockVoucherById('${e['ভাউচার নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
@@ -3789,12 +3799,11 @@ function editStockEntryRow(entryId){
   const e = stockVouchersCache.find(x => x["EntryID"] === entryId);
   if(!e) return;
   openEditModal("স্টক এন্ট্রি এডিট", [
-    { key:"বাজার মূল্য", label:"বাজার মূল্য", value:e["বাজার মূল্য"] },
-    { key:"কম্বো মূল্য", label:"কম্বো মূল্য", value:e["কম্বো মূল্য"] },
+    { key:"ব্র্যান্ড", label:"ব্র্যান্ড", value:stkBrand(e) },
+    { key:"ক্রয় মূল্য", label:"ক্রয় মূল্য", value:stkPrice(e) },
     { key:"সংখ্যা", label:"সংখ্যা", value:e["সংখ্যা"] }
   ], async (values) => {
-    values["সাশ্রয়ী"] = (Number(values["বাজার মূল্য"])||0) - (Number(values["কম্বো মূল্য"])||0);
-    values["মোট মূল্য"] = (Number(values["কম্বো মূল্য"])||0) * (Number(values["সংখ্যা"])||0);
+    values["মোট মূল্য"] = (Number(values["ক্রয় মূল্য"])||0) * (Number(values["সংখ্যা"])||0);
     const res = await apiCall("updateStockVoucherEntry", { entryId, fields: values });
     if(res.success){ clearCache(); loadStockVouchers(); }
     return res;
@@ -3807,19 +3816,70 @@ async function deleteStockVoucherByNo(voucherNo){
   if(res.success){ clearCache(); loadStockVouchers(); } else alert(res.message);
 }
 
+/* ভাউচার প্রিন্ট — শুধু পণ্যের টেবিলে বর্ডার; সর্বমোট/পরিশোধ/বকেয়া বর্ডারহীন; তারিখ ডানে; নিচে বিক্রয়কারী ও ক্রেতার স্বাক্ষর */
 function printStockVoucherById(voucherNo){
   const lines = stockVouchersCache.filter(e => e["ভাউচার নং"] === voucherNo);
   if(lines.length === 0) return;
   const first = lines[0];
-  const headers = ["ক্রম", "পণ্যের নাম", "বাজার মূল্য", "কম্বো মূল্য", "সাশ্রয়ী", "সংখ্যা", "মোট মূল্য"];
-  const rows = lines.map((e, i) => [i+1, e["পণ্যের নাম"], e["বাজার মূল্য"], e["কম্বো মূল্য"], e["সাশ্রয়ী"], e["সংখ্যা"], e["মোট মূল্য"]]);
-  printOfficialTable(
-    "স্টক ইন ভাউচার — " + voucherNo,
-    "তারিখ: " + (first["তারিখ"] ? new Date(first["তারিখ"]).toLocaleDateString("bn-BD") : ""),
-    headers, rows,
-    [["", "", "", "", "", "সর্বমোট", first["সর্বমোট"]||0], ["", "", "", "", "", "পরিশোধ", first["পরিশোধ"]||0], ["", "", "", "", "", "বকেয়া", first["বকেয়া"]||0]],
-    "@Powered by: AM Shahed: 01605721296", [1]
-  );
+  const rowsHtml = lines.map((e, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td class="cell-left">${e["পণ্যের নাম"]||""}</td>
+      <td class="cell-left">${stkBrand(e)}</td>
+      <td>${stkPrice(e)}</td>
+      <td>${e["সংখ্যা"]||0}</td>
+      <td>${e["মোট মূল্য"]||0}</td>
+    </tr>`).join("");
+
+  const win = window.open("", "_blank", "width=900,height=700");
+  win.document.write(`<html><head><meta charset="utf-8"><title>স্টক ভাউচার — ${voucherNo}</title>
+    <style>
+      @page{ size:A4; margin:0.5in; }
+      html, body{ margin:0; padding:0; }
+      body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; font-size:13px; }
+      .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:10px; margin-bottom:14px; }
+      .letterhead h1{ margin:0; color:#153f37; font-size:20px; }
+      .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
+      .doc-title{ text-align:center; font-size:16px; font-weight:700; margin:10px 0 0; }
+      .meta-row{ display:flex; justify-content:space-between; margin-bottom:10px; font-size:12.5px; }
+      table.items{ width:100%; border-collapse:collapse; margin-top:4px; }
+      table.items th, table.items td{ border:1px solid #777; padding:6px 8px; font-size:12.5px; text-align:center; }
+      table.items th{ background:#eef0e9; }
+      table.items td.cell-left, table.items th.cell-left{ text-align:left; }
+      .totals-wrap{ display:flex; justify-content:flex-end; margin-top:12px; }
+      .totals-box{ min-width:210px; }
+      .totals-box .trow{ display:flex; justify-content:space-between; gap:24px; font-size:13px; padding:2px 0; border:0; }
+      .totals-box .trow span:last-child{ font-weight:700; }
+      .sign-row{ display:flex; justify-content:space-between; margin-top:80px; }
+      .sign-box{ text-align:center; width:38%; }
+      .sign-line{ border-top:1px solid #333; padding-top:4px; font-size:12px; }
+      .doc-footer{ margin-top:30px; font-size:9px; color:#6b7570; text-align:center; }
+    </style></head><body>
+    <div class="letterhead">
+      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
+      <div class="doc-title">স্টক ভাউচার</div>
+    </div>
+    <div class="meta-row"><span>ভাউচার নং: <b>${voucherNo}</b></span><span>তারিখ: <b>${stkDate(first)}</b></span></div>
+    <table class="items">
+      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th class="cell-left">ব্র্যান্ড</th><th>ক্রয় মূল্য</th><th>সংখ্যা</th><th>মোট মূল্য</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="totals-wrap">
+      <div class="totals-box">
+        <div class="trow"><span>সর্বমোট</span><span>${first["সর্বমোট"]||0}</span></div>
+        <div class="trow"><span>পরিশোধ</span><span>${first["পরিশোধ"]||0}</span></div>
+        <div class="trow"><span>বকেয়া</span><span>${first["বকেয়া"]||0}</span></div>
+      </div>
+    </div>
+    <div class="sign-row">
+      <div class="sign-box"><div class="sign-line">বিক্রয়কারীর স্বাক্ষর</div></div>
+      <div class="sign-box"><div class="sign-line">ক্রেতার স্বাক্ষর</div></div>
+    </div>
+    <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
+    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
+    </body></html>`);
+  win.document.close();
 }
 
 function printStockVouchersListOfficial(){
@@ -3827,9 +3887,9 @@ function printStockVouchersListOfficial(){
   let list = stockVouchersCache;
   if(q) list = list.filter(e => (e["ভাউচার নং"]||"").toLowerCase().includes(q) || (e["পণ্যের নাম"]||"").toLowerCase().includes(q));
   if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো ডাটা নেই"); return; }
-  const headers = ["ভাউচার নং", "তারিখ", "পণ্যের নাম", "বাজার মূল্য", "কম্বো মূল্য", "সাশ্রয়ী", "সংখ্যা", "মোট মূল্য", "সর্বমোট", "পরিশোধ", "বকেয়া"];
-  const rows = list.map(e => [e["ভাউচার নং"], e["তারিখ"] ? new Date(e["তারিখ"]).toLocaleDateString("bn-BD") : "", e["পণ্যের নাম"], e["বাজার মূল্য"], e["কম্বো মূল্য"], e["সাশ্রয়ী"], e["সংখ্যা"], e["মোট মূল্য"], e["সর্বমোট"]||0, e["পরিশোধ"]||0, e["বকেয়া"]||0]);
-  printOfficialTable("স্টক ইন ভাউচার তালিকা", "মোট এন্ট্রি: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [2]);
+  const headers = ["ভাউচার নং", "তারিখ", "পণ্যের নাম", "ব্র্যান্ড", "ক্রয় মূল্য", "সংখ্যা", "মোট মূল্য", "সর্বমোট", "পরিশোধ", "বকেয়া"];
+  const rows = list.map(e => [e["ভাউচার নং"], stkDate(e), e["পণ্যের নাম"], stkBrand(e), stkPrice(e), e["সংখ্যা"], e["মোট মূল্য"], e["সর্বমোট"]||0, e["পরিশোধ"]||0, e["বকেয়া"]||0]);
+  printOfficialTable("স্টক ভাউচার তালিকা", "মোট এন্ট্রি: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [2,3]);
 }
 
 /* ================= অর্ডার ইনভয়েস (ডিপু ও ডিলার উভয়ে শেয়ার্ড) ================= */
