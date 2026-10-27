@@ -248,10 +248,13 @@
   .expense-row > input{ flex:1 1 110px; min-width:0; }
   .expense-row > input.expDesc{ flex:2 1 160px; }
   .expense-row > button{ flex:0 0 auto; }
-  .si-totals-col{ display:flex; flex-direction:column; gap:6px; align-items:flex-end; margin-left:auto; margin-top:8px; width:170px; max-width:100%; }
-  .si-totals-col .field{ width:100%; margin-bottom:0; }
-  .si-totals-col .field label{ font-size:0.78rem; }
-  .si-totals-col .field input{ padding:6px 8px; font-size:0.88rem; }
+  /* অর্ডার ইনভয়েস — পণ্য টেবিলের পরে ডানদিকে: লেভেল : বক্স */
+  .si-totals{ display:grid; grid-template-columns:auto 14px minmax(110px,160px); gap:8px 6px; align-items:center; justify-content:end; margin-top:14px; max-width:100%; }
+  .si-totals .si-lbl{ text-align:right; font-size:0.9rem; font-weight:600; color:var(--teal-dark); white-space:nowrap; }
+  .si-totals .si-colon{ text-align:center; font-weight:700; color:var(--muted); }
+  .si-totals input{ width:100%; padding:7px 9px; font-size:0.92rem; text-align:right; border:1px solid #cfd8d3; background:#fff; }
+  .si-totals input[readonly]{ background:#f4f7f5; font-weight:700; }
+  .si-totals input:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(21,63,55,0.12); }
   /* স্টক ভাউচার — পণ্যের নাম বক্স নির্দিষ্ট Width, ব্র্যান্ড মাঝারি, মূল্য/সংখ্যার বক্স ছোট */
   /* স্টক ভাউচার ফরম — পেশাদার ইনভয়েস ধাঁচের ছোট, গোছানো বক্স */
   .sv-form{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px 16px; }
@@ -717,11 +720,11 @@
         </div>
         <div id="siItems"></div>
         <button class="btn secondary small" onclick="addSiItemRow()">+ আরেকটি প্যাকেজ যোগ করুন</button>
-        <div id="siTotalsPreview" style="font-size:0.9rem;color:var(--muted);margin-top:10px;"></div>
-        <div class="si-totals-col">
-          <div class="field"><label>ডিসকাউন্ট</label><input id="siDiscount" type="number" min="0" value="0" oninput="updateSiTotalsPreview()"></div>
-          <div class="field"><label>পরিশোধ</label><input id="siPaid" type="number" min="0" value="0" oninput="updateSiTotalsPreview()"></div>
-          <div class="field"><label>বকেয়া</label><input id="siDueBox" type="number" readonly></div>
+        <div class="si-totals">
+          <span class="si-lbl">সর্বমোট</span><span class="si-colon">:</span><input id="siTotalBox" type="number" readonly>
+          <span class="si-lbl">ডিসকাউন্ট</span><span class="si-colon">:</span><input id="siDiscount" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
+          <span class="si-lbl">পরিশোধ</span><span class="si-colon">:</span><input id="siPaid" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
+          <span class="si-lbl">বকেয়া</span><span class="si-colon">:</span><input id="siDueBox" type="number" readonly>
         </div>
         <div class="btn-row">
           <button class="btn" id="siSubmitBtn" onclick="submitSalesInvoice()">সংরক্ষণ করুন</button>
@@ -4032,9 +4035,8 @@ function updateSiTotalsPreview(){
   const paid = Number(document.getElementById("siPaid").value) || 0;
   const netPayable = totalPayable - discount;
   const due = netPayable - paid;
+  document.getElementById("siTotalBox").value = totalPayable;
   document.getElementById("siDueBox").value = due;
-  document.getElementById("siTotalsPreview").textContent =
-    `সাবটোটাল: ${subtotal} | পরিশোধযোগ্য মূল্য (নীট): ${netPayable}`;
 }
 
 async function submitSalesInvoice(){
