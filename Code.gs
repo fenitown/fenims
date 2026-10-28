@@ -580,7 +580,7 @@ const READ_CACHE_TTL = 300;
 const READ_CACHE_SALT = "r5";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-10-06.5";
+const BACKEND_VERSION = "2026-10-28.1";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {
@@ -953,6 +953,27 @@ function runAction(action, data) {
         break;
       case "listStockVouchers":
         result = listStockVouchers(data);
+        break;
+      case "updateStockVoucherFull":
+        result = updateStockVoucherFull(data);
+        break;
+      case "addStockPayment":
+        result = addStockPayment(data);
+        break;
+      case "listStockPayments":
+        result = listStockPayments(data);
+        break;
+      case "deleteStockPayment":
+        result = deleteStockPayment(data);
+        break;
+      case "addDealerCollection":
+        result = addDealerCollection(data);
+        break;
+      case "listDealerCollections":
+        result = listDealerCollections(data);
+        break;
+      case "deleteDealerCollection":
+        result = deleteDealerCollection(data);
         break;
       case "updateStockVoucherEntry":
         result = updateStockVoucherEntry(data);

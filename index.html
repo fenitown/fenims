@@ -704,6 +704,7 @@
         <button class="btn secondary" id="stockBtnProducts" onclick="switchStockTab('products', this)">পণ্য তালিকা</button>
         <button class="btn secondary" id="stockBtnStockIn" onclick="switchStockTab('stockIn', this)">স্টক ভাউচার</button>
         <button class="btn secondary" id="stockBtnCurrent" onclick="switchStockTab('current', this)">বর্তমান স্টক</button>
+        <button class="btn secondary" id="stockBtnPay" onclick="switchStockTab('pay', this)">বকেয়া পরিশোধ</button>
       </div>
       <div id="stockTabContent"></div>
     </section>
@@ -713,7 +714,9 @@
       <h2>অর্ডার ইনভয়েস</h2>
       <div class="toolbar no-print">
         <button class="btn" id="siFormToggleBtn" onclick="toggleSiForm()">+ অর্ডার ইনভয়েস ফরম</button>
+        <button class="btn secondary" id="siCollectBtn" style="display:none;" onclick="toggleCollectBox()">বকেয়া আদায়</button>
       </div>
+      <div id="siCollectWrap" style="display:none;"></div>
       <div id="siFormWrap" style="display:none;">
       <fieldset class="no-print">
         <legend id="siFormLegend">নতুন অর্ডার ইনভয়েস</legend>
@@ -2285,7 +2288,11 @@ function showSection(name){
   if(name === "agencyExpense") loadAgencyExpenses();
   if(name === "customerCards") loadCustomerCardsSetup();
   if(name === "stock") openStockSection();
-  if(name === "salesInvoice") loadSalesInvoiceSetup();
+  if(name === "salesInvoice"){
+    loadSalesInvoiceSetup();
+    const cb = document.getElementById("siCollectBtn");
+    if(cb) cb.style.display = state.dealerId === "AGENCY" ? "" : "none";
+  }
   if(name === "agencyReports") openReportsSection();
 
   if(name === "dashboard") loadDashboard();
@@ -3579,6 +3586,7 @@ function openStockSection(){
 function renderStockTab(){
   if(stockCurrentTab === "products") renderProductsTab();
   else if(stockCurrentTab === "current") renderCurrentStockTab();
+  else if(stockCurrentTab === "pay") renderStockPayTab();
   else renderStockInTab();
   applyStockFormState();
 }
@@ -3590,6 +3598,8 @@ function applyStockFormState(){
   if(bs) bs.className = "btn" + ((stockCurrentTab === "stockIn" && stockFormOpen) ? "" : " secondary");
   const bc = document.getElementById("stockBtnCurrent");
   if(bc) bc.className = "btn" + ((stockCurrentTab === "current" && stockFormOpen) ? "" : " secondary");
+  const bpay = document.getElementById("stockBtnPay");
+  if(bpay) bpay.className = "btn" + ((stockCurrentTab === "pay" && stockFormOpen) ? "" : " secondary");
 }
 function switchStockTab(tab, btn){
   if(tab === stockCurrentTab){ stockFormOpen = !stockFormOpen; applyStockFormState(); return; }
@@ -3719,6 +3729,135 @@ function printProductsListOfficial(){
   printOfficialTable("পণ্য তালিকা", "মোট পণ্য: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [1,2]);
 }
 
+/* ================= এজেন্সি: কোম্পানির বকেয়া পরিশোধ (স্টক ভাউচার ভিত্তিক / সকল) ================= */
+let stockPaymentsCache = [];
+let spBusy = false;
+
+function spVoucherGroups(){
+  const m = {}, order = [];
+  stockVouchersCache.forEach(e => {
+    const k = e["ভাউচার নং"];
+    if(!m[k]){ m[k] = { no:k, date:e["তারিখ"], total:Number(e["সর্বমোট"])||0, paid:Number(e["পরিশোধ"])||0, due:Number(e["বকেয়া"])||0 }; order.push(k); }
+  });
+  return order.map(k => m[k]);
+}
+function spDueGroups(){
+  return spVoucherGroups().filter(g => g.due > 0.0001).sort((a, b) => (new Date(a.date) - new Date(b.date)) || (a.no < b.no ? -1 : 1));
+}
+function fmtDay(v){ const d = new Date(v); return isNaN(d.getTime()) ? "" : d.toLocaleDateString("bn-BD"); }
+
+function renderStockPayTab(){
+  const box = document.getElementById("stockTabContent");
+  box.innerHTML = `
+    <div id="stockFormWrap" style="display:none;">
+    <fieldset class="no-print sv-form">
+      <legend>কোম্পানির বকেয়া পরিশোধ</legend>
+      <div class="sv-head" style="border:0;margin:0;padding:0;">
+        <div class="sv-field" style="width:240px;"><label>কোন ভাউচারের বকেয়া</label><select id="spVoucher" onchange="spOnVoucher()"></select></div>
+        <div class="sv-field" style="width:130px;"><label>বকেয়া</label><div class="sv-ro" id="spDue">0</div></div>
+        <div class="sv-field"><label>তারিখ</label><input id="spDate" type="date"></div>
+        <div class="sv-field" style="width:130px;"><label>পরিশোধের টাকা</label><input id="spAmount" type="number" min="0"></div>
+        <div class="sv-field" style="width:200px;"><label>নোট (ঐচ্ছিক)</label><input id="spNote"></div>
+        <button class="btn" onclick="submitStockPayment()">পরিশোধ করুন</button>
+      </div>
+      <div id="spMsg" class="msg"></div>
+    </fieldset>
+    </div>
+    <h3 style="margin:14px 0 6px;font-size:1rem;">বকেয়া ভাউচার</h3>
+    <div class="table-wrap"><table id="spDueTable"><thead></thead><tbody></tbody></table></div>
+    <h3 style="margin:16px 0 6px;font-size:1rem;">পরিশোধের ইতিহাস</h3>
+    <div class="table-wrap"><table id="spHistTable"><thead></thead><tbody></tbody></table></div>`;
+  loadStockPayTab();
+}
+
+async function loadStockPayTab(){
+  const [vr, pr] = await Promise.all([ apiCall("listStockVouchers", {}), apiCall("listStockPayments", {}) ]);
+  stockVouchersCache = vr.success ? vr.entries : [];
+  stockPaymentsCache = pr.success ? pr.payments : [];
+  if(!document.getElementById("spVoucher")) return;
+  if(!document.getElementById("spDate").value) document.getElementById("spDate").value = new Date().toISOString().slice(0,10);
+  renderStockPayUI();
+}
+
+function renderStockPayUI(keepVoucher){
+  const groups = spDueGroups();
+  const sel = document.getElementById("spVoucher");
+  const keep = keepVoucher !== undefined ? keepVoucher : sel.value;
+  let total = 0; groups.forEach(g => total += g.due);
+  sel.innerHTML = `<option value="">সকল বকেয়া (পুরনো থেকে) — ${Math.round(total*100)/100}</option>` +
+    groups.map(g => `<option value="${escAttr(g.no)}">${escAttr(g.no)} | ${fmtDay(g.date)} | বকেয়া ${g.due}</option>`).join("");
+  if(groups.some(g => g.no === keep)) sel.value = keep;
+  spOnVoucher();
+
+  const t = document.getElementById("spDueTable");
+  t.innerHTML = "<thead><tr><th>ভাউচার নং</th><th>তারিখ</th><th>সর্বমোট</th><th>পরিশোধ</th><th>বকেয়া</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  const tb = t.querySelector("tbody");
+  if(groups.length === 0){ tb.innerHTML = emptyRowHtml(6, "কোনো বকেয়া নেই"); }
+  else {
+    groups.forEach(g => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${escAttr(g.no)}</td><td>${fmtDay(g.date)}</td><td>${g.total}</td><td>${g.paid}</td><td>${g.due}</td>
+        <td class="no-print"><button class="btn small" onclick="spPickVoucher('${escAttr(g.no)}')">পরিশোধ</button></td>`;
+      tb.appendChild(tr);
+    });
+    const tf = document.createElement("tr");
+    tf.style.fontWeight = "700"; tf.style.background = "#eef0e9";
+    tf.innerHTML = `<td colspan="4" class="cell-left">মোট বকেয়া</td><td>${Math.round(total*100)/100}</td><td class="no-print"></td>`;
+    tb.appendChild(tf);
+  }
+
+  const h = document.getElementById("spHistTable");
+  h.innerHTML = "<thead><tr><th>তারিখ</th><th>ভাউচার নং</th><th>টাকা</th><th class='cell-left'>নোট</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  const hb = h.querySelector("tbody");
+  const hist = stockPaymentsCache.slice().reverse();
+  if(hist.length === 0){ hb.innerHTML = emptyRowHtml(5, "এখনো কোনো পরিশোধ নেই"); }
+  else hist.forEach(p => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${fmtDay(p["তারিখ"])}</td><td>${escAttr(p["ভাউচার নং"])}</td><td>${p["টাকা"]}</td><td class="cell-left">${escAttr(p["নোট"]||"")}</td>
+      <td class="no-print"><button class="btn icon small danger" onclick="deleteStockPaymentRow('${p['PaymentID']}')" title="মুছুন" aria-label="মুছুন">${IC.del}</button></td>`;
+    hb.appendChild(tr);
+  });
+}
+
+function spOnVoucher(){
+  const no = document.getElementById("spVoucher").value;
+  const groups = spDueGroups();
+  let due = 0;
+  if(no){ const g = groups.find(x => x.no === no); due = g ? g.due : 0; }
+  else groups.forEach(g => due += g.due);
+  due = Math.round(due*100)/100;
+  document.getElementById("spDue").textContent = due;
+  document.getElementById("spAmount").value = due > 0 ? due : "";
+}
+function spPickVoucher(no){
+  stockFormOpen = true; applyStockFormState();
+  document.getElementById("spVoucher").value = no;
+  spOnVoucher();
+  document.getElementById("spAmount").focus();
+  document.getElementById("spAmount").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+async function submitStockPayment(){
+  if(spBusy) return;
+  const msg = document.getElementById("spMsg");
+  const amount = Number(document.getElementById("spAmount").value) || 0;
+  if(amount <= 0){ msg.textContent = "পরিশোধের টাকা দিন"; msg.className = "msg err"; return; }
+  spBusy = true; markSaving("spMsg");
+  const res = await apiCall("addStockPayment", {
+    voucherNo: document.getElementById("spVoucher").value, amount,
+    date: document.getElementById("spDate").value, note: document.getElementById("spNote").value.trim()
+  });
+  spBusy = false;
+  msg.textContent = res.message; msg.className = "msg " + (res.success ? "ok" : "err");
+  if(res.success){ clearCache(); document.getElementById("spNote").value = ""; await loadStockPayTab(); }
+}
+
+async function deleteStockPaymentRow(paymentId){
+  if(!confirm("এই পরিশোধ মুছলে ভাউচারের বকেয়া আবার বেড়ে যাবে। মুছবেন?")) return;
+  const res = await apiCall("deleteStockPayment", { paymentId });
+  if(res.success){ clearCache(); loadStockPayTab(); } else alert(res.message);
+}
+
 /* ================= এজেন্সি: বর্তমান স্টক ================= */
 let currentStockRows = [], currentStockUnmatched = [];
 
@@ -3824,12 +3963,14 @@ function stkBrand(e){
 }
 function stkDate(e){ return e["তারিখ"] ? new Date(e["তারিখ"]).toLocaleDateString("bn-BD") : ""; }
 
+let editingStockVoucherNo = null;
 function renderStockInTab(){
+  editingStockVoucherNo = null;
   const box = document.getElementById("stockTabContent");
   box.innerHTML = `
     <div id="stockFormWrap" style="display:none;">
     <fieldset class="no-print sv-form">
-      <legend>নতুন স্টক ভাউচার</legend>
+      <legend id="svLegend">নতুন স্টক ভাউচার</legend>
       <div class="sv-head">
         <div class="sv-field"><label>তারিখ</label><input id="stockInDate" type="date"></div>
       </div>
@@ -3842,7 +3983,10 @@ function renderStockInTab(){
           <div class="sv-field"><label>পরিশোধ (কোম্পানিকে)</label><input id="stockInPaid" type="number" min="0" value="0" oninput="updateStockInTotalsPreview()"></div>
           <div class="sv-field"><label>বকেয়া</label><div class="sv-ro due" id="svDue">0</div></div>
         </div>
-        <button class="btn" onclick="submitStockVoucher()">সংরক্ষণ করুন</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" id="svSaveBtn" onclick="submitStockVoucher()">সংরক্ষণ করুন</button>
+          <button class="btn secondary" id="svCancelBtn" style="display:none;" onclick="cancelStockVoucherEdit()">বাতিল</button>
+        </div>
       </div>
       <div id="stockInMsg" class="msg"></div>
     </fieldset>
@@ -3937,15 +4081,15 @@ async function submitStockVoucher(){
   const msgBox = document.getElementById("stockInMsg");
   if(items.length === 0){ msgBox.textContent = "অন্তত একটি পণ্য ও সংখ্যা দিন"; msgBox.className = "msg err"; return; }
   markSaving("stockInMsg");
-  const res = await apiCall("addStockVoucher", {
-    items,
-    date: document.getElementById("stockInDate").value,
-    paid: document.getElementById("stockInPaid").value
-  });
+  const editing = editingStockVoucherNo;
+  const payload = { items, date: document.getElementById("stockInDate").value, paid: document.getElementById("stockInPaid").value };
+  if(editing) payload.voucherNo = editing;
+  const res = await apiCall(editing ? "updateStockVoucherFull" : "addStockVoucher", payload);
   msgBox.textContent = res.message + (res.success ? " (ভাউচার নং: " + res.voucherNo + ", সর্বমোট: " + res.total + ", বকেয়া: " + res.due + ")" : "");
   msgBox.className = "msg " + (res.success?"ok":"err");
   if(res.success){
     clearCache();
+    resetStockVoucherEditUI();
     document.getElementById("stockInItems").innerHTML = "";
     addStockInItemRow();
     document.getElementById("stockInPaid").value = "0";
@@ -3974,7 +4118,7 @@ function renderStockInTable(){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${stkDate(e)}</td><td class="cell-left">${e["পণ্যের নাম"]}</td><td class="cell-left">${stkBrand(e)}</td><td>${stkPrice(e)}</td><td>${e["সংখ্যা"]}</td><td>${e["মোট মূল্য"]}</td><td>${e["সর্বমোট"]||0}</td><td>${e["পরিশোধ"]||0}</td><td>${e["বকেয়া"]||0}</td>
       <td class="no-print">
-        <button class="btn icon small secondary" onclick="editStockEntryRow('${e['EntryID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small secondary" onclick="editStockVoucherForm('${e['ভাউচার নং']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printStockVoucherById('${e['ভাউচার নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
         <button class="btn icon small danger" onclick="deleteStockVoucherByNo('${e['ভাউচার নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
@@ -3982,19 +4126,60 @@ function renderStockInTable(){
   });
 }
 
-function editStockEntryRow(entryId){
-  const e = stockVouchersCache.find(x => x["EntryID"] === entryId);
-  if(!e) return;
-  openEditModal("স্টক এন্ট্রি এডিট", [
-    { key:"ব্র্যান্ড", label:"ব্র্যান্ড", value:stkBrand(e) },
-    { key:"ক্রয় মূল্য", label:"ক্রয় মূল্য", value:stkPrice(e) },
-    { key:"সংখ্যা", label:"সংখ্যা", value:e["সংখ্যা"] }
-  ], async (values) => {
-    values["মোট মূল্য"] = (Number(values["ক্রয় মূল্য"])||0) * (Number(values["সংখ্যা"])||0);
-    const res = await apiCall("updateStockVoucherEntry", { entryId, fields: values });
-    if(res.success){ clearCache(); loadStockVouchers(); }
-    return res;
+function resetStockVoucherEditUI(){
+  editingStockVoucherNo = null;
+  const lg = document.getElementById("svLegend"); if(lg) lg.textContent = "নতুন স্টক ভাউচার";
+  const sb = document.getElementById("svSaveBtn"); if(sb) sb.textContent = "সংরক্ষণ করুন";
+  const cb = document.getElementById("svCancelBtn"); if(cb) cb.style.display = "none";
+}
+function cancelStockVoucherEdit(){
+  resetStockVoucherEditUI();
+  document.getElementById("stockInItems").innerHTML = "";
+  addStockInItemRow();
+  document.getElementById("stockInPaid").value = "0";
+  document.getElementById("stockInDate").value = new Date().toISOString().slice(0,10);
+  document.getElementById("stockInMsg").textContent = "";
+  updateStockInTotalsPreview();
+}
+function dateInputValue(v){
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return "";
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/* তালিকার এডিট বাটন — পুরো ভাউচার ফরমে লোড হয়; বদলে "আপডেট করুন" */
+function editStockVoucherForm(voucherNo){
+  const lines = stockVouchersCache.filter(e => e["ভাউচার নং"] === voucherNo);
+  if(lines.length === 0) return;
+  const first = lines[0];
+  editingStockVoucherNo = voucherNo;
+  stockFormOpen = true; applyStockFormState();
+  document.getElementById("svLegend").textContent = "স্টক ভাউচার এডিট — " + voucherNo;
+  document.getElementById("svSaveBtn").textContent = "আপডেট করুন";
+  document.getElementById("svCancelBtn").style.display = "inline-block";
+  document.getElementById("stockInMsg").textContent = "";
+  document.getElementById("stockInDate").value = dateInputValue(first["তারিখ"]);
+  document.getElementById("stockInPaid").value = first["পরিশোধ"] || 0;
+
+  const wrap = document.getElementById("stockInItems");
+  wrap.innerHTML = "";
+  lines.forEach(e => {
+    addStockInItemRow();
+    const row = wrap.lastElementChild;
+    const sel = row.querySelector(".stockInProduct");
+    if(![...sel.options].some(o => o.value === e["ProductID"])){        // পণ্য তালিকা থেকে ডিলিট হয়ে গেলেও লাইন দেখা যাবে
+      const o = document.createElement("option"); o.value = e["ProductID"]; o.textContent = e["পণ্যের নাম"] || e["ProductID"]; sel.appendChild(o);
+    }
+    sel.value = e["ProductID"];
+    const bSel = row.querySelector(".stockInBrand");
+    const b = stkBrand(e);
+    if(b && ![...bSel.options].some(o => o.value === b)){ const o = document.createElement("option"); o.value = b; o.textContent = b; bSel.appendChild(o); }
+    bSel.value = b || "";
+    row.querySelector(".stockInPrice").value = stkPrice(e);
+    row.querySelector(".stockInQty").value = e["সংখ্যা"];
   });
+  updateStockInTotalsPreview();
+  document.getElementById("stockInDate").scrollIntoView({ behavior:"smooth", block:"center" });
 }
 
 async function deleteStockVoucherByNo(voucherNo){
@@ -4265,11 +4450,166 @@ function renderSalesInvoiceTable(){
         <button class="btn icon small secondary" onclick="editSalesInvoiceByNo('${e['ইনভয়েস নং']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printSalesInvoiceById('${e['ইনভয়েস নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
         <button class="btn icon small secondary" onclick="shareSalesInvoiceById('${e['ইনভয়েস নং']}')" title="ছবি শেয়ার" aria-label="ছবি শেয়ার">${IC.share}</button>
+        ${isAgency && (Number(e["বকেয়া"]) || 0) > 0 ? `<button class="btn icon small secondary" onclick="openCollectForInvoice('${e['ইনভয়েস নং']}')" title="বকেয়া আদায়" aria-label="বকেয়া আদায়">💰</button>` : ""}
         ${isAgency && status !== "ডেলিভারি সম্পন্ন" ? `<button class="btn icon small secondary" onclick="markSiDelivered('${e['ইনভয়েস নং']}')" title="ডেলিভারি সম্পন্ন" aria-label="ডেলিভারি সম্পন্ন">${IC.deliver}</button>` : ""}
         <button class="btn icon small danger" onclick="deleteSalesInvoiceByNo('${e['ইনভয়েস নং']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
       </td>`;
     tbody.appendChild(tr);
   });
+}
+
+/* ================= ডিপু: ডিলারের কাছ থেকে বকেয়া আদায় (ইনভয়েস ভিত্তিক / ডিলারের সকল / সকল ডিলারের) ================= */
+let dealerCollectionsCache = [];
+let dcBusy = false;
+
+function dcInvoiceGroups(){
+  const m = {}, order = [];
+  salesInvoicesCache.forEach(e => {
+    const k = e["ইনভয়েস নং"];
+    if(!m[k]){ m[k] = { no:k, date:e["তারিখ"], dealerId:e["DealerID"], dealer:e["ডিলার নাম"], paid:Number(e["পরিশোধ"])||0, due:Number(e["বকেয়া"])||0 }; order.push(k); }
+  });
+  return order.map(k => m[k]).filter(g => g.due > 0.0001).sort((a, b) => (new Date(a.date) - new Date(b.date)) || (a.no < b.no ? -1 : 1));
+}
+
+async function toggleCollectBox(){
+  const w = document.getElementById("siCollectWrap"), b = document.getElementById("siCollectBtn");
+  const open = w.style.display === "none";
+  w.style.display = open ? "block" : "none";
+  b.className = "btn" + (open ? "" : " secondary");
+  if(open) await renderCollectBox();
+}
+
+async function renderCollectBox(){
+  const w = document.getElementById("siCollectWrap");
+  if(!w.innerHTML.trim()) w.innerHTML = "লোড হচ্ছে...";
+  const res = await apiCall("listDealerCollections", {});
+  dealerCollectionsCache = res.success ? res.collections : [];
+  if(salesInvoicesCache.length === 0) await loadSalesInvoices();
+  w.innerHTML = `
+    <fieldset class="no-print sv-form" style="margin-bottom:12px;">
+      <legend>বকেয়া আদায় (ডিলারের কাছ থেকে)</legend>
+      <div class="sv-head" style="border:0;margin:0;padding:0;">
+        <div class="sv-field" style="width:210px;"><label>ডিলার</label><select id="dcDealer" onchange="dcOnDealer()"></select></div>
+        <div class="sv-field" style="width:250px;"><label>ইনভয়েস</label><select id="dcInvoice" onchange="dcOnInvoice()"></select></div>
+        <div class="sv-field" style="width:130px;"><label>বকেয়া</label><div class="sv-ro" id="dcDue">0</div></div>
+        <div class="sv-field"><label>তারিখ</label><input id="dcDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="sv-field" style="width:130px;"><label>আদায়ের টাকা</label><input id="dcAmount" type="number" min="0"></div>
+        <div class="sv-field" style="width:200px;"><label>নোট (ঐচ্ছিক)</label><input id="dcNote"></div>
+        <button class="btn" onclick="submitDealerCollection()">আদায় করুন</button>
+      </div>
+      <div id="dcMsg" class="msg"></div>
+    </fieldset>
+    <h3 style="margin:10px 0 6px;font-size:1rem;">বকেয়া ইনভয়েস</h3>
+    <div class="table-wrap"><table id="dcDueTable"><thead></thead><tbody></tbody></table></div>
+    <h3 style="margin:16px 0 6px;font-size:1rem;">আদায়ের ইতিহাস</h3>
+    <div class="table-wrap"><table id="dcHistTable"><thead></thead><tbody></tbody></table></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0;">`;
+  renderCollectUI();
+}
+
+function renderCollectUI(keepDealer, keepInvoice){
+  const groups = dcInvoiceGroups();
+  const dSel = document.getElementById("dcDealer");
+  if(!dSel) return;
+  const dealers = {}, dOrder = [];
+  groups.forEach(g => { if(!dealers[g.dealerId]){ dealers[g.dealerId] = { id:g.dealerId, name:g.dealer, due:0 }; dOrder.push(g.dealerId); } dealers[g.dealerId].due += g.due; });
+  let total = 0; groups.forEach(g => total += g.due);
+  const keepD = keepDealer !== undefined ? keepDealer : dSel.value;
+  dSel.innerHTML = `<option value="">সকল ডিলার — ${Math.round(total*100)/100}</option>` +
+    dOrder.map(id => `<option value="${escAttr(id)}">${escAttr(dealers[id].name)} — ${Math.round(dealers[id].due*100)/100}</option>`).join("");
+  if(dealers[keepD]) dSel.value = keepD;
+  dcFillInvoices(keepInvoice);
+
+  const t = document.getElementById("dcDueTable");
+  t.innerHTML = "<thead><tr><th>ইনভয়েস নং</th><th>তারিখ</th><th class='cell-left'>ডিলার</th><th>পরিশোধ/আদায়</th><th>বকেয়া</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  const tb = t.querySelector("tbody");
+  if(groups.length === 0){ tb.innerHTML = emptyRowHtml(6, "কোনো বকেয়া নেই"); }
+  else {
+    groups.forEach(g => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${escAttr(g.no)}</td><td>${fmtDay(g.date)}</td><td class="cell-left">${escAttr(g.dealer)}</td><td>${g.paid}</td><td>${g.due}</td>
+        <td class="no-print"><button class="btn small" onclick="openCollectForInvoice('${escAttr(g.no)}')">💰 আদায়</button></td>`;
+      tb.appendChild(tr);
+    });
+    const tf = document.createElement("tr");
+    tf.style.fontWeight = "700"; tf.style.background = "#eef0e9";
+    tf.innerHTML = `<td colspan="4" class="cell-left">মোট বকেয়া</td><td>${Math.round(total*100)/100}</td><td class="no-print"></td>`;
+    tb.appendChild(tf);
+  }
+
+  const h = document.getElementById("dcHistTable");
+  h.innerHTML = "<thead><tr><th>তারিখ</th><th>ইনভয়েস নং</th><th class='cell-left'>ডিলার</th><th>টাকা</th><th class='cell-left'>নোট</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  const hb = h.querySelector("tbody");
+  const hist = dealerCollectionsCache.slice().reverse();
+  if(hist.length === 0){ hb.innerHTML = emptyRowHtml(6, "এখনো কোনো আদায় নেই"); }
+  else hist.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${fmtDay(c["তারিখ"])}</td><td>${escAttr(c["ইনভয়েস নং"])}</td><td class="cell-left">${escAttr(c["ডিলার নাম"]||"")}</td><td>${c["টাকা"]}</td><td class="cell-left">${escAttr(c["নোট"]||"")}</td>
+      <td class="no-print"><button class="btn icon small danger" onclick="deleteDealerCollectionRow('${c['CollectionID']}')" title="মুছুন" aria-label="মুছুন">${IC.del}</button></td>`;
+    hb.appendChild(tr);
+  });
+}
+
+function dcFillInvoices(keepInvoice){
+  const dealerId = document.getElementById("dcDealer").value;
+  const groups = dcInvoiceGroups().filter(g => !dealerId || g.dealerId === dealerId);
+  const sel = document.getElementById("dcInvoice");
+  const keep = keepInvoice !== undefined ? keepInvoice : sel.value;
+  sel.innerHTML = `<option value="">${dealerId ? "এই ডিলারের সকল বকেয়া" : "সকল বকেয়া"} (পুরনো থেকে)</option>` +
+    groups.map(g => `<option value="${escAttr(g.no)}">${escAttr(g.no)} | ${fmtDay(g.date)} | বকেয়া ${g.due}</option>`).join("");
+  if(groups.some(g => g.no === keep)) sel.value = keep;
+  dcOnInvoice();
+}
+function dcOnDealer(){ dcFillInvoices(""); }
+function dcOnInvoice(){
+  const dealerId = document.getElementById("dcDealer").value;
+  const no = document.getElementById("dcInvoice").value;
+  const groups = dcInvoiceGroups().filter(g => !dealerId || g.dealerId === dealerId);
+  let due = 0;
+  if(no){ const g = groups.find(x => x.no === no); due = g ? g.due : 0; } else groups.forEach(g => due += g.due);
+  due = Math.round(due*100)/100;
+  document.getElementById("dcDue").textContent = due;
+  document.getElementById("dcAmount").value = due > 0 ? due : "";
+}
+
+async function openCollectForInvoice(invoiceNo){
+  const w = document.getElementById("siCollectWrap");
+  if(w.style.display === "none") await toggleCollectBox();
+  const g = dcInvoiceGroups().find(x => x.no === invoiceNo);
+  if(!g) return;
+  document.getElementById("dcDealer").value = g.dealerId;
+  dcFillInvoices(invoiceNo);
+  document.getElementById("dcAmount").focus();
+  document.getElementById("dcAmount").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+async function submitDealerCollection(){
+  if(dcBusy) return;
+  const msg = document.getElementById("dcMsg");
+  const amount = Number(document.getElementById("dcAmount").value) || 0;
+  if(amount <= 0){ msg.textContent = "আদায়ের টাকা দিন"; msg.className = "msg err"; return; }
+  dcBusy = true; markSaving("dcMsg");
+  const res = await apiCall("addDealerCollection", {
+    dealerId: document.getElementById("dcDealer").value, invoiceNo: document.getElementById("dcInvoice").value, amount,
+    date: document.getElementById("dcDate").value, note: document.getElementById("dcNote").value.trim()
+  });
+  dcBusy = false;
+  msg.textContent = res.message; msg.className = "msg " + (res.success ? "ok" : "err");
+  if(res.success){
+    clearCache();
+    await loadSalesInvoices();
+    const r2 = await apiCall("listDealerCollections", {});
+    dealerCollectionsCache = r2.success ? r2.collections : [];
+    document.getElementById("dcNote").value = "";
+    renderCollectUI("", "");
+    document.getElementById("dcMsg").textContent = res.message; document.getElementById("dcMsg").className = "msg ok";
+  }
+}
+
+async function deleteDealerCollectionRow(collectionId){
+  if(!confirm("এই আদায় মুছলে ইনভয়েসের বকেয়া আবার বেড়ে যাবে। মুছবেন?")) return;
+  const res = await apiCall("deleteDealerCollection", { collectionId });
+  if(res.success){ clearCache(); await loadSalesInvoices(); await renderCollectBox(); } else alert(res.message);
 }
 
 function editSalesInvoiceByNo(invoiceNo){
