@@ -172,12 +172,12 @@
   .card .num{ font-size:1.6rem; font-weight:700; color:var(--teal-dark); }
   .card .label{ font-size:0.82rem; color:var(--muted); margin-top:2px; }
   /* ডিপু ড্যাশবোর্ড — কার্ড আগের চেয়ে চওড়া, সবগুলো সমান সাইজ; লেখা বড় হলে JS ছোট করে কার্ডের ভেতরেই বসায় */
-  #agencyDashboardCards{ grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:84px; gap:10px; }
-  #agencyDashboardCards .card{ display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; padding:6px 12px; box-sizing:border-box; }
-  #agencyDashboardCards .card .num{ line-height:1.15; white-space:nowrap; font-size:1.35rem; font-weight:800; color:#0b2520; }
-  #agencyDashboardCards .card .label{ line-height:1.25; overflow-wrap:anywhere; font-size:0.88rem; font-weight:600; color:#1c2b28; margin-top:1px; }
+  #agencyDashboardCards{ grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:104px; gap:10px; }
+  #agencyDashboardCards .card{ display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; padding:8px 14px; box-sizing:border-box; }
+  #agencyDashboardCards .card .num{ line-height:1.15; white-space:nowrap; font-size:1.7rem; font-weight:800; color:#0b2520; }
+  #agencyDashboardCards .card .label{ line-height:1.25; overflow-wrap:anywhere; font-size:1rem; font-weight:600; color:#1c2b28; margin-top:2px; }
   @media (max-width:900px){ #agencyDashboardCards{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-  @media (max-width:640px){ #agencyDashboardCards{ grid-template-columns:1fr; grid-auto-rows:68px; gap:8px; } }
+  @media (max-width:640px){ #agencyDashboardCards{ grid-template-columns:1fr; grid-auto-rows:88px; gap:8px; } }
 
   /* ---------- অফিসিয়াল ফরম্যাট (ডিলার রেজিস্ট্রেশন) ---------- */
   .official-letterhead{
@@ -250,10 +250,10 @@
   .expense-row > input.expDesc{ flex:2 1 160px; }
   .expense-row > button{ flex:0 0 auto; }
   /* অর্ডার ইনভয়েস — পণ্য টেবিলের পরে ডানদিকে: লেভেল : বক্স */
-  .si-totals{ display:grid; grid-template-columns:auto 14px minmax(110px,160px); gap:8px 6px; align-items:center; justify-content:end; margin-top:14px; max-width:100%; }
+  .si-totals{ display:grid; grid-template-columns:auto 14px minmax(110px,160px); gap:2px 6px; align-items:center; justify-content:end; margin-top:10px; max-width:100%; }
   .si-totals .si-lbl{ text-align:right; font-size:0.9rem; font-weight:600; color:var(--teal-dark); white-space:nowrap; }
   .si-totals .si-colon{ text-align:center; font-weight:700; color:var(--muted); }
-  .si-totals input{ width:100%; padding:7px 9px; font-size:0.92rem; text-align:right; border:1px solid #cfd8d3; background:#fff; }
+  .si-totals input{ width:100%; padding:2px 8px; height:26px; box-sizing:border-box; font-size:0.9rem; line-height:1.2; margin:0; text-align:right; border:1px solid #cfd8d3; background:#fff; }
   .si-totals input[readonly]{ background:#f4f7f5; font-weight:700; }
   .si-totals input:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(21,63,55,0.12); }
   /* অর্ডার ইনভয়েস — প্যাকেজ ব্লক (ভাউচার ধাঁচ): প্যাকেজ সিলেক্ট করলে পণ্য তালিকা বসে */
@@ -744,7 +744,6 @@
           <div class="field" id="siDealerThikanaField"><label>ঠিকানা (অটো)</label><input id="siDealerThikana" readonly></div>
         </div>
         <div id="siItems"></div>
-        <button class="btn secondary small" onclick="addSiItemRow()">+ আরেকটি প্যাকেজ যোগ করুন</button>
         <div id="siStockMsg" class="msg err"></div>
         <div class="si-totals">
           <span class="si-lbl">সর্বমোট</span><span class="si-colon">:</span><input id="siTotalBox" type="number" readonly>
@@ -757,6 +756,7 @@
         </div>
         <div class="btn-row">
           <button class="btn" id="siSubmitBtn" onclick="submitSalesInvoice()">সংরক্ষণ করুন</button>
+          <button class="btn secondary" type="button" onclick="addSiItemRow()">+ আরেকটি প্যাকেজ যোগ করুন</button>
           <button class="btn secondary" id="siCancelBtn" onclick="cancelSiEdit()" style="display:none;">বাতিল</button>
         </div>
         <div id="siMsg" class="msg"></div>
@@ -1283,9 +1283,7 @@ function showVersionInfo(serverVer){
   if(serverVer === FRONTEND_VERSION){
     el.style.color = "#9aa5a0"; el.textContent = "সংস্করণ " + FRONTEND_VERSION;
   } else {
-    el.style.color = "#a3352b";
-    el.textContent = "⚠️ সার্ভার " + (serverVer ? "সংস্করণ " + serverVer : "পুরনো সংস্করণে") + " চলছে, অ্যাপ সংস্করণ " + FRONTEND_VERSION +
-      " — Apps Script এ Deploy → Manage deployments → ✏️ → Version: New version → Deploy করুন";
+    el.textContent = "";
   }
 }
 function warmServer(){
@@ -4886,17 +4884,22 @@ function printSalesInvoiceById(invoiceNo){
   const first = lines[0];
   const dateStr = first["তারিখ"] ? new Date(first["তারিখ"]).toLocaleDateString("bn-BD") : "";
 
-  const rowsHtml = lines.map((e, i) => `
-    <tr>
-      <td>${i+1}</td>
-      <td class="cell-left">${e["প্যাকেজ"]||""}</td>
-      <td>${e["একক মূল্য"]||0}</td>
-      <td>${e["সংখ্যা"]||0}</td>
-      <td>${e["মোট মূল্য"]||0}</td>
-      <td>${e["কমিশন %"]||0}</td>
-      <td>${e["কমিশন মূল্য"]||0}</td>
-      <td>${e["পরিশোধযোগ্য মূল্য"]||0}</td>
-    </tr>`).join("");
+  const pkgCache = window.__siPackagesCache || [];
+  const money = n => Math.round((Number(n) || 0) * 100) / 100;
+  const rowsHtml = lines.map(e => {
+    const pkg = pkgCache.find(p => p["PackageID"] === e["PackageID"]);
+    const qty = Number(e["সংখ্যা"]) || 0;
+    const items = pkg ? (pkg.items || []) : [];
+    const head = `<tr class="pk-head"><td colspan="5" class="cell-left"><b>${e["প্যাকেজ"]||""}</b> — প্যাকেজ সংখ্যা: ${qty}</td></tr>`;
+    const body = items.map((it, k) => {
+      const price = Number(it["কম্বো মূল্য"]) || 0;
+      return `<tr><td>${k+1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""))}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
+    }).join("");
+    return head + body + `<tr class="pk-sub"><td colspan="4" style="text-align:right;">প্যাকেজের মোট</td><td>${e["মোট মূল্য"]||0}</td></tr>`;
+  }).join("");
+  const commTotal = lines.reduce((s,e)=>s+(Number(e["কমিশন মূল্য"])||0),0);
+  const subTotal = lines.reduce((s,e)=>s+(Number(e["মোট মূল্য"])||0),0);
+  const netPay = lines.reduce((s,e)=>s+(Number(e["পরিশোধযোগ্য মূল্য"])||0),0) - (Number(first["ডিসকাউন্ট"])||0);
 
   const win = window.open("", "_blank", "width=900,height=700");
   win.document.write(`<html><head><meta charset="utf-8"><title>অর্ডার ইনভয়েস — ${invoiceNo}</title>
@@ -4915,6 +4918,8 @@ function printSalesInvoiceById(invoiceNo){
       table.items th{ border-bottom:2px solid #153f37; padding:6px 8px; font-size:12px; text-align:center; background:#eef0e9; }
       table.items td{ border-bottom:1px dashed #999; padding:7px 8px; font-size:12.5px; text-align:center; }
       table.items td.cell-left{ text-align:left; }
+      table.items tr.pk-head td{ background:#eef0e9; border-bottom:1px solid #153f37; }
+      table.items tr.pk-sub td{ font-weight:700; border-bottom:1px solid #153f37; }
       .totals-wrap{ display:flex; justify-content:flex-end; margin-top:10px; }
       .totals-box{ min-width:230px; }
       .totals-box .trow{ display:flex; justify-content:space-between; font-size:13px; }
@@ -4937,14 +4942,15 @@ function printSalesInvoiceById(invoiceNo){
       <div><b>ঠিকানা</b> : ${first["ঠিকানা"]||""}</div>
     </div>
     <table class="items">
-      <thead><tr><th>ক্রম</th><th class="cell-left">প্যাকেজ</th><th>একক মূল্য</th><th>সংখ্যা</th><th>মোট মূল্য</th><th>কমিশন %</th><th>কমিশন মূল্য</th><th>পরিশোধযোগ্য মূল্য</th></tr></thead>
+      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
     <div class="totals-wrap">
       <div class="totals-box">
-        <div class="trow"><span>সাবটোটাল</span><span>${first["সাবটোটাল"]||0}</span></div>
-        <div class="trow"><span>ডিসকাউন্ট</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
-        <div class="trow"><span>পরিশোধযোগ্য মূল্য (নীট)</span><span>${(lines.reduce((s,e)=>s+(Number(e["পরিশোধযোগ্য মূল্য"])||0),0) - (Number(first["ডিসকাউন্ট"])||0))}</span></div>
+        <div class="trow"><span>সর্বমোট</span><span>${money(subTotal)}</span></div>
+        <div class="trow"><span>কমিশন (${first["কমিশন %"]||0}%)</span><span>${money(commTotal)}</span></div>
+        <div class="trow"><span>অতিরিক্ত ডিসকাউন্ট</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
+        <div class="trow"><span>পরিশোধযোগ্য</span><span>${money(netPay)}</span></div>
         <div class="trow"><span>পরিশোধ</span><span>${first["পরিশোধ"]||0}</span></div>
         <div class="trow due"><span>বকেয়া</span><span>${first["বকেয়া"]||0}</span></div>
       </div>
