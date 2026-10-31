@@ -268,7 +268,10 @@
   table.si-prod-table td.cell-left{ text-align:left; }
   table.si-prod-table tfoot td{ font-weight:700; background:#f4f7f5; }
   table.si-prod-table tr.si-over td{ background:#fdecea; color:#b3261e; font-weight:600; }
-  #siStockMsg{ margin:6px 0; font-weight:600; }
+  .si-foot-row{ display:flex; gap:14px; align-items:flex-start; justify-content:space-between; margin-top:10px; }
+  #siStockMsg{ flex:1 1 auto; min-width:0; margin:0; font-weight:600; }
+  .si-foot-row .si-totals{ flex:0 0 auto; margin-top:0; width:300px; max-width:60%; }
+  @media (max-width:640px){ .si-foot-row{ gap:8px; } .si-foot-row .si-totals{ width:250px; max-width:62%; } #siStockMsg{ font-size:0.8rem; } }
   /* স্টক ভাউচার — পণ্যের নাম বক্স নির্দিষ্ট Width, ব্র্যান্ড মাঝারি, মূল্য/সংখ্যার বক্স ছোট */
   /* স্টক ভাউচার ফরম — পেশাদার ইনভয়েস ধাঁচের ছোট, গোছানো বক্স */
   .sv-form{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px 16px; }
@@ -744,6 +747,7 @@
           <div class="field" id="siDealerThikanaField"><label>ঠিকানা (অটো)</label><input id="siDealerThikana" readonly></div>
         </div>
         <div id="siItems"></div>
+        <div class="si-foot-row">
         <div id="siStockMsg" class="msg err"></div>
         <div class="si-totals">
           <span class="si-lbl">সর্বমোট</span><span class="si-colon">:</span><input id="siTotalBox" type="number" readonly>
@@ -753,6 +757,7 @@
           <span class="si-lbl">পরিশোধযোগ্য</span><span class="si-colon">:</span><input id="siPayableBox" type="number" readonly>
           <span class="si-lbl">পরিশোধ</span><span class="si-colon">:</span><input id="siPaid" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
           <span class="si-lbl">বকেয়া</span><span class="si-colon">:</span><input id="siDueBox" type="number" readonly>
+        </div>
         </div>
         <div class="btn-row">
           <button class="btn" id="siSubmitBtn" onclick="submitSalesInvoice()">সংরক্ষণ করুন</button>
@@ -4255,9 +4260,12 @@ function printStockVoucherById(voucherNo){
     </table>
     <div class="totals-wrap">
       <div class="totals-box">
-        <div class="trow"><span>সর্বমোট</span><span>${first["সর্বমোট"]||0}</span></div>
-        <div class="trow"><span>পরিশোধ</span><span>${first["পরিশোধ"]||0}</span></div>
-        <div class="trow"><span>বকেয়া</span><span>${first["বকেয়া"]||0}</span></div>
+        <div class="trow"><span>সর্বমোট</span><span>:</span><span>${money(subTotal)}</span></div>
+        <div class="trow"><span>কমিশন</span><span>:</span><span>(${first["কমিশন %"]||0}%)${money(commTotal)}</span></div>
+        <div class="trow"><span>অতিরিক্ত ডিসকাউন্ট</span><span>:</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
+        <div class="trow"><span>পরিশোধযোগ্য</span><span>:</span><span>${money(netPay)}</span></div>
+        <div class="trow"><span>পরিশোধ</span><span>:</span><span>${first["পরিশোধ"]||0}</span></div>
+        <div class="trow due"><span>বকেয়া</span><span>:</span><span>${first["বকেয়া"]||0}</span></div>
       </div>
     </div>
     <div class="sign-row">
@@ -4361,7 +4369,7 @@ function renderSiBlock(block){
     const price = Number(it["কম্বো মূল্য"]) || 0;
     return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td></tr>`;
   }).join("");
-  tfoot.innerHTML = `<tr><td colspan="4" style="text-align:right;">প্যাকেজের মোট</td><td>${siMoney(unit * qty)}</td></tr>`;
+  tfoot.innerHTML = "";
 }
 
 /* স্টকের বেশি অর্ডার হলে বার্তা দেখায়; ঠিক থাকলে true */
@@ -4878,7 +4886,7 @@ async function rejectPendingOrder(invoiceNo){
   } else alert(res.message);
 }
 
-function printSalesInvoiceById(invoiceNo){
+async function printSalesInvoiceById(invoiceNo){
   const lines = salesInvoicesCache.filter(e => e["ইনভয়েস নং"] === invoiceNo);
   if(lines.length === 0) return;
   const first = lines[0];
@@ -4895,13 +4903,15 @@ function printSalesInvoiceById(invoiceNo){
       const price = Number(it["কম্বো মূল্য"]) || 0;
       return `<tr><td>${k+1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""))}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
     }).join("");
-    return head + body + `<tr class="pk-sub"><td colspan="4" style="text-align:right;">প্যাকেজের মোট</td><td>${e["মোট মূল্য"]||0}</td></tr>`;
+    return head + body;
   }).join("");
   const commTotal = lines.reduce((s,e)=>s+(Number(e["কমিশন মূল্য"])||0),0);
   const subTotal = lines.reduce((s,e)=>s+(Number(e["মোট মূল্য"])||0),0);
   const netPay = lines.reduce((s,e)=>s+(Number(e["পরিশোধযোগ্য মূল্য"])||0),0) - (Number(first["ডিসকাউন্ট"])||0);
 
   const win = window.open("", "_blank", "width=900,height=700");
+  let depotAddr = "";
+  try{ const ab = await cachedApiCall("getAbout", {}, 30000); depotAddr = ab && ab.success && ab.about ? (ab.about["জেলা ডিপুর ঠিকানা"] || "") : ""; }catch(e){}
   win.document.write(`<html><head><meta charset="utf-8"><title>অর্ডার ইনভয়েস — ${invoiceNo}</title>
     <style>
       @page{ size:A4; margin:0.5in; }
@@ -4922,7 +4932,8 @@ function printSalesInvoiceById(invoiceNo){
       table.items tr.pk-sub td{ font-weight:700; border-bottom:1px solid #153f37; }
       .totals-wrap{ display:flex; justify-content:flex-end; margin-top:10px; }
       .totals-box{ min-width:230px; }
-      .totals-box .trow{ display:flex; justify-content:space-between; font-size:13px; }
+      .totals-box .trow{ display:grid; grid-template-columns:150px 14px auto; font-size:13px; line-height:1.7; }
+      .totals-box .trow span:nth-child(2){ text-align:center; }
       .totals-box .trow span:last-child{ font-weight:600; }
       .totals-box .trow.due span{ font-weight:700; }
       .sign-row{ display:flex; justify-content:space-between; margin-top:70px; }
@@ -4933,12 +4944,12 @@ function printSalesInvoiceById(invoiceNo){
     <div class="letterhead">
       <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
+      ${depotAddr ? `<p style="color:#1c2b28;font-weight:500;">${escMsgHtml(depotAddr)}</p>` : ""}
       <div class="doc-title">অর্ডার ইনভয়েস</div>
     </div>
     <div class="meta-row"><span>ইনভয়েস নং: <b>${invoiceNo}</b></span><span>তারিখ: <b>${dateStr}</b></span></div>
     <div class="dealer-info">
-      <div><b>ডিলার</b> : ${first["ডিলার নাম"]||""}</div>
-      <div><b>মোবাইল</b> : ${first["মোবাইল"]||""}</div>
+      <div><b>ডিলার</b> : ${first["ডিলার নাম"]||""} &nbsp;&nbsp;&nbsp; <b style="min-width:0;">মোবাইল</b> : ${first["মোবাইল"]||""}</div>
       <div><b>ঠিকানা</b> : ${first["ঠিকানা"]||""}</div>
     </div>
     <table class="items">
