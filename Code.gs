@@ -1021,6 +1021,9 @@ function runAction(action, data) {
       case "currentStockReport":
         result = currentStockReport(data);
         break;
+      case "orderStockInfo":
+        result = orderStockInfo(data);
+        break;
 
       // ---- খরচ ভাউচার (ডিলারের নিজস্ব) ----
       case "addExpenseVoucher":

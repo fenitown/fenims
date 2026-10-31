@@ -251,6 +251,10 @@ function addSalesInvoice(data) {
   const dealerInfo = getDealerRow(dealersSheet, targetDealerId);
   if (!dealerInfo) return { success: false, message: "ডিলার পাওয়া যায়নি" };
 
+  // স্টকের বেশি অর্ডার করা যাবে না
+  const stockErr = checkOrderStock(masterSS, data.items || [], "");
+  if (stockErr) return { success: false, message: stockErr };
+
   const contact = getDealerContactInfo(dealersSheet, targetDealerId);
   const invoiceNo = "SI" + Utilities.formatString("%06d", Math.floor(Math.random() * 900000) + 100000);
   const now = data.date ? new Date(data.date) : new Date();
@@ -304,6 +308,10 @@ function updateSalesInvoiceFull(data) {
     return { success: false, message: "এই ইনভয়েস এডিট করার অনুমতি আপনার নেই" };
   }
   const targetDealerId = scopeDealerId === null ? (data.dealerId || existingDealerId) : scopeDealerId;
+
+  // স্টকের বেশি অর্ডার করা যাবে না (এই ইনভয়েসের নিজের পুরনো সংখ্যা বাদ দিয়ে হিসাব)
+  const stockErr = checkOrderStock(masterSS, data.items || [], data.invoiceNo);
+  if (stockErr) return { success: false, message: stockErr };
 
   // পুরনো লাইন সব ডিলিট
   for (let i = values.length - 1; i >= 1; i--) {
@@ -771,11 +779,18 @@ function depotReport(data) {
  *=======================================================*/
 function stockNormName(v) { return String(v == null ? "" : v).replace(/\s+/g, "").toLowerCase(); }
 
-function currentStockReport(data) {
-  const perm = checkAgencyPermission(data.token);
-  if (!perm.ok) return { success: false, message: perm.message };
+/* প্যাকেজের পণ্য-লাইনের লেখা (যেমন "চিনি ১ কেজি") থেকে শেষের একক (কেজি/লিটার/পিস) আলাদা করা */
+function stockUnitFromText(text) {
+  const m = String(text == null ? "" : text).trim().match(/[\d০-৯][\d০-৯.,\/]*\s*([^\d০-৯\s.,\/][^\d০-৯]*?)\s*$/);
+  const u = m ? m[1].trim() : "";
+  return u.length <= 12 ? u : "";
+}
 
-  const masterSS = getMasterSS();
+/*******************************************************
+ * স্টকের শেয়ার্ড হিসাব — currentStockReport ও অর্ডার ইনভয়েসের স্টক যাচাই দুটোতেই ব্যবহৃত
+ * excludeInvoiceNo: ইনভয়েস এডিটের সময় ওই ইনভয়েসের নিজের সংখ্যা বিক্রি হিসেবে ধরা হয় না
+ *******************************************************/
+function computeStockState(masterSS, excludeInvoiceNo) {
   const products = genericListRows(getSheet(masterSS, "Products"));
   const byId = {};
   const list = [];
@@ -795,9 +810,10 @@ function currentStockReport(data) {
 
   // প্যাকেজ → কোন কোন পণ্য (পণ্য-লাইন ধরে)
   const unmatched = {};
-  const pkgMap = {};
+  const pkgMap = {};     // PackageID -> [r, ...]
+  const pkgLines = {};   // PackageID -> [{ r|null, unit }, ...] (প্যাকেজের পণ্য-লাইনের ক্রমে)
   genericListRows(getSheet(masterSS, "Packages")).forEach(function (pk) {
-    const hits = [];
+    const hits = [], lines = [];
     for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
       const text = pk["পণ্য" + i + " - নাম ও পরিমাণ"];
       if (!text) continue;
@@ -807,19 +823,78 @@ function currentStockReport(data) {
         if (r.key && t.indexOf(r.key) !== -1 && (!best || r.key.length > best.key.length)) best = r;
       });
       if (best) hits.push(best); else unmatched[String(text)] = true;
+      lines.push({ r: best, unit: stockUnitFromText(text) });
     }
     pkgMap[pk["PackageID"]] = hits;
+    pkgLines[pk["PackageID"]] = lines;
   });
 
   genericListRows(getSheet(masterSS, "SalesInvoice")).forEach(function (e) {
+    if (excludeInvoiceNo && e["ইনভয়েস নং"] === excludeInvoiceNo) return;
     const q = Number(e["সংখ্যা"]) || 0;
     (pkgMap[e["PackageID"]] || []).forEach(function (r) { r.sold += q; });
   });
 
-  const rows = list.map(function (r) {
+  return { list: list, pkgMap: pkgMap, pkgLines: pkgLines, unmatched: unmatched };
+}
+
+function currentStockReport(data) {
+  const perm = checkAgencyPermission(data.token);
+  if (!perm.ok) return { success: false, message: perm.message };
+
+  const st = computeStockState(getMasterSS());
+  const rows = st.list.map(function (r) {
     const qty = r.qtyIn - r.sold;
     const avg = r.qtyIn > 0 ? r.valueIn / r.qtyIn : 0;
     return { productId: r.productId, name: r.name, brand: r.brand, qtyIn: r.qtyIn, sold: r.sold, qty: qty, value: Math.round(qty * avg) };
   });
-  return { success: true, rows: rows, unmatched: Object.keys(unmatched).slice(0, 10) };
+  return { success: true, rows: rows, unmatched: Object.keys(st.unmatched).slice(0, 10) };
+}
+
+/*******************************************************
+ * অর্ডার ইনভয়েসের স্টক তথ্য — প্রতিটি প্যাকেজের প্রতিটি পণ্য-লাইনে কতটুকু স্টক আছে
+ * (ডিপু ও ডিলার দুই সাইট থেকেই ডাকা যায়)
+ * data: { token, excludeInvoice? }
+ *******************************************************/
+function orderStockInfo(data) {
+  const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
+  if (!perm.ok) return { success: false, message: perm.message };
+  const st = computeStockState(getMasterSS(), data.excludeInvoice || "");
+  const packages = {};
+  Object.keys(st.pkgLines).forEach(function (pid) {
+    packages[pid] = st.pkgLines[pid].map(function (l) {
+      return l.r
+        ? { productId: l.r.productId, name: l.r.name, avail: l.r.qtyIn - l.r.sold, unit: l.unit }
+        : null;   // স্টকের পণ্যের সাথে মেলেনি — সীমা নেই
+    });
+  });
+  return { success: true, packages: packages };
+}
+
+/*******************************************************
+ * সংরক্ষণের আগে সার্ভার-সাইড স্টক যাচাই — বেশি অর্ডার হলে ব্যর্থ বার্তা ফেরত দেয়, ঠিক থাকলে null
+ *******************************************************/
+function checkOrderStock(masterSS, items, excludeInvoiceNo) {
+  const st = computeStockState(masterSS, excludeInvoiceNo);
+  const need = {}, order = [];
+  (items || []).forEach(function (item) {
+    const q = Number(item.quantity) || 0;
+    if (q <= 0) return;
+    (st.pkgLines[item.packageId] || []).forEach(function (l) {
+      if (!l.r) return;
+      const k = l.r.productId;
+      if (!need[k]) { need[k] = { r: l.r, unit: l.unit, qty: 0 }; order.push(k); }
+      need[k].qty += q;
+    });
+  });
+  const problems = [];
+  order.forEach(function (k) {
+    const n = need[k], avail = n.r.qtyIn - n.r.sold;
+    if (n.qty > avail) {
+      problems.push(avail <= 0
+        ? n.r.name + " — স্টক নেই"
+        : n.r.name + " — স্টক আছে " + avail + (n.unit ? " " + n.unit : ""));
+    }
+  });
+  return problems.length ? problems.join("; ") : null;
 }

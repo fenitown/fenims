@@ -172,11 +172,12 @@
   .card .num{ font-size:1.6rem; font-weight:700; color:var(--teal-dark); }
   .card .label{ font-size:0.82rem; color:var(--muted); margin-top:2px; }
   /* ডিপু ড্যাশবোর্ড — কার্ড আগের চেয়ে চওড়া, সবগুলো সমান সাইজ; লেখা বড় হলে JS ছোট করে কার্ডের ভেতরেই বসায় */
-  #agencyDashboardCards{ grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); grid-auto-rows:118px; gap:12px; }
-  #agencyDashboardCards .card{ display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; padding:10px 14px; box-sizing:border-box; }
-  #agencyDashboardCards .card .num{ line-height:1.15; white-space:nowrap; }
-  #agencyDashboardCards .card .label{ line-height:1.3; overflow-wrap:anywhere; }
-  @media (max-width:640px){ #agencyDashboardCards{ grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:128px; gap:10px; } }
+  #agencyDashboardCards{ grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:84px; gap:10px; }
+  #agencyDashboardCards .card{ display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; padding:6px 12px; box-sizing:border-box; }
+  #agencyDashboardCards .card .num{ line-height:1.15; white-space:nowrap; font-size:1.35rem; font-weight:800; color:#0b2520; }
+  #agencyDashboardCards .card .label{ line-height:1.25; overflow-wrap:anywhere; font-size:0.88rem; font-weight:600; color:#1c2b28; margin-top:1px; }
+  @media (max-width:900px){ #agencyDashboardCards{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:640px){ #agencyDashboardCards{ grid-template-columns:1fr; grid-auto-rows:68px; gap:8px; } }
 
   /* ---------- অফিসিয়াল ফরম্যাট (ডিলার রেজিস্ট্রেশন) ---------- */
   .official-letterhead{
@@ -255,6 +256,19 @@
   .si-totals input{ width:100%; padding:7px 9px; font-size:0.92rem; text-align:right; border:1px solid #cfd8d3; background:#fff; }
   .si-totals input[readonly]{ background:#f4f7f5; font-weight:700; }
   .si-totals input:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(21,63,55,0.12); }
+  /* অর্ডার ইনভয়েস — প্যাকেজ ব্লক (ভাউচার ধাঁচ): প্যাকেজ সিলেক্ট করলে পণ্য তালিকা বসে */
+  .si-pkg-block{ border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px; background:#fff; }
+  .si-pkg-head{ display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px; }
+  .si-pkg-head select{ flex:1 1 220px; min-width:0; }
+  .si-pkg-head .si-qty-wrap{ display:flex; flex-direction:column; width:110px; }
+  .si-pkg-head .si-qty-wrap label{ font-size:0.76rem; color:var(--muted); margin-bottom:2px; }
+  table.si-prod-table{ width:100%; border-collapse:collapse; }
+  table.si-prod-table th, table.si-prod-table td{ border:1px solid var(--line); padding:5px 8px; font-size:0.88rem; text-align:center; }
+  table.si-prod-table th{ background:#eef0e9; }
+  table.si-prod-table td.cell-left{ text-align:left; }
+  table.si-prod-table tfoot td{ font-weight:700; background:#f4f7f5; }
+  table.si-prod-table tr.si-over td{ background:#fdecea; color:#b3261e; font-weight:600; }
+  #siStockMsg{ margin:6px 0; font-weight:600; }
   /* স্টক ভাউচার — পণ্যের নাম বক্স নির্দিষ্ট Width, ব্র্যান্ড মাঝারি, মূল্য/সংখ্যার বক্স ছোট */
   /* স্টক ভাউচার ফরম — পেশাদার ইনভয়েস ধাঁচের ছোট, গোছানো বক্স */
   .sv-form{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px 16px; }
@@ -731,9 +745,13 @@
         </div>
         <div id="siItems"></div>
         <button class="btn secondary small" onclick="addSiItemRow()">+ আরেকটি প্যাকেজ যোগ করুন</button>
+        <div id="siStockMsg" class="msg err"></div>
         <div class="si-totals">
           <span class="si-lbl">সর্বমোট</span><span class="si-colon">:</span><input id="siTotalBox" type="number" readonly>
-          <span class="si-lbl">ডিসকাউন্ট</span><span class="si-colon">:</span><input id="siDiscount" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
+          <span class="si-lbl">কমিশন (%)</span><span class="si-colon">:</span><input id="siCommissionPct" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
+          <span class="si-lbl">কমিশন</span><span class="si-colon">:</span><input id="siCommissionAmt" type="number" readonly>
+          <span class="si-lbl">অতিরিক্ত ডিসকাউন্ট</span><span class="si-colon">:</span><input id="siDiscount" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
+          <span class="si-lbl">পরিশোধযোগ্য</span><span class="si-colon">:</span><input id="siPayableBox" type="number" readonly>
           <span class="si-lbl">পরিশোধ</span><span class="si-colon">:</span><input id="siPaid" type="number" min="0" value="0" oninput="updateSiTotalsPreview()">
           <span class="si-lbl">বকেয়া</span><span class="si-colon">:</span><input id="siDueBox" type="number" readonly>
         </div>
@@ -4292,6 +4310,7 @@ async function loadSalesInvoiceSetup(){
   document.getElementById("siDate").value = new Date().toISOString().slice(0,10);
   if(document.getElementById("siItems").children.length === 0) addSiItemRow();
 
+  loadSiStock(window.__siEditingInvoiceNo || "");
   loadSalesInvoices();
 }
 
@@ -4302,62 +4321,106 @@ function onSiDealerChange(){
   document.getElementById("siDealerThikana").value = d ? (d["ঠিকানা"]||"") : "";
 }
 
+const siMoney = n => Math.round((Number(n) || 0) * 100) / 100;
+
+/* প্যাকেজ ব্লক — প্যাকেজ সিলেক্ট করলে তার সব পণ্য (ক্রম, নাম, মূল্য, সংখ্যা, মোট) টেবিলে বসে */
 function addSiItemRow(){
   const wrap = document.getElementById("siItems");
   const packages = window.__siPackagesCache || [];
-  const row = document.createElement("div");
-  row.className = "item-row-v2";
-  row.innerHTML = `
-    <select class="siPackage" onchange="onSiPackageChange(this)">${packages.map(p => `<option value="${p['PackageID']}" data-price="${p['সর্বমোট মূল্য']||0}">${p['নাম']}</option>`).join("")}</select>
-    <input placeholder="একক মূল্য" type="number" min="0" class="siUnitPrice" oninput="updateSiRowCalc(this)">
-    <input placeholder="সংখ্যা" type="number" min="1" class="siQty" oninput="updateSiRowCalc(this)">
-    <input placeholder="মোট মূল্য" type="number" class="siTotal" readonly>
-    <input placeholder="কমিশন %" type="number" min="0" class="siCommissionPct" oninput="updateSiRowCalc(this)">
-    <input placeholder="কমিশন মূল্য" type="number" class="siCommissionAmt" readonly>
-    <input placeholder="পরিশোধযোগ্য মূল্য" type="number" class="siPayable" readonly>
-    <button type="button" class="btn secondary small" onclick="this.parentElement.remove(); updateSiTotalsPreview();">✕</button>`;
-  wrap.appendChild(row);
-  if(row.querySelector(".siPackage").options.length > 0) onSiPackageChange(row.querySelector(".siPackage"));
+  const block = document.createElement("div");
+  block.className = "si-pkg-block";
+  block.dataset.unit = "0";
+  block.innerHTML = `
+    <div class="si-pkg-head">
+      <select class="siPackage" onchange="onSiPackageChange(this)"><option value="">-- প্যাকেজ সিলেক্ট করুন --</option>${packages.map(p => `<option value="${p['PackageID']}">${p['নাম']}</option>`).join("")}</select>
+      <div class="si-qty-wrap"><label>প্যাকেজ সংখ্যা</label><input type="number" min="1" value="1" class="siQty" oninput="onSiQtyChange(this)"></div>
+      <button type="button" class="btn secondary small" onclick="this.closest('.si-pkg-block').remove(); updateSiTotalsPreview();">✕</button>
+    </div>
+    <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
+  wrap.appendChild(block);
 }
 
 function onSiPackageChange(sel){
-  const row = sel.closest(".item-row-v2");
-  const opt = sel.options[sel.selectedIndex];
-  if(opt) row.querySelector(".siUnitPrice").value = opt.dataset.price || 0;
-  updateSiRowCalc(row.querySelector(".siUnitPrice"));
+  renderSiBlock(sel.closest(".si-pkg-block"));
+  updateSiTotalsPreview();
 }
-
-function updateSiRowCalc(el){
-  const row = el.closest(".item-row-v2");
-  const unitPrice = Number(row.querySelector(".siUnitPrice").value) || 0;
-  const qty = Number(row.querySelector(".siQty").value) || 0;
-  const total = unitPrice * qty;
-  const commissionPct = Number(row.querySelector(".siCommissionPct").value) || 0;
-  const commissionAmt = total * commissionPct / 100;
-  const payable = total - commissionAmt;
-  row.querySelector(".siTotal").value = total;
-  row.querySelector(".siCommissionAmt").value = commissionAmt;
-  row.querySelector(".siPayable").value = payable;
+function onSiQtyChange(inp){
+  renderSiBlock(inp.closest(".si-pkg-block"));
   updateSiTotalsPreview();
 }
 
-function updateSiTotalsPreview(){
-  const rows = [...document.querySelectorAll("#siItems .item-row-v2")];
-  let subtotal = 0, totalPayable = 0;
-  rows.forEach(r => {
-    const qty = Number(r.querySelector(".siQty").value) || 0;
-    const price = Number(r.querySelector(".siUnitPrice").value) || 0;
-    const total = qty * price;
-    const commissionAmt = Number(r.querySelector(".siCommissionAmt").value) || 0;
-    subtotal += total;
-    totalPayable += (total - commissionAmt);
+function renderSiBlock(block){
+  const pid = block.querySelector(".siPackage").value;
+  const qty = Number(block.querySelector(".siQty").value) || 0;
+  const tbody = block.querySelector("tbody"), tfoot = block.querySelector("tfoot");
+  const pkg = (window.__siPackagesCache || []).find(p => p["PackageID"] === pid);
+  if(!pkg){ tbody.innerHTML = ""; tfoot.innerHTML = ""; block.dataset.unit = "0"; return; }
+  const items = pkg.items || [];
+  const sumItems = items.reduce((s, it) => s + (Number(it["কম্বো মূল্য"]) || 0), 0);
+  const unit = Number(pkg["সর্বমোট মূল্য"]) || sumItems;
+  block.dataset.unit = String(unit);
+  tbody.innerHTML = items.map((it, k) => {
+    const price = Number(it["কম্বো মূল্য"]) || 0;
+    return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td></tr>`;
+  }).join("");
+  tfoot.innerHTML = `<tr><td colspan="4" style="text-align:right;">প্যাকেজের মোট</td><td>${siMoney(unit * qty)}</td></tr>`;
+}
+
+/* স্টকের বেশি অর্ডার হলে বার্তা দেখায়; ঠিক থাকলে true */
+function siCheckStock(){
+  const stock = window.__siStock || {};
+  const blocks = [...document.querySelectorAll("#siItems .si-pkg-block")];
+  const need = {}, meta = {};
+  blocks.forEach(b => {
+    b.querySelectorAll("tbody tr.si-over").forEach(tr => tr.classList.remove("si-over"));
+    const pid = b.querySelector(".siPackage").value;
+    const q = Number(b.querySelector(".siQty").value) || 0;
+    if(!pid || q <= 0) return;
+    (stock[pid] || []).forEach(l => {
+      if(!l) return;
+      need[l.productId] = (need[l.productId] || 0) + q;
+      meta[l.productId] = l;
+    });
   });
+  const msgs = [], over = {};
+  Object.keys(need).forEach(k => {
+    const m = meta[k];
+    if(need[k] > m.avail){
+      over[k] = true;
+      msgs.push(m.avail <= 0 ? `${m.name} — স্টক নেই` : `${m.name} — স্টক আছে ${m.avail}${m.unit ? " " + m.unit : ""}`);
+    }
+  });
+  blocks.forEach(b => {
+    const pid = b.querySelector(".siPackage").value;
+    const trs = b.querySelectorAll("tbody tr");
+    (stock[pid] || []).forEach((l, i) => { if(l && over[l.productId] && trs[i]) trs[i].classList.add("si-over"); });
+  });
+  document.getElementById("siStockMsg").innerHTML = msgs.map(m => escMsgHtml(m)).join("<br>");
+  return msgs.length === 0;
+}
+
+async function loadSiStock(excludeInvoice){
+  const res = await apiCall("orderStockInfo", { excludeInvoice: excludeInvoice || "" });
+  window.__siStock = res.success ? res.packages : {};
+  siCheckStock();
+}
+
+function updateSiTotalsPreview(){
+  const blocks = [...document.querySelectorAll("#siItems .si-pkg-block")];
+  let subtotal = 0;
+  blocks.forEach(b => {
+    subtotal += (Number(b.dataset.unit) || 0) * (Number(b.querySelector(".siQty").value) || 0);
+  });
+  const pct = Number(document.getElementById("siCommissionPct").value) || 0;
+  const commission = siMoney(subtotal * pct / 100);
   const discount = Number(document.getElementById("siDiscount").value) || 0;
   const paid = Number(document.getElementById("siPaid").value) || 0;
-  const netPayable = totalPayable - discount;
-  const due = netPayable - paid;
-  document.getElementById("siTotalBox").value = totalPayable;
-  document.getElementById("siDueBox").value = due;
+  const payable = siMoney(subtotal - commission - discount);
+  document.getElementById("siTotalBox").value = siMoney(subtotal);
+  document.getElementById("siCommissionAmt").value = commission;
+  document.getElementById("siPayableBox").value = payable;
+  document.getElementById("siDueBox").value = siMoney(payable - paid);
+  siCheckStock();
 }
 
 async function submitSalesInvoice(){
@@ -4366,16 +4429,18 @@ async function submitSalesInvoice(){
   const msgBox = document.getElementById("siMsg");
   if(isAgency && !dealerId){ msgBox.textContent = "ডিলার সিলেক্ট করুন"; msgBox.className = "msg err"; return; }
 
-  const rows = [...document.querySelectorAll("#siItems .item-row-v2")];
+  const rows = [...document.querySelectorAll("#siItems .si-pkg-block")];
+  const commissionPct = document.getElementById("siCommissionPct").value || 0;
   const items = rows.map(r => ({
     packageId: r.querySelector(".siPackage").value,
     packageName: r.querySelector(".siPackage").selectedOptions[0]?.textContent || "",
-    unitPrice: r.querySelector(".siUnitPrice").value,
+    unitPrice: r.dataset.unit,
     quantity: r.querySelector(".siQty").value,
-    commissionPercent: r.querySelector(".siCommissionPct").value || 0
-  })).filter(i => i.packageId && i.quantity);
+    commissionPercent: commissionPct
+  })).filter(i => i.packageId && Number(i.quantity) > 0);
 
-  if(items.length === 0){ msgBox.textContent = "অন্তত একটি প্যাকেজ ও সংখ্যা দিন"; msgBox.className = "msg err"; return; }
+  if(items.length === 0){ msgBox.textContent = "অন্তত একটি প্যাকেজ সিলেক্ট করে সংখ্যা দিন"; msgBox.className = "msg err"; return; }
+  if(!siCheckStock()){ msgBox.textContent = "স্টকের বেশি অর্ডার করা যাবে না — উপরের স্টকের বার্তা দেখুন"; msgBox.className = "msg err"; return; }
 
   markSaving("siMsg");
   const payload = {
@@ -4400,6 +4465,7 @@ async function submitSalesInvoice(){
     clearCache();
     cancelSiEdit();
     loadSalesInvoices();
+    loadSiStock();
     checkPendingOrdersBadge();
   }
 }
@@ -4418,10 +4484,12 @@ function cancelSiEdit(){
   document.getElementById("siDate").value = new Date().toISOString().slice(0,10);
   document.getElementById("siItems").innerHTML = "";
   addSiItemRow();
+  document.getElementById("siCommissionPct").value = "0";
   document.getElementById("siDiscount").value = "0";
   document.getElementById("siPaid").value = "0";
   updateSiTotalsPreview();
   document.getElementById("siMsg").textContent = "";
+  loadSiStock();
 }
 
 async function loadSalesInvoices(){
@@ -4612,7 +4680,7 @@ async function deleteDealerCollectionRow(collectionId){
   if(res.success){ clearCache(); await loadSalesInvoices(); await renderCollectBox(); } else alert(res.message);
 }
 
-function editSalesInvoiceByNo(invoiceNo){
+async function editSalesInvoiceByNo(invoiceNo){
   const isAgency = state.dealerId === "AGENCY";
   const lines = salesInvoicesCache.filter(x => x["ইনভয়েস নং"] === invoiceNo);
   if(lines.length === 0) return;
@@ -4632,17 +4700,17 @@ function editSalesInvoiceByNo(invoiceNo){
   document.getElementById("siDiscount").value = first["ডিসকাউন্ট"] || 0;
   document.getElementById("siPaid").value = first["পরিশোধ"] || 0;
 
+  document.getElementById("siCommissionPct").value = first["কমিশন %"] || 0;
   document.getElementById("siItems").innerHTML = "";
   lines.forEach(line => {
     addSiItemRow();
     const row = document.getElementById("siItems").lastElementChild;
     row.querySelector(".siPackage").value = line["PackageID"] || "";
-    row.querySelector(".siUnitPrice").value = line["একক মূল্য"] || 0;
-    row.querySelector(".siQty").value = line["সংখ্যা"] || 0;
-    row.querySelector(".siCommissionPct").value = line["কমিশন %"] || 0;
-    updateSiRowCalc(row.querySelector(".siQty"));
+    row.querySelector(".siQty").value = line["সংখ্যা"] || 1;
+    renderSiBlock(row);
   });
   updateSiTotalsPreview();
+  await loadSiStock(invoiceNo);   // এই ইনভয়েসের নিজের সংখ্যা বাদ দিয়ে স্টক হিসাব
 
   document.getElementById("sec-salesInvoice").scrollIntoView({ behavior:"smooth" });
 }
