@@ -5004,8 +5004,10 @@ async function printSalesInvoiceById(invoiceNo){
       .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
       .meta-row{ display:flex; justify-content:space-between; margin-bottom:10px; font-size:12.5px; }
       .dealer-info{ display:flex; justify-content:space-between; gap:24px; margin-bottom:14px; font-size:13px; line-height:1.8; }
-      .dealer-info .di-row{ display:grid; grid-template-columns:72px 12px auto; }
-      .dealer-info .di-col:last-child .di-row{ grid-template-columns:78px 12px auto; }
+      .dealer-info .di-col:first-child{ flex:1 1 auto; }
+      .dealer-info .di-col:last-child{ flex:0 0 230px; margin-right:50px; }
+      .dealer-info .di-row{ display:grid; grid-template-columns:46px 12px auto; }
+      .dealer-info .di-col:last-child .di-row{ grid-template-columns:66px 12px auto; }
       table.items{ width:100%; border-collapse:collapse; margin-top:4px; }
       table.items th{ border-bottom:2px solid #153f37; padding:6px 8px; font-size:12px; text-align:center; background:#eef0e9; }
       table.items td{ border-bottom:1px dashed #999; padding:7px 8px; font-size:12.5px; text-align:center; }
@@ -5019,7 +5021,7 @@ async function printSalesInvoiceById(invoiceNo){
       .totals-box .trow span:last-child{ font-weight:600; }
       .totals-box .trow.due span{ font-weight:700; }
       .sign-row{ display:flex; justify-content:space-between; margin-top:70px; }
-      .sign-box{ text-align:center; width:40%; }
+      .sign-box{ text-align:center; width:22%; }
       .sign-line{ border-top:1px solid #333; margin-top:40px; padding-top:4px; font-size:12px; }
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
@@ -5047,8 +5049,7 @@ async function printSalesInvoiceById(invoiceNo){
     <div class="totals-wrap">
       <div class="totals-box">
         <div class="trow"><span>সর্বমোট</span><span>:</span><span>${money(subTotal)}</span></div>
-        <div class="trow"><span>কমিশন (%)</span><span>:</span><span>${first["কমিশন %"]||0}%</span></div>
-        <div class="trow"><span>কমিশন</span><span>:</span><span>${money(commTotal)}</span></div>
+        <div class="trow"><span>কমিশন (${first["কমিশন %"]||0}%)</span><span>:</span><span>${money(commTotal)}</span></div>
         <div class="trow"><span>অতিরিক্ত ডিসকাউন্ট</span><span>:</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
         <div class="trow"><span>পরিশোধযোগ্য</span><span>:</span><span>${money(netPay)}</span></div>
         <div class="trow"><span>পরিশোধ</span><span>:</span><span>${first["পরিশোধ"]||0}</span></div>
