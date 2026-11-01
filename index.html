@@ -4305,12 +4305,9 @@ function printStockVoucherById(voucherNo){
     </table>
     <div class="totals-wrap">
       <div class="totals-box">
-        <div class="trow"><span>সর্বমোট</span><span>:</span><span>${money(subTotal)}</span></div>
-        <div class="trow"><span>কমিশন</span><span>:</span><span>(${first["কমিশন %"]||0}%)${money(commTotal)}</span></div>
-        <div class="trow"><span>অতিরিক্ত ডিসকাউন্ট</span><span>:</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
-        <div class="trow"><span>পরিশোধযোগ্য</span><span>:</span><span>${money(netPay)}</span></div>
-        <div class="trow"><span>পরিশোধ</span><span>:</span><span>${first["পরিশোধ"]||0}</span></div>
-        <div class="trow due"><span>বকেয়া</span><span>:</span><span>${first["বকেয়া"]||0}</span></div>
+        <div class="trow"><span>সর্বমোট</span><span>${first["সর্বমোট"]||0}</span></div>
+        <div class="trow"><span>পরিশোধ</span><span>${first["পরিশোধ"]||0}</span></div>
+        <div class="trow"><span>বকেয়া</span><span>${first["বকেয়া"]||0}</span></div>
       </div>
     </div>
     <div class="sign-row">
@@ -4361,6 +4358,7 @@ async function loadSalesInvoiceSetup(){
   document.getElementById("siDate").value = new Date().toISOString().slice(0,10);
   if(document.getElementById("siItems").children.length === 0) addSiItemRow();
 
+  loadSiManagers();
   loadSiStock(window.__siEditingInvoiceNo || "");
   loadSalesInvoices();
 }
@@ -4390,6 +4388,7 @@ const siMoney = n => Math.round((Number(n) || 0) * 100) / 100;
 function addSiItemRow(){
   const wrap = document.getElementById("siItems");
   const packages = window.__siPackagesCache || [];
+  const isFirst = wrap.children.length === 0;
   const block = document.createElement("div");
   block.className = "si-pkg-block";
   block.dataset.unit = "0";
@@ -4397,10 +4396,26 @@ function addSiItemRow(){
     <div class="si-pkg-head">
       <select class="siPackage" onchange="onSiPackageChange(this)"><option value="">-- প্যাকেজ সিলেক্ট করুন --</option>${packages.map(p => `<option value="${p['PackageID']}">${p['নাম']}</option>`).join("")}</select>
       <div class="si-qty-wrap"><label>প্যাকেজ সংখ্যা</label><input type="number" min="1" value="1" class="siQty" oninput="onSiQtyChange(this)"></div>
-      <button type="button" class="btn secondary small" onclick="this.closest('.si-pkg-block').remove(); updateSiTotalsPreview();">✕</button>
+      ${isFirst ? `<div class="si-qty-wrap" style="width:170px;"><label>বিক্রয়কারী</label><select id="siSeller">${siSellerOptions("")}</select></div>` : ""}
+      ${isFirst ? "" : `<button type="button" class="btn secondary small" onclick="this.closest('.si-pkg-block').remove(); updateSiTotalsPreview();">✕</button>`}
     </div>
-    <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>বস্তা/বক্স</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
+    <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
   wrap.appendChild(block);
+}
+
+/* বিক্রয়কারী — ব্যবস্থাপক তথ্য থেকে নামের তালিকা */
+function siSellerOptions(cur){
+  const names = window.__siManagers || [];
+  let h = '<option value="">-- বিক্রয়কারী --</option>' + names.map(n => `<option value="${escAttr(n)}"${n === cur ? " selected" : ""}>${escAttr(n)}</option>`).join("");
+  if(cur && !names.includes(cur)) h += `<option value="${escAttr(cur)}" selected>${escAttr(cur)}</option>`;
+  return h;
+}
+function setSiSeller(v){ const el = document.getElementById("siSeller"); if(el) el.innerHTML = siSellerOptions(v || ""); }
+async function loadSiManagers(){
+  const res = await cachedApiCall("getAgencyInfo", {}, 60000);
+  window.__siManagers = (res.success && res.agency && res.agency.managers ? res.agency.managers : []).map(m => String(m.name || "").trim()).filter(Boolean);
+  const el = document.getElementById("siSeller");
+  if(el) setSiSeller(el.value);
 }
 
 function onSiPackageChange(sel){
@@ -4514,7 +4529,8 @@ async function submitSalesInvoice(){
     dealerId, items,
     date: document.getElementById("siDate").value,
     discount: document.getElementById("siDiscount").value,
-    paid: document.getElementById("siPaid").value
+    paid: document.getElementById("siPaid").value,
+    seller: document.getElementById("siSeller") ? document.getElementById("siSeller").value : ""
   };
 
   let res;
@@ -4769,6 +4785,7 @@ async function editSalesInvoiceByNo(invoiceNo){
 
   document.getElementById("siCommissionPct").value = first["কমিশন %"] || 0;
   document.getElementById("siItems").innerHTML = "";
+  window.__siSellerPending = first["বিক্রয়কারী"] || "";
   lines.forEach(line => {
     addSiItemRow();
     const row = document.getElementById("siItems").lastElementChild;
@@ -4776,6 +4793,7 @@ async function editSalesInvoiceByNo(invoiceNo){
     row.querySelector(".siQty").value = line["সংখ্যা"] || 1;
     renderSiBlock(row);
   });
+  setSiSeller(window.__siSellerPending || "");
   updateSiTotalsPreview();
   await loadSiStock(invoiceNo);   // এই ইনভয়েসের নিজের সংখ্যা বাদ দিয়ে স্টক হিসাব
 
@@ -4985,8 +5003,9 @@ async function printSalesInvoiceById(invoiceNo){
       .letterhead h1{ margin:0; color:#153f37; font-size:20px; }
       .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
       .meta-row{ display:flex; justify-content:space-between; margin-bottom:10px; font-size:12.5px; }
-      .dealer-info{ margin-bottom:14px; font-size:13px; line-height:1.8; }
-      .dealer-info b{ display:inline-block; min-width:64px; }
+      .dealer-info{ display:flex; justify-content:space-between; gap:24px; margin-bottom:14px; font-size:13px; line-height:1.8; }
+      .dealer-info .di-row{ display:grid; grid-template-columns:72px 12px auto; }
+      .dealer-info .di-col:last-child .di-row{ grid-template-columns:78px 12px auto; }
       table.items{ width:100%; border-collapse:collapse; margin-top:4px; }
       table.items th{ border-bottom:2px solid #153f37; padding:6px 8px; font-size:12px; text-align:center; background:#eef0e9; }
       table.items td{ border-bottom:1px dashed #999; padding:7px 8px; font-size:12.5px; text-align:center; }
@@ -4995,7 +5014,7 @@ async function printSalesInvoiceById(invoiceNo){
       table.items tr.pk-sub td{ font-weight:700; border-bottom:1px solid #153f37; }
       .totals-wrap{ display:flex; justify-content:flex-end; margin-top:10px; }
       .totals-box{ min-width:230px; }
-      .totals-box .trow{ display:grid; grid-template-columns:150px 14px auto; font-size:13px; line-height:1.7; }
+      .totals-box .trow{ display:grid; grid-template-columns:150px 16px minmax(60px,auto); font-size:13px; line-height:1.7; }
       .totals-box .trow span:nth-child(2){ text-align:center; }
       .totals-box .trow span:last-child{ font-weight:600; }
       .totals-box .trow.due span{ font-weight:700; }
@@ -5012,26 +5031,33 @@ async function printSalesInvoiceById(invoiceNo){
     </div>
     <div class="meta-row"><span>ইনভয়েস নং: <b>${invoiceNo}</b></span><span>তারিখ: <b>${dateStr}</b></span></div>
     <div class="dealer-info">
-      <div><b>ডিলার</b> : ${first["ডিলার নাম"]||""} &nbsp;&nbsp;&nbsp; <b style="min-width:0;">মোবাইল</b> : ${first["মোবাইল"]||""}</div>
-      <div><b>ঠিকানা</b> : ${first["ঠিকানা"]||""}</div>
+      <div class="di-col">
+        <div class="di-row"><b>ডিলার</b><span>:</span><span>${first["ডিলার নাম"]||""}</span></div>
+        <div class="di-row"><b>ঠিকানা</b><span>:</span><span>${first["ঠিকানা"]||""}</span></div>
+      </div>
+      <div class="di-col">
+        <div class="di-row"><b>মোবাইল</b><span>:</span><span>${first["মোবাইল"]||""}</span></div>
+        <div class="di-row"><b>বিক্রয়কারী</b><span>:</span><span>${escMsgHtml(String(first["বিক্রয়কারী"]||""))}</span></div>
+      </div>
     </div>
     <table class="items">
-      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>বস্তা/বক্স</th></tr></thead>
+      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
     <div class="totals-wrap">
       <div class="totals-box">
-        <div class="trow"><span>সর্বমোট</span><span>${money(subTotal)}</span></div>
-        <div class="trow"><span>কমিশন (${first["কমিশন %"]||0}%)</span><span>${money(commTotal)}</span></div>
-        <div class="trow"><span>অতিরিক্ত ডিসকাউন্ট</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
-        <div class="trow"><span>পরিশোধযোগ্য</span><span>${money(netPay)}</span></div>
-        <div class="trow"><span>পরিশোধ</span><span>${first["পরিশোধ"]||0}</span></div>
-        <div class="trow due"><span>বকেয়া</span><span>${first["বকেয়া"]||0}</span></div>
+        <div class="trow"><span>সর্বমোট</span><span>:</span><span>${money(subTotal)}</span></div>
+        <div class="trow"><span>কমিশন (%)</span><span>:</span><span>${first["কমিশন %"]||0}%</span></div>
+        <div class="trow"><span>কমিশন</span><span>:</span><span>${money(commTotal)}</span></div>
+        <div class="trow"><span>অতিরিক্ত ডিসকাউন্ট</span><span>:</span><span>${first["ডিসকাউন্ট"]||0}</span></div>
+        <div class="trow"><span>পরিশোধযোগ্য</span><span>:</span><span>${money(netPay)}</span></div>
+        <div class="trow"><span>পরিশোধ</span><span>:</span><span>${first["পরিশোধ"]||0}</span></div>
+        <div class="trow due"><span>বকেয়া</span><span>:</span><span>${first["বকেয়া"]||0}</span></div>
       </div>
     </div>
     <div class="sign-row">
-      <div class="sign-box"><div class="sign-line">ডিলারের স্বাক্ষর</div></div>
-      <div class="sign-box"><div class="sign-line">ডিপুর স্বাক্ষর</div></div>
+      <div class="sign-box"><div class="sign-line">ক্রেতার স্বাক্ষর</div></div>
+      <div class="sign-box"><div class="sign-line">বিক্রয়কারীর স্বাক্ষর</div></div>
     </div>
     <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
     <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
@@ -7645,6 +7671,32 @@ function printDealerReport(){
   if(!ok){
     document.querySelectorAll(".pw-mask").forEach(function(el){ el.type = "password"; el.setAttribute("autocomplete","new-password"); });
   }
+})();
+</script>
+<script>
+/* সব ফরমে বাংলা-ইংরেজি দুই রকম সংখ্যা লেখা যাবে — number ঘর টেক্সট ঘরে বদলে বাংলা অঙ্ক নিজে ইংরেজিতে রূপান্তর হয় */
+(function(){
+  const BN = "০১২৩৪৫৬৭৮৯";
+  function conv(el){
+    if(el.tagName !== "INPUT") return;
+    if(el.type === "number"){ el.type = "text"; el.setAttribute("inputmode", "decimal"); el.dataset.num = "1"; el.autocomplete = "off"; }
+    else if(el.type === "tel"){ el.dataset.tel = "1"; }
+  }
+  function scan(root){
+    if(root.nodeType !== 1) return;
+    conv(root);
+    if(root.querySelectorAll) root.querySelectorAll('input[type=number],input[type=tel]').forEach(conv);
+  }
+  function bn2en(v){ return v.replace(/[০-৯]/g, function(d){ return BN.indexOf(d); }); }
+  document.addEventListener("input", function(e){
+    const t = e.target;
+    if(!t || t.tagName !== "INPUT" || !(t.dataset.num || t.dataset.tel)) return;
+    let v = bn2en(t.value);
+    if(t.dataset.num) v = v.replace(/[^0-9.\-]/g, "");
+    if(v !== t.value){ t.value = v; }
+  }, true);
+  scan(document.body);
+  new MutationObserver(function(muts){ muts.forEach(function(m){ m.addedNodes.forEach(scan); }); }).observe(document.body, { childList:true, subtree:true });
 })();
 </script>
 </body>

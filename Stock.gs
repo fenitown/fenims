@@ -170,7 +170,7 @@ function deleteStockVoucher(data) {
  * বিক্রয় ইনভয়েসের সারি তৈরি করার শেয়ার্ড লজিক — addSalesInvoice ও
  * updateSalesInvoiceFull দুটোতেই ব্যবহৃত হয়
  *******************************************************/
-function buildSalesInvoiceRows(invoiceNo, dealerInfo, dealerMobile, dealerThikana, date, items, discount, paid, status) {
+function buildSalesInvoiceRows(invoiceNo, dealerInfo, dealerMobile, dealerThikana, date, items, discount, paid, status, seller) {
   let subtotal = 0, totalPayable = 0;
   const lineCalc = items.map(function (item) {
     const total = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
@@ -203,7 +203,8 @@ function buildSalesInvoiceRows(invoiceNo, dealerInfo, dealerMobile, dealerThikan
       "ডিসকাউন্ট": discount,
       "পরিশোধ": paid,
       "বকেয়া": due,
-      "স্ট্যাটাস": status
+      "স্ট্যাটাস": status,
+      "বিক্রয়কারী": seller || ""
     };
   });
 
@@ -251,6 +252,7 @@ function addSalesInvoice(data) {
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "SalesInvoice");
   const dealersSheet = getSheet(masterSS, "Dealers");
+  ensureSheetColumns(sheet, ["বিক্রয়কারী"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
   const dealerInfo = getDealerRow(dealersSheet, targetDealerId);
   if (!dealerInfo) return { success: false, message: "ডিলার পাওয়া যায়নি" };
 
@@ -265,7 +267,7 @@ function addSalesInvoice(data) {
   const initialStatus = scopeDealerId === null ? "পেন্ডিং" : "অপেক্ষমান";
   const built = buildSalesInvoiceRows(
     invoiceNo, { dealerId: targetDealerId, name: dealerInfo.name }, contact.mobile, contact.thikana,
-    now, data.items || [], Number(data.discount) || 0, Number(data.paid) || 0, initialStatus
+    now, data.items || [], Number(data.discount) || 0, Number(data.paid) || 0, initialStatus, String(data.seller || "").trim()
   );
 
   batchAppendRows(sheet, built.rows, "SIE", "EntryID");
@@ -291,6 +293,7 @@ function updateSalesInvoiceFull(data) {
   const sheet = getSheet(masterSS, "SalesInvoice");
   const dealersSheet = getSheet(masterSS, "Dealers");
 
+  ensureSheetColumns(sheet, ["বিক্রয়কারী"]);
   // পুরনো স্ট্যাটাস ও মালিকানা (DealerID) যাচাই
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
@@ -328,7 +331,7 @@ function updateSalesInvoiceFull(data) {
 
   const built = buildSalesInvoiceRows(
     data.invoiceNo, { dealerId: targetDealerId, name: dealerInfo.name }, contact.mobile, contact.thikana,
-    now, data.items || [], Number(data.discount) || 0, Number(data.paid) || 0, oldStatus
+    now, data.items || [], Number(data.discount) || 0, Number(data.paid) || 0, oldStatus, String(data.seller || "").trim()
   );
 
   batchAppendRows(sheet, built.rows, "SIE", "EntryID");
