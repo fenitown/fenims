@@ -261,7 +261,9 @@
   /* অর্ডার ইনভয়েস — প্যাকেজ ব্লক (ভাউচার ধাঁচ): প্যাকেজ সিলেক্ট করলে পণ্য তালিকা বসে */
   .si-pkg-block{ border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px; background:#fff; }
   .si-pkg-head{ display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px; }
-  .si-pkg-head select{ flex:1 1 220px; min-width:0; }
+  .si-pkg-head > select{ flex:1 1 220px; min-width:0; }
+  .si-pkg-head select, .si-pkg-head input{ height:38px; box-sizing:border-box; }
+  .si-pkg-head .si-qty-wrap select, .si-pkg-head .si-qty-wrap input{ flex:none; width:100%; }
   .si-pkg-head .si-qty-wrap{ display:flex; flex-direction:column; width:110px; }
   .si-pkg-head .si-qty-wrap label{ font-size:0.76rem; color:var(--muted); margin-bottom:2px; }
   table.si-prod-table{ width:100%; border-collapse:collapse; }
@@ -4984,7 +4986,7 @@ async function printSalesInvoiceById(invoiceNo){
       const l = sl[k], tq = l ? money(l.per * qty) : 0;
       return `<tr><td>${k+1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""))}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td><td>${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td>${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
     }).join("");
-    return head + body;
+    return body;
   }).join("");
   const commTotal = lines.reduce((s,e)=>s+(Number(e["কমিশন মূল্য"])||0),0);
   const subTotal = lines.reduce((s,e)=>s+(Number(e["মোট মূল্য"])||0),0);
@@ -4998,7 +5000,7 @@ async function printSalesInvoiceById(invoiceNo){
       @page{ size:A4; margin:0.5in; }
       html, body{ margin:0; padding:0; }
       body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; font-size:13px; }
-      .doc-title{ text-align:center; font-size:16px; font-weight:700; margin:10px 0 0; }
+      .doc-title{ display:inline-block; text-align:center; font-size:16px; font-weight:700; margin:10px 0 0; padding:3px 22px; border:1.5px solid #153f37; border-radius:5px; background:transparent; }
       .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:10px; margin-bottom:14px; }
       .letterhead h1{ margin:0; color:#153f37; font-size:20px; }
       .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
@@ -5036,6 +5038,7 @@ async function printSalesInvoiceById(invoiceNo){
       <div class="di-col">
         <div class="di-row"><b>ডিলার</b><span>:</span><span>${first["ডিলার নাম"]||""}</span></div>
         <div class="di-row"><b>ঠিকানা</b><span>:</span><span>${first["ঠিকানা"]||""}</span></div>
+        ${lines.map(e => `<div style="font-weight:700;">${escMsgHtml(String(e["প্যাকেজ"]||""))} — প্যাকেজ সংখ্যা: ${Number(e["সংখ্যা"])||0}</div>`).join("")}
       </div>
       <div class="di-col">
         <div class="di-row"><b>মোবাইল</b><span>:</span><span>${first["মোবাইল"]||""}</span></div>
