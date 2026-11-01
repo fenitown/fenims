@@ -17,14 +17,17 @@ function addProduct(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "Products");
-  ensureSheetColumns(sheet, ["পরিমাণ"]);   // পুরনো শীটে "পরিমাণ" কলাম না থাকলে নিজে যোগ হয়
+  ensureSheetColumns(sheet, ["পরিমাণ", "একক", "প্যাকিং ধরন", "প্যাকিং পরিমাণ"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
   const productId = generateId(sheet, "PR");
 
   genericAddRow(sheet, {
     "ProductID": productId,
     "পণ্যের নাম": data.নাম,
     "ব্র্যান্ড": data.brand,
-    "পরিমাণ": data.poriman || ""
+    "পরিমাণ": data.poriman || "",
+    "একক": data.unit || "",
+    "প্যাকিং ধরন": data.packType || "",
+    "প্যাকিং পরিমাণ": Number(data.packSize) || ""
   });
 
   invalidateAgencyCaches();
@@ -36,14 +39,14 @@ function listProducts(data) {
   if (!perm.ok) return { success: false, message: perm.message };
 
   const cache = CacheService.getScriptCache();
-  const cached = cache.get("products_cache_v1");
+  const cached = cache.get("products_cache_v2");
   if (cached) return { success: true, products: JSON.parse(cached) };
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "Products");
   const products = genericListRows(sheet);
 
-  try { cache.put("products_cache_v1", JSON.stringify(products), 30); } catch (e) { /* বাদ */ }
+  try { cache.put("products_cache_v2", JSON.stringify(products), 30); } catch (e) { /* বাদ */ }
   return { success: true, products: products };
 }
 
@@ -53,7 +56,7 @@ function updateProduct(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "Products");
-  ensureSheetColumns(sheet, ["পরিমাণ"]);
+  ensureSheetColumns(sheet, ["পরিমাণ", "একক", "প্যাকিং ধরন", "প্যাকিং পরিমাণ"]);
   const ok = genericUpdateRow(sheet, "ProductID", data.productId, data.fields || {});
   invalidateProductCache();
   return { success: ok, message: ok ? "পণ্য আপডেট হয়েছে" : "পণ্য পাওয়া যায়নি" };
@@ -71,7 +74,7 @@ function deleteProduct(data) {
 }
 
 function invalidateProductCache() {
-  CacheService.getScriptCache().remove("products_cache_v1");
+  CacheService.getScriptCache().remove("products_cache_v2");
 }
 
 /*=========================================================
@@ -641,7 +644,7 @@ function getPackageProductCountMap(masterSS) {
   packages.forEach(function (p) {
     let count = 0;
     for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
-      if (p["পণ্য" + i + " - নাম ও পরিমাণ"]) count++;
+      if (p["পণ্য" + i + " - নাম ও পরিমাণ"]) count += Number(p["পণ্য" + i + " - সংখ্যা"]) || 1;
     }
     map[p["PackageID"]] = count;
   });
@@ -779,16 +782,32 @@ function depotReport(data) {
  *=======================================================*/
 function stockNormName(v) { return String(v == null ? "" : v).replace(/\s+/g, "").toLowerCase(); }
 
-/* প্যাকেজের পণ্য-লাইনের লেখা (যেমন "চিনি ১ কেজি") থেকে শেষের একক (কেজি/লিটার/পিস) আলাদা করা */
+/* প্যাকেজের পণ্য-লাইনের লেখা (যেমন "চিনি ১ কেজি") থেকে শেষের একক (কেজি/লিটার/পিস) আলাদা করা — পণ্যে "একক" দেওয়া না থাকলে ব্যবহৃত */
 function stockUnitFromText(text) {
   const m = String(text == null ? "" : text).trim().match(/[\d০-৯][\d০-৯.,\/]*\s*([^\d০-৯\s.,\/][^\d০-৯]*?)\s*$/);
   const u = m ? m[1].trim() : "";
   return u.length <= 12 ? u : "";
 }
 
+/* সংখ্যা + একক এবং বস্তা/বক্স হিসাব, যেমন "110 কেজি (2 বস্তা 10 কেজি)" */
+function formatStockQty(qty, unit, packType, packSize) {
+  qty = Math.round((Number(qty) || 0) * 100) / 100;
+  let out = qty + (unit ? " " + unit : "");
+  packSize = Number(packSize) || 0;
+  if (packType && packSize > 0 && qty >= packSize) {
+    const n = Math.floor(qty / packSize);
+    const rem = Math.round((qty - n * packSize) * 100) / 100;
+    out += " (" + n + " " + packType + (rem > 0 ? " " + rem + (unit ? " " + unit : "") : "") + ")";
+  }
+  return out;
+}
+
 /*******************************************************
  * স্টকের শেয়ার্ড হিসাব — currentStockReport ও অর্ডার ইনভয়েসের স্টক যাচাই দুটোতেই ব্যবহৃত
  * excludeInvoiceNo: ইনভয়েস এডিটের সময় ওই ইনভয়েসের নিজের সংখ্যা বিক্রি হিসেবে ধরা হয় না
+ *
+ * প্যাকেজের পণ্য-লাইনে ProductID ও "সংখ্যা" (প্যাকেজ-প্রতি পরিমাণ) থাকলে সেটাই ব্যবহার হয়;
+ * না থাকলে (পুরনো প্যাকেজ) নাম মিলিয়ে ধরা হয় এবং প্যাকেজ-প্রতি ১ একক ধরা হয়
  *******************************************************/
 function computeStockState(masterSS, excludeInvoiceNo) {
   const products = genericListRows(getSheet(masterSS, "Products"));
@@ -796,6 +815,7 @@ function computeStockState(masterSS, excludeInvoiceNo) {
   const list = [];
   products.forEach(function (p) {
     const r = { productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), brand: String(p["ব্র্যান্ড"] || ""),
+                unit: String(p["একক"] || ""), packType: String(p["প্যাকিং ধরন"] || ""), packSize: Number(p["প্যাকিং পরিমাণ"]) || 0,
                 qtyIn: 0, valueIn: 0, sold: 0, key: stockNormName(p["পণ্যের নাম"]) };
     byId[r.productId] = r;
     list.push(r);
@@ -810,32 +830,36 @@ function computeStockState(masterSS, excludeInvoiceNo) {
 
   // প্যাকেজ → কোন কোন পণ্য (পণ্য-লাইন ধরে)
   const unmatched = {};
-  const pkgMap = {};     // PackageID -> [r, ...]
-  const pkgLines = {};   // PackageID -> [{ r|null, unit }, ...] (প্যাকেজের পণ্য-লাইনের ক্রমে)
+  const pkgLines = {};   // PackageID -> [{ r|null, unit, per }, ...] (প্যাকেজের পণ্য-লাইনের ক্রমে)
   genericListRows(getSheet(masterSS, "Packages")).forEach(function (pk) {
-    const hits = [], lines = [];
+    const lines = [];
     for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
       const text = pk["পণ্য" + i + " - নাম ও পরিমাণ"];
       if (!text) continue;
-      const t = stockNormName(text);
-      let best = null;
-      list.forEach(function (r) {
-        if (r.key && t.indexOf(r.key) !== -1 && (!best || r.key.length > best.key.length)) best = r;
+      let best = byId[pk["পণ্য" + i + " - ProductID"]] || null;
+      if (!best) {
+        const t = stockNormName(text);
+        list.forEach(function (r) {
+          if (r.key && t.indexOf(r.key) !== -1 && (!best || r.key.length > best.key.length)) best = r;
+        });
+      }
+      if (!best) unmatched[String(text)] = true;
+      lines.push({
+        r: best,
+        unit: (best && best.unit) || stockUnitFromText(text),
+        per: Number(pk["পণ্য" + i + " - সংখ্যা"]) || 1
       });
-      if (best) hits.push(best); else unmatched[String(text)] = true;
-      lines.push({ r: best, unit: stockUnitFromText(text) });
     }
-    pkgMap[pk["PackageID"]] = hits;
     pkgLines[pk["PackageID"]] = lines;
   });
 
   genericListRows(getSheet(masterSS, "SalesInvoice")).forEach(function (e) {
     if (excludeInvoiceNo && e["ইনভয়েস নং"] === excludeInvoiceNo) return;
     const q = Number(e["সংখ্যা"]) || 0;
-    (pkgMap[e["PackageID"]] || []).forEach(function (r) { r.sold += q; });
+    (pkgLines[e["PackageID"]] || []).forEach(function (l) { if (l.r) l.r.sold += q * l.per; });
   });
 
-  return { list: list, pkgMap: pkgMap, pkgLines: pkgLines, unmatched: unmatched };
+  return { list: list, pkgLines: pkgLines, unmatched: unmatched };
 }
 
 function currentStockReport(data) {
@@ -846,7 +870,8 @@ function currentStockReport(data) {
   const rows = st.list.map(function (r) {
     const qty = r.qtyIn - r.sold;
     const avg = r.qtyIn > 0 ? r.valueIn / r.qtyIn : 0;
-    return { productId: r.productId, name: r.name, brand: r.brand, qtyIn: r.qtyIn, sold: r.sold, qty: qty, value: Math.round(qty * avg) };
+    return { productId: r.productId, name: r.name, brand: r.brand, unit: r.unit, packType: r.packType, packSize: r.packSize,
+             qtyIn: r.qtyIn, sold: r.sold, qty: qty, value: Math.round(qty * avg) };
   });
   return { success: true, rows: rows, unmatched: Object.keys(st.unmatched).slice(0, 10) };
 }
@@ -864,7 +889,8 @@ function orderStockInfo(data) {
   Object.keys(st.pkgLines).forEach(function (pid) {
     packages[pid] = st.pkgLines[pid].map(function (l) {
       return l.r
-        ? { productId: l.r.productId, name: l.r.name, avail: l.r.qtyIn - l.r.sold, unit: l.unit }
+        ? { productId: l.r.productId, name: l.r.name, avail: l.r.qtyIn - l.r.sold, unit: l.unit,
+            per: l.per, packType: l.r.packType, packSize: l.r.packSize }
         : null;   // স্টকের পণ্যের সাথে মেলেনি — সীমা নেই
     });
   });
@@ -884,7 +910,7 @@ function checkOrderStock(masterSS, items, excludeInvoiceNo) {
       if (!l.r) return;
       const k = l.r.productId;
       if (!need[k]) { need[k] = { r: l.r, unit: l.unit, qty: 0 }; order.push(k); }
-      need[k].qty += q;
+      need[k].qty += q * l.per;
     });
   });
   const problems = [];
@@ -893,7 +919,7 @@ function checkOrderStock(masterSS, items, excludeInvoiceNo) {
     if (n.qty > avail) {
       problems.push(avail <= 0
         ? n.r.name + " — স্টক নেই"
-        : n.r.name + " — স্টক আছে " + avail + (n.unit ? " " + n.unit : ""));
+        : n.r.name + " — স্টক আছে " + formatStockQty(avail, n.unit, n.r.packType, n.r.packSize));
     }
   });
   return problems.length ? problems.join("; ") : null;

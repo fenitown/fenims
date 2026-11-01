@@ -237,6 +237,7 @@
   #pkgItems .item-row-v2 > input{ flex:0 0 84px; width:84px; min-width:0; }
   #pkgItems .item-row-v2 > input.itemNaamPoriman{ flex:1 1 180px; width:auto; min-width:110px; }
   #pkgItems .item-row-v2 > button{ flex:0 0 auto; padding:6px 9px; }
+  #pkgItems .item-row-v2 > select.itemProduct{ flex:0 0 130px; width:130px; min-width:0; padding:7px 4px; font-size:0.85rem; }
   #pkgItems input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
   #pkgItems input[type=number]::-webkit-inner-spin-button, #pkgItems input[type=number]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
   @media (max-width:600px){
@@ -244,6 +245,7 @@
     #pkgItems .item-row-v2 > input{ flex:0 0 56px; width:56px; padding:7px 3px; font-size:0.78rem; text-align:center; }
     #pkgItems .item-row-v2 > input.itemNaamPoriman{ flex:1 1 90px; min-width:90px; padding:7px 6px; text-align:left; }
     #pkgItems .item-row-v2 > button{ padding:6px 7px; font-size:0.8rem; }
+    #pkgItems .item-row-v2 > select.itemProduct{ flex:0 0 84px; width:84px; padding:7px 2px; font-size:0.75rem; }
   }
   .expense-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
   .expense-row > input{ flex:1 1 110px; min-width:0; }
@@ -3075,12 +3077,30 @@ function addPkgItemRow(prefill){
   const row = document.createElement("div");
   row.className = "item-row-v2";
   row.innerHTML = `
-    <input placeholder="পণ্যের নাম ও পরিমাণ" class="itemNaamPoriman" value="${prefill?(prefill.naamPoriman||''):''}">
+    <select class="itemProduct" title="স্টকের পণ্য (স্টক হিসাবের জন্য)" onchange="onPkgProductChange(this)">${pkgProductOptions(prefill ? prefill.productId : "")}</select>
+    <input placeholder="পরিমাণ" title="প্যাকেজে এই পণ্য কত (কেজি/বোতল/পিস)" type="number" min="0" step="any" class="itemQty" oninput="onPkgProductChange(this)" value="${prefill?(prefill.qty||''):''}">
+    <input placeholder="পণ্যের নাম ও পরিমাণ" class="itemNaamPoriman" oninput="this.dataset.manual='1'" ${prefill ? 'data-manual="1"' : ''} value="${prefill?(prefill.naamPoriman||''):''}">
     <input placeholder="বাজার" title="বাজার মূল্য" type="number" min="0" class="itemBazar" oninput="updateItemSaving(this)" value="${prefill?(prefill.bazarMulyo||''):''}">
     <input placeholder="কম্বো" title="কম্বো মূল্য" type="number" min="0" class="itemCombo" oninput="updateItemSaving(this)" value="${prefill?(prefill.comboMulyo||''):''}">
     <input placeholder="সাশ্রয়" type="number" class="itemSashroy" readonly value="${prefill?((Number(prefill.bazarMulyo)||0)-(Number(prefill.comboMulyo)||0)):''}">
     <button type="button" class="btn secondary small" onclick="this.parentElement.remove()">✕</button>`;
   wrap.appendChild(row);
+}
+
+function pkgProductOptions(sel){
+  return '<option value="">-- পণ্য --</option>' + productsCache.map(p => `<option value="${p['ProductID']}" data-name="${escAttr(p['পণ্যের নাম'])}" data-unit="${escAttr(p['একক']||'')}" ${sel === p['ProductID'] ? 'selected' : ''}>${escAttr(p['পণ্যের নাম'])}</option>`).join("");
+}
+function refreshPkgProductSelects(){
+  document.querySelectorAll("#pkgItems select.itemProduct").forEach(sel => { const cur = sel.value; sel.innerHTML = pkgProductOptions(cur); });
+}
+/* পণ্য/পরিমাণ বদলালে "পণ্যের নাম ও পরিমাণ" লেখা নিজে ভরে যায় (হাতে লিখে থাকলে বদলায় না) */
+function onPkgProductChange(el){
+  const row = el.closest(".item-row-v2");
+  const sel = row.querySelector(".itemProduct"), txt = row.querySelector(".itemNaamPoriman");
+  const opt = sel.options[sel.selectedIndex];
+  if(!opt || !opt.value) return;
+  if(txt.dataset.manual === "1" && txt.value) return;
+  txt.value = [opt.dataset.name, row.querySelector(".itemQty").value, opt.dataset.unit].filter(Boolean).join(" ");
 }
 
 function updateItemSaving(el){
@@ -3092,6 +3112,8 @@ function updateItemSaving(el){
 
 async function submitPackage(){
   const items = [...document.querySelectorAll("#pkgItems .item-row-v2")].map(r => ({
+    "productId": r.querySelector(".itemProduct").value,
+    "qty": r.querySelector(".itemQty").value,
     "naamPoriman": r.querySelector(".itemNaamPoriman").value.trim(),
     "bazarMulyo": r.querySelector(".itemBazar").value,
     "comboMulyo": r.querySelector(".itemCombo").value
@@ -3161,6 +3183,11 @@ async function loadAgencyPackages(){
   const table = document.getElementById("agencyPackagesTable");
   if(!res.success){ table.innerHTML = res.message; return; }
   window.__packagesCache = res.packages;
+  if(productsCache.length === 0){
+    const pr = await cachedApiCall("listProducts", {}, 20000);
+    productsCache = pr.success ? pr.products : [];
+  }
+  refreshPkgProductSelects();
   setNextPkgNo(res.packages);
   table.innerHTML = "<thead><tr><th class='cell-left'>নাম</th><th>তারিখ</th><th>পণ্য সংখ্যা</th><th>বাজার মূল্য</th><th>কম্বো মূল্য</th><th>সাশ্রয়</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
   const tbody = table.querySelector("tbody");
@@ -3208,6 +3235,8 @@ function editAgencyPackage(packageId){
   document.getElementById("pkgItems").innerHTML = "";
   (p.items || []).forEach(it => addPkgItemRow({
     naamPoriman: it["পণ্যের নাম ও পরিমাণ"],
+    productId: it["ProductID"] || "",
+    qty: it["পণ্যের সংখ্যা"] || "",
     bazarMulyo: it["বাজার মূল্য"],
     comboMulyo: it["কম্বো মূল্য"]
   }));
@@ -3638,6 +3667,9 @@ function renderProductsTab(){
         <div class="field"><label>পণ্যের নাম</label><input id="prodNaam"></div>
         <div class="field"><label>ব্র্যান্ড</label><input id="prodBrand"></div>
         <div class="field"><label>পরিমাণ</label><input id="prodPoriman" placeholder="যেমন: ১ কেজি / ৫০০ গ্রাম"></div>
+        <div class="field"><label>একক (স্টক যে মাপে গোনা হয়)</label><input id="prodUnit" list="prodUnitList" placeholder="কেজি / বোতল / পিস / লিটার"><datalist id="prodUnitList"><option value="কেজি"><option value="লিটার"><option value="বোতল"><option value="পিস"><option value="প্যাকেট"></datalist></div>
+        <div class="field"><label>প্যাকিং ধরন</label><input id="prodPackType" list="prodPackList" placeholder="বস্তা / বক্স"><datalist id="prodPackList"><option value="বস্তা"><option value="বক্স"><option value="কার্টন"></datalist></div>
+        <div class="field"><label>প্যাকিং পরিমাণ (এক বস্তা/বক্সে কত একক)</label><input id="prodPackSize" type="number" min="0" step="any" placeholder="যেমন: ৫০"></div>
       </div>
       <div class="btn-row">
         <button class="btn" id="prodSubmitBtn" onclick="submitProduct()">সংরক্ষণ করুন</button>
@@ -3669,12 +3701,12 @@ function renderProductsTable(){
   let list = productsCache;
   if(q) list = list.filter(p => (p["পণ্যের নাম"]||"").toLowerCase().includes(q) || (p["ব্র্যান্ড"]||"").toLowerCase().includes(q));
 
-  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>পরিমাণ</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>পরিমাণ</th><th>একক</th><th>প্যাকিং</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
   const tbody = table.querySelector("tbody");
-  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(5, "এখনো কোনো পণ্য যোগ করা হয়নি"); return; }
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(7, "এখনো কোনো পণ্য যোগ করা হয়নি"); return; }
   list.forEach((p, i) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["পরিমাণ"]||""}</td>
+    tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["পরিমাণ"]||""}</td><td>${p["একক"]||""}</td><td>${p["প্যাকিং ধরন"] && p["প্যাকিং পরিমাণ"] ? ("১ " + p["প্যাকিং ধরন"] + " = " + p["প্যাকিং পরিমাণ"] + " " + (p["একক"]||"")) : ""}</td>
       <td class="no-print">
         <button class="btn icon small secondary" onclick="editProductRow('${p['ProductID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small danger" onclick="deleteProductRow('${p['ProductID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
@@ -3688,23 +3720,27 @@ async function submitProduct(){
   const naam = document.getElementById("prodNaam").value.trim();
   const brand = document.getElementById("prodBrand").value.trim();
   const poriman = document.getElementById("prodPoriman").value.trim();
+  const unit = document.getElementById("prodUnit").value.trim();
+  const packType = document.getElementById("prodPackType").value.trim();
+  const packSize = document.getElementById("prodPackSize").value;
   if(!naam){ msgBox.textContent = "পণ্যের নাম দিন"; msgBox.className = "msg err"; return; }
   markSaving("prodMsg");
 
   if(editingProductId){
-    const res = await apiCall("updateProduct", { productId: editingProductId, fields:{ "পণ্যের নাম":naam, "ব্র্যান্ড":brand, "পরিমাণ":poriman } });
+    const res = await apiCall("updateProduct", { productId: editingProductId, fields:{ "পণ্যের নাম":naam, "ব্র্যান্ড":brand, "পরিমাণ":poriman, "একক":unit, "প্যাকিং ধরন":packType, "প্যাকিং পরিমাণ":packSize === "" ? "" : Number(packSize) } });
     msgBox.textContent = res.message; msgBox.className = "msg " + (res.success?"ok":"err");
     if(res.success){ clearCache(); cancelProductEdit(); loadProducts(); }
     return;
   }
 
-  const res = await apiCall("addProduct", { "নাম":naam, brand, poriman });
+  const res = await apiCall("addProduct", { "নাম":naam, brand, poriman, unit, packType, packSize });
   msgBox.textContent = res.message; msgBox.className = "msg " + (res.success?"ok":"err");
   if(res.success){
     clearCache();
     document.getElementById("prodNaam").value = "";
     document.getElementById("prodBrand").value = "";
     document.getElementById("prodPoriman").value = "";
+    document.getElementById("prodUnit").value = ""; document.getElementById("prodPackType").value = ""; document.getElementById("prodPackSize").value = "";
     loadProducts();
   }
 }
@@ -3720,6 +3756,9 @@ function editProductRow(productId){
   document.getElementById("prodNaam").value = p["পণ্যের নাম"] || "";
   document.getElementById("prodBrand").value = p["ব্র্যান্ড"] || "";
   document.getElementById("prodPoriman").value = p["পরিমাণ"] || "";
+  document.getElementById("prodUnit").value = p["একক"] || "";
+  document.getElementById("prodPackType").value = p["প্যাকিং ধরন"] || "";
+  document.getElementById("prodPackSize").value = p["প্যাকিং পরিমাণ"] || "";
   document.getElementById("prodNaam").scrollIntoView({ behavior:"smooth", block:"center" });
 }
 
@@ -3731,6 +3770,7 @@ function cancelProductEdit(){
   document.getElementById("prodNaam").value = "";
   document.getElementById("prodBrand").value = "";
   document.getElementById("prodPoriman").value = "";
+  document.getElementById("prodUnit").value = ""; document.getElementById("prodPackType").value = ""; document.getElementById("prodPackSize").value = "";
   document.getElementById("prodMsg").textContent = "";
 }
 
@@ -3745,8 +3785,8 @@ function printProductsListOfficial(){
   let list = productsCache;
   if(q) list = list.filter(p => (p["পণ্যের নাম"]||"").toLowerCase().includes(q) || (p["ব্র্যান্ড"]||"").toLowerCase().includes(q));
   if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো পণ্য নেই"); return; }
-  const headers = ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "পরিমাণ"];
-  const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["পরিমাণ"]||""]);
+  const headers = ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "পরিমাণ", "একক", "প্যাকিং"];
+  const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["পরিমাণ"]||"", p["একক"]||"", (p["প্যাকিং ধরন"] && p["প্যাকিং পরিমাণ"]) ? ("১ " + p["প্যাকিং ধরন"] + " = " + p["প্যাকিং পরিমাণ"] + " " + (p["একক"]||"")) : ""]);
   printOfficialTable("পণ্য তালিকা", "মোট পণ্য: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [1,2]);
 }
 
@@ -3940,18 +3980,18 @@ function renderCurrentStockTable(){
   list.forEach(r => { qty += Number(r.qty) || 0; val += Number(r.value) || 0; });
   document.getElementById("csQty").textContent = qty;
   document.getElementById("csVal").textContent = val;
-  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>মোট পরিমাণ</th><th>মোট মূল্য</th></tr></thead><tbody></tbody>";
+  table.innerHTML = "<thead><tr><th>ক্রম</th><th class='cell-left'>পণ্যের নাম</th><th class='cell-left'>ব্র্যান্ড</th><th>মোট পরিমাণ</th><th>বস্তা/বক্স</th><th>মোট মূল্য</th></tr></thead><tbody></tbody>";
   const tbody = table.querySelector("tbody");
-  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(5, "কোনো তথ্য পাওয়া যায়নি"); }
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(6, "কোনো তথ্য পাওয়া যায়নি"); }
   else {
     list.forEach((r, i) => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${escAttr(r.name)}</td><td class="cell-left">${escAttr(r.brand)}</td><td>${r.qty}</td><td>${r.value}</td>`;
+      tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${escAttr(r.name)}</td><td class="cell-left">${escAttr(r.brand)}</td><td>${r.qty}${r.unit ? " " + escAttr(r.unit) : ""}</td><td>${packBreakdown(r.qty, r.unit, r.packType, r.packSize) || "—"}</td><td>${r.value}</td>`;
       tbody.appendChild(tr);
     });
     const tf = document.createElement("tr");
     tf.style.fontWeight = "700"; tf.style.background = "#eef0e9";
-    tf.innerHTML = `<td></td><td class="cell-left">সর্বমোট</td><td></td><td>${qty}</td><td>${val}</td>`;
+    tf.innerHTML = `<td></td><td class="cell-left">সর্বমোট</td><td></td><td></td><td></td><td>${val}</td>`;
     tbody.appendChild(tf);
   }
   const note = document.getElementById("csNote");
@@ -3968,10 +4008,10 @@ function printCurrentStock(){
   const brand = document.getElementById("csBrand").value || "সকল";
   let qty = 0, val = 0;
   list.forEach(r => { qty += Number(r.qty) || 0; val += Number(r.value) || 0; });
-  const rows = list.map((r, i) => [i+1, r.name, r.brand, r.qty, r.value]);
+  const rows = list.map((r, i) => [i+1, r.name, r.brand, r.qty + (r.unit ? " " + r.unit : ""), packBreakdown(r.qty, r.unit, r.packType, r.packSize) || "—", r.value]);
   printOfficialTable("বর্তমান স্টক", "পণ্য: " + name + " | ব্র্যান্ড: " + brand + " | তারিখ: " + new Date().toLocaleDateString("bn-BD"),
-    ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "মোট পরিমাণ", "মোট মূল্য"], rows,
-    [["সর্বমোট", "", "", qty, val]], "@Powered by: AM Shahed: 01605721296", [1,2]);
+    ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "মোট পরিমাণ", "বস্তা/বক্স", "মোট মূল্য"], rows,
+    [["সর্বমোট", "", "", "", "", val]], "@Powered by: AM Shahed: 01605721296", [1,2]);
 }
 
 /* ================= এজেন্সি: স্টক ভাউচার ================= */
@@ -3981,6 +4021,10 @@ function stkBrand(e){
   if(e["ব্র্যান্ড"]) return e["ব্র্যান্ড"];
   const p = productsCache.find(x => x["ProductID"] === e["ProductID"]);
   return p ? (p["ব্র্যান্ড"] || "") : "";
+}
+function stkQtyLabel(e){
+  const p = productsCache.find(x => x["ProductID"] === e["ProductID"]);
+  return p ? fmtStockQty(e["সংখ্যা"], p["একক"], p["প্যাকিং ধরন"], p["প্যাকিং পরিমাণ"]) : e["সংখ্যা"];
 }
 function stkDate(e){ return e["তারিখ"] ? new Date(e["তারিখ"]).toLocaleDateString("bn-BD") : ""; }
 
@@ -4046,7 +4090,7 @@ function addStockInItemRow(){
   row.className = "item-row-v2";
   const brandOpts = '<option value="">-- ব্র্যান্ড --</option>' + stockBrandList().map(b => `<option value="${escAttr(b)}">${escAttr(b)}</option>`).join("");
   row.innerHTML = `
-    <select class="stockInProduct" onchange="onStockInProductChange(this)">${productsCache.map(p => `<option value="${p['ProductID']}" data-brand="${escAttr(p['ব্র্যান্ড']||'')}">${escAttr(p['পণ্যের নাম'])}</option>`).join("")}</select>
+    <select class="stockInProduct" onchange="onStockInProductChange(this)">${productsCache.map(p => `<option value="${p['ProductID']}" data-brand="${escAttr(p['ব্র্যান্ড']||'')}" data-unit="${escAttr(p['একক']||'')}">${escAttr(p['পণ্যের নাম'])}</option>`).join("")}</select>
     <select class="stockInBrand">${brandOpts}</select>
     <input placeholder="ক্রয় মূল্য" type="number" min="0" class="stockInPrice" oninput="updateStockInTotalsPreview()">
     <input placeholder="সংখ্যা" type="number" min="1" class="stockInQty" oninput="updateStockInTotalsPreview()">
@@ -4065,6 +4109,7 @@ function onStockInProductChange(sel){
     // পণ্যের ব্র্যান্ড তালিকায় না থাকলে (বিরল) যোগ করে নেওয়া — ব্যবহারকারী পরে যেকোনো ব্র্যান্ড বদলাতে পারবে
     if(b && ![...bSel.options].some(o => o.value === b)){ const o = document.createElement("option"); o.value = b; o.textContent = b; bSel.appendChild(o); }
     bSel.value = b;
+    row.querySelector(".stockInQty").placeholder = "সংখ্যা" + (opt.dataset.unit ? " (" + opt.dataset.unit + ")" : "");
   }
   updateStockInTotalsPreview();
 }
@@ -4137,7 +4182,7 @@ function renderStockInTable(){
   if(list.length === 0){ tbody.innerHTML = emptyRowHtml(11, "এখনো কোনো স্টক ভাউচার নেই"); return; }
   list.forEach(e => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${stkDate(e)}</td><td class="cell-left">${e["পণ্যের নাম"]}</td><td class="cell-left">${stkBrand(e)}</td><td>${stkPrice(e)}</td><td>${e["সংখ্যা"]}</td><td>${e["মোট মূল্য"]}</td><td>${e["সর্বমোট"]||0}</td><td>${e["পরিশোধ"]||0}</td><td>${e["বকেয়া"]||0}</td>
+    tr.innerHTML = `<td>${e["ভাউচার নং"]}</td><td>${stkDate(e)}</td><td class="cell-left">${e["পণ্যের নাম"]}</td><td class="cell-left">${stkBrand(e)}</td><td>${stkPrice(e)}</td><td>${stkQtyLabel(e)}</td><td>${e["মোট মূল্য"]}</td><td>${e["সর্বমোট"]||0}</td><td>${e["পরিশোধ"]||0}</td><td>${e["বকেয়া"]||0}</td>
       <td class="no-print">
         <button class="btn icon small secondary" onclick="editStockVoucherForm('${e['ভাউচার নং']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small secondary" onclick="printStockVoucherById('${e['ভাউচার নং']}')" title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
@@ -4327,6 +4372,18 @@ function onSiDealerChange(){
   document.getElementById("siDealerThikana").value = d ? (d["ঠিকানা"]||"") : "";
 }
 
+/* সংখ্যা + একক এবং বস্তা/বক্স হিসাব — "110 কেজি (2 বস্তা 10 কেজি)" */
+function packBreakdown(qty, unit, packType, packSize){
+  qty = Math.round((Number(qty) || 0) * 100) / 100; packSize = Number(packSize) || 0;
+  if(!packType || packSize <= 0 || qty < packSize) return "";
+  const n = Math.floor(qty / packSize), rem = Math.round((qty - n * packSize) * 100) / 100;
+  return n + " " + packType + (rem > 0 ? " " + rem + (unit ? " " + unit : "") : "");
+}
+function fmtStockQty(qty, unit, packType, packSize){
+  qty = Math.round((Number(qty) || 0) * 100) / 100;
+  const b = packBreakdown(qty, unit, packType, packSize);
+  return qty + (unit ? " " + unit : "") + (b ? " (" + b + ")" : "");
+}
 const siMoney = n => Math.round((Number(n) || 0) * 100) / 100;
 
 /* প্যাকেজ ব্লক — প্যাকেজ সিলেক্ট করলে তার সব পণ্য (ক্রম, নাম, মূল্য, সংখ্যা, মোট) টেবিলে বসে */
@@ -4342,7 +4399,7 @@ function addSiItemRow(){
       <div class="si-qty-wrap"><label>প্যাকেজ সংখ্যা</label><input type="number" min="1" value="1" class="siQty" oninput="onSiQtyChange(this)"></div>
       <button type="button" class="btn secondary small" onclick="this.closest('.si-pkg-block').remove(); updateSiTotalsPreview();">✕</button>
     </div>
-    <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
+    <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>বস্তা/বক্স</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
   wrap.appendChild(block);
 }
 
@@ -4365,9 +4422,12 @@ function renderSiBlock(block){
   const sumItems = items.reduce((s, it) => s + (Number(it["কম্বো মূল্য"]) || 0), 0);
   const unit = Number(pkg["সর্বমোট মূল্য"]) || sumItems;
   block.dataset.unit = String(unit);
+  const sl = (window.__siStock || {})[pid] || [];
   tbody.innerHTML = items.map((it, k) => {
     const price = Number(it["কম্বো মূল্য"]) || 0;
-    return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td></tr>`;
+    const l = sl[k];
+    const totQty = l ? siMoney(l.per * qty) : 0;
+    return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td><td>${l ? totQty + " " + escMsgHtml(l.unit || "") : "—"}</td><td>${l ? (packBreakdown(totQty, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
   }).join("");
   tfoot.innerHTML = "";
 }
@@ -4384,7 +4444,7 @@ function siCheckStock(){
     if(!pid || q <= 0) return;
     (stock[pid] || []).forEach(l => {
       if(!l) return;
-      need[l.productId] = (need[l.productId] || 0) + q;
+      need[l.productId] = (need[l.productId] || 0) + q * (Number(l.per) || 1);
       meta[l.productId] = l;
     });
   });
@@ -4393,7 +4453,7 @@ function siCheckStock(){
     const m = meta[k];
     if(need[k] > m.avail){
       over[k] = true;
-      msgs.push(m.avail <= 0 ? `${m.name} — স্টক নেই` : `${m.name} — স্টক আছে ${m.avail}${m.unit ? " " + m.unit : ""}`);
+      msgs.push(m.avail <= 0 ? `${m.name} — স্টক নেই` : `${m.name} — স্টক আছে ${fmtStockQty(m.avail, m.unit, m.packType, m.packSize)}`);
     }
   });
   blocks.forEach(b => {
@@ -4408,6 +4468,7 @@ function siCheckStock(){
 async function loadSiStock(excludeInvoice){
   const res = await apiCall("orderStockInfo", { excludeInvoice: excludeInvoice || "" });
   window.__siStock = res.success ? res.packages : {};
+  document.querySelectorAll("#siItems .si-pkg-block").forEach(renderSiBlock);   // পরিমাণ কলাম নতুন স্টক তথ্যে ভরে
   siCheckStock();
 }
 
@@ -4898,10 +4959,12 @@ async function printSalesInvoiceById(invoiceNo){
     const pkg = pkgCache.find(p => p["PackageID"] === e["PackageID"]);
     const qty = Number(e["সংখ্যা"]) || 0;
     const items = pkg ? (pkg.items || []) : [];
-    const head = `<tr class="pk-head"><td colspan="5" class="cell-left"><b>${e["প্যাকেজ"]||""}</b> — প্যাকেজ সংখ্যা: ${qty}</td></tr>`;
+    const sl = (window.__siStock || {})[e["PackageID"]] || [];
+    const head = `<tr class="pk-head"><td colspan="7" class="cell-left"><b>${e["প্যাকেজ"]||""}</b> — প্যাকেজ সংখ্যা: ${qty}</td></tr>`;
     const body = items.map((it, k) => {
       const price = Number(it["কম্বো মূল্য"]) || 0;
-      return `<tr><td>${k+1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""))}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
+      const l = sl[k], tq = l ? money(l.per * qty) : 0;
+      return `<tr><td>${k+1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""))}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td><td>${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td>${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
     }).join("");
     return head + body;
   }).join("");
@@ -4953,7 +5016,7 @@ async function printSalesInvoiceById(invoiceNo){
       <div><b>ঠিকানা</b> : ${first["ঠিকানা"]||""}</div>
     </div>
     <table class="items">
-      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th></tr></thead>
+      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>বস্তা/বক্স</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
     <div class="totals-wrap">

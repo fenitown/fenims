@@ -455,12 +455,20 @@ function packageNoOf(p) {
   return 100000 + (p.rowIndex || 2);
 }
 
+/* প্যাকেজ শীটের নতুন কলাম — প্রতিটি পণ্য-লাইনের ProductID ও প্যাকেজ-প্রতি পরিমাণ (শীটের শেষে যোগ হয়) */
+function packageExtraHeaders() {
+  const h = [];
+  for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) h.push("পণ্য" + i + " - ProductID", "পণ্য" + i + " - সংখ্যা");
+  return h;
+}
+
 function addPackage(data) {
   const perm = checkAgencyPermission(data.token);
   if (!perm.ok) return { success: false, message: perm.message };
 
   const masterSS = getMasterSS();
   const pkgSheet = getPackagesSheet(masterSS);
+  ensureSheetColumns(pkgSheet, packageExtraHeaders());   // পুরনো শীটে না থাকলে নিজে যোগ হয়
   const packageId = generateId(pkgSheet, "P");
 
   const items = (data.items || []).slice(0, MAX_PACKAGE_ITEMS);
@@ -479,11 +487,15 @@ function addPackage(data) {
       row["পণ্য" + n + " - বাজার মূল্য"] = bazar;
       row["পণ্য" + n + " - কম্বো মূল্য"] = combo;
       row["পণ্য" + n + " - সাশ্রয়"] = sashroy;
+      row["পণ্য" + n + " - ProductID"] = item.productId || "";
+      row["পণ্য" + n + " - সংখ্যা"] = Number(item.qty) || "";
     } else {
       row["পণ্য" + n + " - নাম ও পরিমাণ"] = "";
       row["পণ্য" + n + " - বাজার মূল্য"] = "";
       row["পণ্য" + n + " - কম্বো মূল্য"] = "";
       row["পণ্য" + n + " - সাশ্রয়"] = "";
+      row["পণ্য" + n + " - ProductID"] = "";
+      row["পণ্য" + n + " - সংখ্যা"] = "";
     }
   }
   row["সর্বমোট বাজার মূল্য"] = totalBazar;
@@ -501,7 +513,7 @@ function addPackage(data) {
  * প্যাকেজ লিস্ট ক্যাশ করা হয় (পরিবর্তনে নিজে থেকে মুছে যায়)
  *******************************************************/
 function invalidatePackageCache() {
-  CacheService.getScriptCache().remove("packages_cache_v5");
+  CacheService.getScriptCache().remove("packages_cache_v6");
 }
 
 /*******************************************************
@@ -517,7 +529,9 @@ function expandPackageRow(pkg) {
         "পণ্যের নাম ও পরিমাণ": naam,
         "বাজার মূল্য": pkg["পণ্য" + i + " - বাজার মূল্য"],
         "কম্বো মূল্য": pkg["পণ্য" + i + " - কম্বো মূল্য"],
-        "সাশ্রয়": pkg["পণ্য" + i + " - সাশ্রয়"]
+        "সাশ্রয়": pkg["পণ্য" + i + " - সাশ্রয়"],
+        "ProductID": pkg["পণ্য" + i + " - ProductID"] || "",
+        "পণ্যের সংখ্যা": Number(pkg["পণ্য" + i + " - সংখ্যা"]) || 0   // প্যাকেজ-প্রতি এই পণ্যের পরিমাণ (কেজি/বোতল/পিস)
       });
     }
   }
@@ -532,7 +546,7 @@ function listPackages(data) {
   if (!perm.ok) return { success: false, message: perm.message };
 
   const cache = CacheService.getScriptCache();
-  const cached = cache.get("packages_cache_v5");
+  const cached = cache.get("packages_cache_v6");
   if (cached) {
     return { success: true, packages: JSON.parse(cached) };
   }
@@ -548,7 +562,7 @@ function listPackages(data) {
   });
 
   try {
-    cache.put("packages_cache_v5", JSON.stringify(packages), 300); // ৫ মিনিট (যোগ/এডিট/ডিলিটে নিজে থেকে মুছে যায়)
+    cache.put("packages_cache_v6", JSON.stringify(packages), 300); // ৫ মিনিট (যোগ/এডিট/ডিলিটে নিজে থেকে মুছে যায়)
   } catch (e) { /* ক্যাশ সাইজ বেশি হলে চুপচাপ বাদ */ }
 
   return { success: true, packages: packages };
@@ -559,6 +573,7 @@ function updatePackage(data) {
   if (!perm.ok) return { success: false, message: perm.message };
   const masterSS = getMasterSS();
   const sheet = getPackagesSheet(masterSS);
+  ensureSheetColumns(sheet, packageExtraHeaders());
 
   // fields এ items[] থাকলে সম্পূর্ণ রো নতুন করে হিসাব করে বসানো হয়
   let fields = data.fields || {};
@@ -577,11 +592,15 @@ function updatePackage(data) {
         fields["পণ্য" + n + " - বাজার মূল্য"] = bazar;
         fields["পণ্য" + n + " - কম্বো মূল্য"] = combo;
         fields["পণ্য" + n + " - সাশ্রয়"] = sashroy;
+        fields["পণ্য" + n + " - ProductID"] = item.productId || "";
+        fields["পণ্য" + n + " - সংখ্যা"] = Number(item.qty) || "";
       } else {
         fields["পণ্য" + n + " - নাম ও পরিমাণ"] = "";
         fields["পণ্য" + n + " - বাজার মূল্য"] = "";
         fields["পণ্য" + n + " - কম্বো মূল্য"] = "";
         fields["পণ্য" + n + " - সাশ্রয়"] = "";
+        fields["পণ্য" + n + " - ProductID"] = "";
+        fields["পণ্য" + n + " - সংখ্যা"] = "";
       }
     }
     fields["সর্বমোট বাজার মূল্য"] = totalBazar;
