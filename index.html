@@ -4975,80 +4975,29 @@ async function printSalesInvoiceById(invoiceNo){
 
   const pkgCache = window.__siPackagesCache || [];
   const money = n => Math.round((Number(n) || 0) * 100) / 100;
-  const rowsHtml = lines.map(e => {
+  let orderRows = "", deliveryRows = "";
+  lines.forEach(e => {
     const pkg = pkgCache.find(p => p["PackageID"] === e["PackageID"]);
     const qty = Number(e["সংখ্যা"]) || 0;
     const items = pkg ? (pkg.items || []) : [];
     const sl = (window.__siStock || {})[e["PackageID"]] || [];
-    const head = `<tr class="pk-head"><td colspan="7" class="cell-left"><b>${e["প্যাকেজ"]||""}</b> — প্যাকেজ সংখ্যা: ${qty}</td></tr>`;
-    const body = items.map((it, k) => {
+    items.forEach((it, k) => {
       const price = Number(it["কম্বো মূল্য"]) || 0;
+      const nm = escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""));
       const l = sl[k], tq = l ? money(l.per * qty) : 0;
-      return `<tr><td>${k+1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""))}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td><td>${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td>${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
-    }).join("");
-    return body;
-  }).join("");
+      orderRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
+      deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td>${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
+    });
+  });
   const commTotal = lines.reduce((s,e)=>s+(Number(e["কমিশন মূল্য"])||0),0);
   const subTotal = lines.reduce((s,e)=>s+(Number(e["মোট মূল্য"])||0),0);
   const netPay = lines.reduce((s,e)=>s+(Number(e["পরিশোধযোগ্য মূল্য"])||0),0) - (Number(first["ডিসকাউন্ট"])||0);
 
-  const win = window.open("", "_blank", "width=900,height=700");
+  const win = window.open("", "_blank", "width=1100,height=700");
   let depotAddr = "";
   try{ const ab = await cachedApiCall("getAbout", {}, 30000); depotAddr = ab && ab.success && ab.about ? (ab.about["জেলা ডিপুর ঠিকানা"] || "") : ""; }catch(e){}
-  win.document.write(`<html><head><meta charset="utf-8"><title>অর্ডার ইনভয়েস — ${invoiceNo}</title>
-    <style>
-      @page{ size:A4; margin:0.5in; }
-      html, body{ margin:0; padding:0; }
-      body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; font-size:13px; }
-      .doc-title{ display:inline-block; text-align:center; font-size:16px; font-weight:700; margin:10px 0 0; padding:3px 22px; border:1.5px solid #153f37; border-radius:5px; background:transparent; }
-      .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:10px; margin-bottom:14px; }
-      .letterhead h1{ margin:0; color:#153f37; font-size:20px; }
-      .letterhead p{ margin:4px 0 0; color:#b5502f; font-weight:600; font-size:12px; }
-      .meta-row{ display:flex; justify-content:space-between; margin-bottom:10px; font-size:12.5px; }
-      .dealer-info{ display:flex; justify-content:space-between; gap:24px; margin-bottom:14px; font-size:13px; line-height:1.8; }
-      .dealer-info .di-col:first-child{ flex:1 1 auto; }
-      .dealer-info .di-col:last-child{ flex:0 0 230px; margin-right:50px; }
-      .dealer-info .di-row{ display:grid; grid-template-columns:46px 12px auto; }
-      .dealer-info .di-col:last-child .di-row{ grid-template-columns:66px 12px auto; }
-      table.items{ width:100%; border-collapse:collapse; margin-top:4px; }
-      table.items th{ border-bottom:2px solid #153f37; padding:6px 8px; font-size:12px; text-align:center; background:#eef0e9; }
-      table.items td{ border-bottom:1px dashed #999; padding:7px 8px; font-size:12.5px; text-align:center; }
-      table.items td.cell-left{ text-align:left; }
-      table.items tr.pk-head td{ background:#eef0e9; border-bottom:1px solid #153f37; }
-      table.items tr.pk-sub td{ font-weight:700; border-bottom:1px solid #153f37; }
-      .totals-wrap{ display:flex; justify-content:flex-end; margin-top:10px; }
-      .totals-box{ min-width:230px; }
-      .totals-box .trow{ display:grid; grid-template-columns:150px 16px minmax(60px,auto); font-size:13px; line-height:1.7; }
-      .totals-box .trow span:nth-child(2){ text-align:center; }
-      .totals-box .trow span:last-child{ font-weight:600; }
-      .totals-box .trow.due span{ font-weight:700; }
-      .sign-row{ display:flex; justify-content:space-between; margin-top:70px; }
-      .sign-box{ text-align:center; width:22%; }
-      .sign-line{ border-top:1px solid #333; margin-top:40px; padding-top:4px; font-size:12px; }
-      .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
-    </style></head><body>
-    <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
-      <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
-      ${depotAddr ? `<p style="color:#1c2b28;font-weight:500;">${escMsgHtml(depotAddr)}</p>` : ""}
-      <div class="doc-title">অর্ডার ইনভয়েস</div>
-    </div>
-    <div class="meta-row"><span>ইনভয়েস নং: <b>${invoiceNo}</b></span><span>তারিখ: <b>${dateStr}</b></span></div>
-    <div class="dealer-info">
-      <div class="di-col">
-        <div class="di-row"><b>ডিলার</b><span>:</span><span>${first["ডিলার নাম"]||""}</span></div>
-        <div class="di-row"><b>ঠিকানা</b><span>:</span><span>${first["ঠিকানা"]||""}</span></div>
-        ${lines.map(e => `<div style="font-weight:700;">${escMsgHtml(String(e["প্যাকেজ"]||""))} — প্যাকেজ সংখ্যা: ${Number(e["সংখ্যা"])||0}</div>`).join("")}
-      </div>
-      <div class="di-col">
-        <div class="di-row"><b>মোবাইল</b><span>:</span><span>${first["মোবাইল"]||""}</span></div>
-        <div class="di-row"><b>বিক্রয়কারী</b><span>:</span><span>${escMsgHtml(String(first["বিক্রয়কারী"]||""))}</span></div>
-      </div>
-    </div>
-    <table class="items">
-      <thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr></thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
+
+  const totalsHtml = `
     <div class="totals-wrap">
       <div class="totals-box">
         <div class="trow"><span>সর্বমোট</span><span>:</span><span>${money(subTotal)}</span></div>
@@ -5058,13 +5007,77 @@ async function printSalesInvoiceById(invoiceNo){
         <div class="trow"><span>পরিশোধ</span><span>:</span><span>${first["পরিশোধ"]||0}</span></div>
         <div class="trow due"><span>বকেয়া</span><span>:</span><span>${first["বকেয়া"]||0}</span></div>
       </div>
-    </div>
-    <div class="sign-row">
-      <div class="sign-box"><div class="sign-line">ক্রেতার স্বাক্ষর</div></div>
-      <div class="sign-box"><div class="sign-line">বিক্রয়কারীর স্বাক্ষর</div></div>
-    </div>
+    </div>`;
+  const copyHtml = (title, theadHtml, tbodyHtml, extraHtml) => `
+    <div class="copy">
+      <div class="letterhead">
+        <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+        <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
+        ${depotAddr ? `<p style="color:#1c2b28;font-weight:500;">${escMsgHtml(depotAddr)}</p>` : ""}
+        <div class="doc-title">${title}</div>
+      </div>
+      <div class="meta-row"><span>ইনভয়েস নং: <b>${invoiceNo}</b></span><span>তারিখ: <b>${dateStr}</b></span></div>
+      <div class="dealer-info">
+        <div class="di-col">
+          <div class="di-row"><b>ডিলার</b><span>:</span><span>${first["ডিলার নাম"]||""}</span></div>
+          <div class="di-row"><b>ঠিকানা</b><span>:</span><span>${first["ঠিকানা"]||""}</span></div>
+          ${lines.map(e => `<div style="font-weight:700;">${escMsgHtml(String(e["প্যাকেজ"]||""))} — প্যাকেজ সংখ্যা: ${Number(e["সংখ্যা"])||0}</div>`).join("")}
+        </div>
+        <div class="di-col">
+          <div class="di-row"><b>মোবাইল</b><span>:</span><span>${first["মোবাইল"]||""}</span></div>
+          <div class="di-row"><b>বিক্রয়কারী</b><span>:</span><span>${escMsgHtml(String(first["বিক্রয়কারী"]||""))}</span></div>
+        </div>
+      </div>
+      <table class="items"><thead>${theadHtml}</thead><tbody>${tbodyHtml}</tbody></table>
+      ${extraHtml}
+      <div class="sign-row">
+        <div class="sign-box"><div class="sign-line">ক্রেতার স্বাক্ষর</div></div>
+        <div class="sign-box"><div class="sign-line">বিক্রয়কারীর স্বাক্ষর</div></div>
+      </div>
+    </div>`;
+
+  const orderCopy = copyHtml("অর্ডার ইনভয়েস",
+    '<tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th></tr>', orderRows, totalsHtml);
+  const deliveryCopy = copyHtml("ডেলিভারি ইনভয়েস",
+    '<tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr>', deliveryRows, "");
+
+  win.document.write(`<html><head><meta charset="utf-8"><title>অর্ডার ইনভয়েস — ${invoiceNo}</title>
+    <style>
+      @page{ size:A4 landscape; margin:0.35in; }
+      html, body{ margin:0; padding:0; }
+      body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; font-size:11.5px; }
+      .sheets{ display:flex; align-items:stretch; }
+      .copy{ flex:1 1 0; min-width:0; box-sizing:border-box; padding:0 10px; }
+      .copy:first-child{ padding-left:0; border-right:1.5px dashed #888; }
+      .copy:last-child{ padding-right:0; }
+      .doc-title{ display:inline-block; text-align:center; font-size:14px; font-weight:700; margin:8px 0 0; padding:2px 18px; border:1.5px solid #153f37; border-radius:5px; background:transparent; }
+      .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:8px; margin-bottom:10px; }
+      .letterhead h1{ margin:0; color:#153f37; font-size:17px; }
+      .letterhead p{ margin:3px 0 0; color:#b5502f; font-weight:600; font-size:11px; }
+      .meta-row{ display:flex; justify-content:space-between; margin-bottom:8px; font-size:11.5px; }
+      .dealer-info{ display:flex; justify-content:space-between; gap:12px; margin-bottom:10px; font-size:12px; line-height:1.7; }
+      .dealer-info .di-col:first-child{ flex:1 1 auto; min-width:0; }
+      .dealer-info .di-col:last-child{ flex:0 0 auto; }
+      .dealer-info .di-row{ display:grid; grid-template-columns:44px 10px auto; }
+      .dealer-info .di-col:last-child .di-row{ grid-template-columns:62px 10px auto; }
+      table.items{ width:100%; border-collapse:collapse; margin-top:4px; }
+      table.items th{ border-bottom:2px solid #153f37; padding:5px 5px; font-size:11px; text-align:center; background:#eef0e9; }
+      table.items td{ border-bottom:1px dashed #999; padding:5px 5px; font-size:11.5px; text-align:center; }
+      table.items td.cell-left, table.items th.cell-left{ text-align:left; }
+      .totals-wrap{ display:flex; justify-content:flex-end; margin-top:8px; }
+      .totals-box{ min-width:210px; }
+      .totals-box .trow{ display:grid; grid-template-columns:130px 14px minmax(50px,auto); font-size:12px; line-height:1.65; }
+      .totals-box .trow span:nth-child(2){ text-align:center; }
+      .totals-box .trow span:last-child{ font-weight:600; }
+      .totals-box .trow.due span{ font-weight:700; }
+      .sign-row{ display:flex; justify-content:space-between; margin-top:50px; }
+      .sign-box{ text-align:center; width:34%; }
+      .sign-line{ border-top:1px solid #333; margin-top:30px; padding-top:3px; font-size:11px; }
+      .doc-footer{ margin-top:14px; font-size:9px; color:#6b7570; text-align:center; }
+    </style></head><body>
+    <div class="sheets">${orderCopy}${deliveryCopy}</div>
     <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
-    <script>window.onload=function(){${PRINT_FIT_JS}window.print();}<\/script>
+    <script>window.onload=function(){window.print();}<\/script>
     </body></html>`);
   win.document.close();
 }
