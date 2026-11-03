@@ -647,7 +647,7 @@ function getPackageProductCountMap(masterSS) {
   packages.forEach(function (p) {
     let count = 0;
     for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
-      if (p["পণ্য" + i + " - নাম ও পরিমাণ"]) count += Number(p["পণ্য" + i + " - সংখ্যা"]) || 1;
+      if (p["পণ্য" + i + " - নাম ও পরিমাণ"]) count += Number(stockToEn(p["পণ্য" + i + " - সংখ্যা"])) || 1;
     }
     map[p["PackageID"]] = count;
   });
@@ -792,6 +792,38 @@ function stockUnitFromText(text) {
   return u.length <= 12 ? u : "";
 }
 
+/* বাংলা অঙ্ক → ইংরেজি */
+function stockToEn(v) { return String(v == null ? "" : v).replace(/[০-৯]/g, function (d) { return "০১২৩৪৫৬৭৮৯".indexOf(d); }); }
+
+/* "৫০০ গ্রাম" / "১ কেজি" / "২৫০ মি.লি" লেখা থেকে সাইজ → { v: কেজি বা লিটারে মান, u: "কেজি"|"লিটার" }, না চিনলে null */
+function parseSizeText(text) {
+  const t = stockToEn(text).replace(/,/g, "");
+  const m = t.match(/(\d+(?:\.\d+)?)\s*(কিলোগ্রাম|কেজি|কেজী|kgs?|গ্রাম|গ্রা|gms?|grams?|g|লিটার|ltr|liters?|litres?|l|মি\.?\s*লি|মিলি|ml)/i);
+  if (!m) return null;
+  const n = Number(m[1]), w = m[2].toLowerCase();
+  if (/^(কিলোগ্রাম|কেজি|কেজী|kgs?)$/.test(w)) return { v: n, u: "কেজি" };
+  if (/^(গ্রাম|গ্রা|gms?|grams?|g)$/.test(w)) return { v: n / 1000, u: "কেজি" };
+  if (/^(লিটার|ltr|liters?|litres?|l)$/.test(w)) return { v: n, u: "লিটার" };
+  return { v: n / 1000, u: "লিটার" };
+}
+
+/* পণ্যের প্রতি প্যাকেট/পিসের সাইজ: "পরিমাণ" = ৫০০ আর "একক" = গ্রাম (অথবা পরিমাণে "৫০০ গ্রাম" লেখা) */
+function productSizeOf(poriman, unit) {
+  const raw = String(poriman == null ? "" : poriman).trim(), un = String(unit || "").trim();
+  let sz = parseSizeText(raw);
+  if (!sz && /^[\d.]+$/.test(stockToEn(raw)) && un) sz = parseSizeText(stockToEn(raw) + " " + un);
+  return sz;
+}
+
+/* প্যাকেজের একটিতে এই পণ্য কত পিস/প্যাকেট: "১ কেজি", "৫০০ গ্রাম" লিখলে পণ্যের সাইজ দিয়ে ভাগ হয়; শুধু সংখ্যা লিখলে সেটাই পিস সংখ্যা */
+function packsPerPackage(raw, size) {
+  const s = String(raw == null ? "" : raw).trim();
+  if (!s) return 1;
+  const a = parseSizeText(s);
+  if (a) return (size && size.u === a.u && size.v > 0) ? Math.round(a.v / size.v * 10000) / 10000 : a.v;
+  return Number(stockToEn(s)) || 1;
+}
+
 /* সংখ্যা + একক এবং বস্তা/বক্স হিসাব, যেমন "110 কেজি (2 বস্তা 10 কেজি)" */
 function formatStockQty(qty, unit, packType, packSize) {
   qty = Math.round((Number(qty) || 0) * 100) / 100;
@@ -818,8 +850,10 @@ function computeStockState(masterSS, excludeInvoiceNo) {
   const list = [];
   products.forEach(function (p) {
     const r = { productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), brand: String(p["ব্র্যান্ড"] || ""),
-                unit: String(p["একক"] || ""), packType: String(p["প্যাকিং ধরন"] || ""), packSize: Number(p["প্যাকিং পরিমাণ"]) || 0,
+                unitRaw: String(p["একক"] || ""), packType: String(p["প্যাকিং ধরন"] || ""), packSize: Number(stockToEn(p["প্যাকিং পরিমাণ"])) || 0,
+                size: productSizeOf(p["পরিমাণ"], p["একক"]),
                 qtyIn: 0, valueIn: 0, sold: 0, key: stockNormName(p["পণ্যের নাম"]) };
+    r.unit = r.size ? "পিস" : (r.unitRaw || "পিস");   // স্টক গোনা হয় পিস/প্যাকেটে; সাইজ না থাকলে পণ্যের এককে
     byId[r.productId] = r;
     list.push(r);
   });
@@ -849,8 +883,8 @@ function computeStockState(masterSS, excludeInvoiceNo) {
       if (!best) unmatched[String(text)] = true;
       lines.push({
         r: best,
-        unit: (best && best.unit) || stockUnitFromText(text),
-        per: Number(pk["পণ্য" + i + " - সংখ্যা"]) || 1
+        unit: best ? best.unit : stockUnitFromText(text),
+        per: best ? packsPerPackage(pk["পণ্য" + i + " - সংখ্যা"], best.size) : 1
       });
     }
     pkgLines[pk["PackageID"]] = lines;
@@ -874,6 +908,7 @@ function currentStockReport(data) {
     const qty = r.qtyIn - r.sold;
     const avg = r.qtyIn > 0 ? r.valueIn / r.qtyIn : 0;
     return { productId: r.productId, name: r.name, brand: r.brand, unit: r.unit, packType: r.packType, packSize: r.packSize,
+             sizeV: r.size ? r.size.v : 0, sizeU: r.size ? r.size.u : "",
              qtyIn: r.qtyIn, sold: r.sold, qty: qty, value: Math.round(qty * avg) };
   });
   return { success: true, rows: rows, unmatched: Object.keys(st.unmatched).slice(0, 10) };
@@ -893,7 +928,8 @@ function orderStockInfo(data) {
     packages[pid] = st.pkgLines[pid].map(function (l) {
       return l.r
         ? { productId: l.r.productId, name: l.r.name, avail: l.r.qtyIn - l.r.sold, unit: l.unit,
-            per: l.per, packType: l.r.packType, packSize: l.r.packSize }
+            per: l.per, packType: l.r.packType, packSize: l.r.packSize,
+            sizeV: l.r.size ? l.r.size.v : 0, sizeU: l.r.size ? l.r.size.u : "" }
         : null;   // স্টকের পণ্যের সাথে মেলেনি — সীমা নেই
     });
   });

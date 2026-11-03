@@ -488,7 +488,7 @@ function addPackage(data) {
       row["পণ্য" + n + " - কম্বো মূল্য"] = combo;
       row["পণ্য" + n + " - সাশ্রয়"] = sashroy;
       row["পণ্য" + n + " - ProductID"] = item.productId || "";
-      row["পণ্য" + n + " - সংখ্যা"] = Number(item.qty) || "";
+      row["পণ্য" + n + " - সংখ্যা"] = String(item.qty == null ? "" : item.qty).trim();
     } else {
       row["পণ্য" + n + " - নাম ও পরিমাণ"] = "";
       row["পণ্য" + n + " - বাজার মূল্য"] = "";
@@ -531,7 +531,7 @@ function expandPackageRow(pkg) {
         "কম্বো মূল্য": pkg["পণ্য" + i + " - কম্বো মূল্য"],
         "সাশ্রয়": pkg["পণ্য" + i + " - সাশ্রয়"],
         "ProductID": pkg["পণ্য" + i + " - ProductID"] || "",
-        "পণ্যের সংখ্যা": Number(pkg["পণ্য" + i + " - সংখ্যা"]) || 0   // প্যাকেজ-প্রতি এই পণ্যের পরিমাণ (কেজি/বোতল/পিস)
+        "পণ্যের সংখ্যা": pkg["পণ্য" + i + " - সংখ্যা"] === undefined || pkg["পণ্য" + i + " - সংখ্যা"] === null ? "" : pkg["পণ্য" + i + " - সংখ্যা"]   // প্যাকেজ-প্রতি এই পণ্যের পরিমাণ (যেমন "১ কেজি", "৫০০ গ্রাম")
       });
     }
   }
@@ -593,7 +593,7 @@ function updatePackage(data) {
         fields["পণ্য" + n + " - কম্বো মূল্য"] = combo;
         fields["পণ্য" + n + " - সাশ্রয়"] = sashroy;
         fields["পণ্য" + n + " - ProductID"] = item.productId || "";
-        fields["পণ্য" + n + " - সংখ্যা"] = Number(item.qty) || "";
+        fields["পণ্য" + n + " - সংখ্যা"] = String(item.qty == null ? "" : item.qty).trim();
       } else {
         fields["পণ্য" + n + " - নাম ও পরিমাণ"] = "";
         fields["পণ্য" + n + " - বাজার মূল্য"] = "";

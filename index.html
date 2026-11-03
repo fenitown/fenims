@@ -3080,7 +3080,7 @@ function addPkgItemRow(prefill){
   row.className = "item-row-v2";
   row.innerHTML = `
     <select class="itemProduct" title="স্টকের পণ্য (স্টক হিসাবের জন্য)" onchange="onPkgProductChange(this)">${pkgProductOptions(prefill ? prefill.productId : "")}</select>
-    <input placeholder="পরিমাণ" title="প্যাকেজে এই পণ্য কত (কেজি/বোতল/পিস)" type="number" min="0" step="any" class="itemQty" oninput="onPkgProductChange(this)" value="${prefill?(prefill.qty||''):''}">
+    <input placeholder="পরিমাণ" title="প্যাকেজে এই পণ্য কত — যেমন: ১ কেজি, ৫০০ গ্রাম" class="itemQty" oninput="onPkgProductChange(this)" value="${prefill?(prefill.qty||''):''}">
     <input placeholder="পণ্যের নাম ও পরিমাণ" class="itemNaamPoriman" oninput="this.dataset.manual='1'" ${prefill ? 'data-manual="1"' : ''} value="${prefill?(prefill.naamPoriman||''):''}">
     <input placeholder="বাজার" title="বাজার মূল্য" type="number" min="0" class="itemBazar" oninput="updateItemSaving(this)" value="${prefill?(prefill.bazarMulyo||''):''}">
     <input placeholder="কম্বো" title="কম্বো মূল্য" type="number" min="0" class="itemCombo" oninput="updateItemSaving(this)" value="${prefill?(prefill.comboMulyo||''):''}">
@@ -3102,7 +3102,7 @@ function onPkgProductChange(el){
   const opt = sel.options[sel.selectedIndex];
   if(!opt || !opt.value) return;
   if(txt.dataset.manual === "1" && txt.value) return;
-  txt.value = [opt.dataset.name, row.querySelector(".itemQty").value, opt.dataset.unit].filter(Boolean).join(" ");
+  txt.value = [opt.dataset.name, row.querySelector(".itemQty").value.trim()].filter(Boolean).join(" ");
 }
 
 function updateItemSaving(el){
@@ -3668,10 +3668,10 @@ function renderProductsTab(){
       <div class="form-grid">
         <div class="field"><label>পণ্যের নাম</label><input id="prodNaam"></div>
         <div class="field"><label>ব্র্যান্ড</label><input id="prodBrand"></div>
-        <div class="field"><label>পরিমাণ (প্রতি পিস/প্যাকেটের সাইজ)</label><input id="prodPoriman" placeholder="যেমন: ১ কেজি / ৫০০ গ্রাম / ১২৫ গ্রাম"></div>
-        <div class="field"><label>একক (স্টক যে মাপে গোনা হয়)</label><input id="prodUnit" list="prodUnitList" placeholder="পিস / বোতল / কেজি / লিটার"><datalist id="prodUnitList"><option value="কেজি"><option value="লিটার"><option value="বোতল"><option value="পিস"><option value="প্যাকেট"></datalist></div>
+        <div class="field"><label>পরিমাণ (প্রতি প্যাকেট/পিসের সাইজ)</label><input id="prodPoriman" placeholder="যেমন: ৫০০"></div>
+        <div class="field"><label>একক (সাইজের মাপ)</label><select id="prodUnit"><option value="">-- নির্বাচন --</option><option>গ্রাম</option><option>কেজি</option><option>মি.লি</option><option>লিটার</option><option>পিস</option><option>বোতল</option></select></div>
         <div class="field"><label>প্যাকিং ধরন</label><input id="prodPackType" list="prodPackList" placeholder="বস্তা / বক্স"><datalist id="prodPackList"><option value="বস্তা"><option value="বক্স"><option value="কার্টন"></datalist></div>
-        <div class="field"><label>প্যাকিং পরিমাণ (এক বস্তা/বক্সে কত একক)</label><input id="prodPackSize" type="number" min="0" step="any" placeholder="যেমন: ৫০"></div>
+        <div class="field"><label>প্যাকিং পরিমাণ (এক বস্তা/বক্সে কত পিস/প্যাকেট)</label><input id="prodPackSize" type="number" min="0" step="any" placeholder="যেমন: ৫০"></div>
       </div>
       <div class="btn-row">
         <button class="btn" id="prodSubmitBtn" onclick="submitProduct()">সংরক্ষণ করুন</button>
@@ -3758,7 +3758,7 @@ function editProductRow(productId){
   document.getElementById("prodNaam").value = p["পণ্যের নাম"] || "";
   document.getElementById("prodBrand").value = p["ব্র্যান্ড"] || "";
   document.getElementById("prodPoriman").value = p["পরিমাণ"] || "";
-  document.getElementById("prodUnit").value = p["একক"] || "";
+  { const ue = document.getElementById("prodUnit"), uv = p["একক"] || ""; if(uv && ![...ue.options].some(o => o.value === uv || o.text === uv)) ue.add(new Option(uv, uv)); ue.value = uv; }
   document.getElementById("prodPackType").value = p["প্যাকিং ধরন"] || "";
   document.getElementById("prodPackSize").value = p["প্যাকিং পরিমাণ"] || "";
   document.getElementById("prodNaam").scrollIntoView({ behavior:"smooth", block:"center" });
@@ -4026,7 +4026,7 @@ function stkBrand(e){
 }
 function stkQtyLabel(e){
   const p = productsCache.find(x => x["ProductID"] === e["ProductID"]);
-  return p ? fmtStockQty(e["সংখ্যা"], p["একক"], p["প্যাকিং ধরন"], p["প্যাকিং পরিমাণ"]) : e["সংখ্যা"];
+  return p ? fmtStockQty(e["সংখ্যা"], stockCountUnit(p), p["প্যাকিং ধরন"], toEnDigits(p["প্যাকিং পরিমাণ"])) : e["সংখ্যা"];
 }
 function stkDate(e){ return e["তারিখ"] ? new Date(e["তারিখ"]).toLocaleDateString("bn-BD") : ""; }
 
@@ -4111,7 +4111,8 @@ function onStockInProductChange(sel){
     // পণ্যের ব্র্যান্ড তালিকায় না থাকলে (বিরল) যোগ করে নেওয়া — ব্যবহারকারী পরে যেকোনো ব্র্যান্ড বদলাতে পারবে
     if(b && ![...bSel.options].some(o => o.value === b)){ const o = document.createElement("option"); o.value = b; o.textContent = b; bSel.appendChild(o); }
     bSel.value = b;
-    row.querySelector(".stockInQty").placeholder = "সংখ্যা" + (opt.dataset.unit ? " (" + opt.dataset.unit + ")" : "");
+    const pr = productsCache.find(x => x["ProductID"] === opt.value);
+    row.querySelector(".stockInQty").placeholder = "সংখ্যা" + (pr ? " (" + stockCountUnit(pr) + ")" : "");
   }
   updateStockInTotalsPreview();
 }
@@ -4384,17 +4385,32 @@ function parseSizeText(text){
   if(/^(লিটার|ltr|liters?|litres?|l)$/.test(w)) return { v: n, u: "লিটার" };
   return { v: n / 1000, u: "লিটার" };
 }
-/* প্যাকিং কলামের লেখা: "১ বস্তা = ২৫ কেজি (২৫ পিস)", "১ বস্তা = ৩০ কেজি (৬০ পিস)" — প্রতি পিসের সাইজ (পরিমাণ) অনুযায়ী ওজন বের হয় */
+/* পণ্যের প্রতি প্যাকেট/পিসের সাইজ — "পরিমাণ" = ৫০০ + "একক" = গ্রাম, অথবা পরিমাণে "৫০০ গ্রাম" লেখা */
+function productSize(p){
+  const raw = String(p["পরিমাণ"] || "").trim(), unit = String(p["একক"] || "").trim();
+  let sz = parseSizeText(raw);
+  if(!sz && /^[\d.]+$/.test(toEnDigits(raw)) && unit) sz = parseSizeText(toEnDigits(raw) + " " + unit);
+  return sz;
+}
+/* স্টক যে এককে গোনা হয়: সাইজ থাকলে পিস/প্যাকেট, না থাকলে পণ্যের একক */
+function stockCountUnit(p){ return productSize(p) ? "পিস" : (String(p["একক"] || "").trim() || "পিস"); }
+/* প্যাকিং কলামের লেখা: "১ বস্তা = ২৫ কেজি (২৫ পিস)", "১ বস্তা = ৩০ কেজি (৬০ পিস)" */
 function productPackLabel(p){
-  const type = p["প্যাকিং ধরন"], n = Number(toEnDigits(p["প্যাকিং পরিমাণ"])) || 0, unit = String(p["একক"] || "").trim();
+  const type = p["প্যাকিং ধরন"], n = Number(toEnDigits(p["প্যাকিং পরিমাণ"])) || 0;
   if(!type || n <= 0) return "";
-  const weightUnit = /^(কেজি|কেজী|kg|লিটার|কিলোগ্রাম)$/i.test(unit);
-  const size = parseSizeText(p["পরিমাণ"]);
-  if(unit && !weightUnit && size){
+  const size = productSize(p), cu = stockCountUnit(p);
+  if(size){
     const tot = Math.round(n * size.v * 1000) / 1000;
-    return "১ " + type + " = " + toBnDigits(tot) + " " + size.u + " (" + toBnDigits(n) + " " + unit + ")";
+    return "১ " + type + " = " + toBnDigits(tot) + " " + size.u + " (" + toBnDigits(n) + " " + cu + ")";
   }
-  return "১ " + type + " = " + toBnDigits(n) + (unit ? " " + unit : "");
+  return "১ " + type + " = " + toBnDigits(n) + " " + cu;
+}
+/* অর্ডার ইনভয়েসের একটি পণ্য-লাইনের মোট: প্যাকেজ সংখ্যা অনুযায়ী পিস, ওজন/আয়তন ও বস্তা-বক্স */
+function siLineTotals(l, qty){
+  if(!l) return null;
+  const packs = Math.round((Number(l.per) || 1) * qty * 100) / 100;
+  const qtyText = l.sizeV > 0 ? (Math.round(packs * l.sizeV * 1000) / 1000) + " " + l.sizeU : packs + " " + (l.unit || "");
+  return { packs: packs, qtyText: qtyText, packText: packBreakdown(packs, l.unit, l.packType, l.packSize) || "—" };
 }
 function packBreakdown(qty, unit, packType, packSize){
   qty = Math.round((Number(qty) || 0) * 100) / 100; packSize = Number(packSize) || 0;
@@ -4465,9 +4481,8 @@ function renderSiBlock(block){
   const sl = (window.__siStock || {})[pid] || [];
   tbody.innerHTML = items.map((it, k) => {
     const price = Number(it["কম্বো মূল্য"]) || 0;
-    const l = sl[k];
-    const totQty = l ? siMoney(l.per * qty) : 0;
-    return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td><td>${l ? totQty + " " + escMsgHtml(l.unit || "") : "—"}</td><td>${l ? (packBreakdown(totQty, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
+    const lt = siLineTotals(sl[k], qty);
+    return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td><td>${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td>${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;
   }).join("");
   tfoot.innerHTML = "";
 }
@@ -5007,9 +5022,9 @@ async function printSalesInvoiceById(invoiceNo){
     items.forEach((it, k) => {
       const price = Number(it["কম্বো মূল্য"]) || 0;
       const nm = escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""));
-      const l = sl[k], tq = l ? money(l.per * qty) : 0;
+      const lt = siLineTotals(sl[k], qty);
       orderRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
-      deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td class="cell-left">${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td class="cell-left">${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
+      deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td class="cell-left">${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td class="cell-left">${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;
     });
   });
   const commTotal = lines.reduce((s,e)=>s+(Number(e["কমিশন মূল্য"])||0),0);
