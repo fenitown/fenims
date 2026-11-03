@@ -7706,8 +7706,9 @@ function printDealerReport(){
   const BN = "০১২৩৪৫৬৭৮৯";
   function conv(el){
     if(el.tagName !== "INPUT") return;
-    if(el.type === "number"){ el.type = "text"; el.setAttribute("inputmode", "decimal"); el.dataset.num = "1"; el.autocomplete = "off"; }
-    else if(el.type === "tel"){ el.dataset.tel = "1"; }
+    /* inputmode দেওয়া হয় না — দিলে মোবাইলে শুধু ইংরেজি অঙ্কের কীবোর্ড আসে, বাংলা অঙ্ক লেখা যায় না */
+    if(el.type === "number"){ el.type = "text"; el.dataset.num = "1"; el.autocomplete = "off"; }
+    else if(el.type === "tel"){ el.type = "text"; el.dataset.tel = "1"; }
   }
   function scan(root){
     if(root.nodeType !== 1) return;
