@@ -3115,7 +3115,7 @@ function onPkgProductChange(el){
   if(!opt || !opt.value) return;
   const unitSel = row.querySelector(".itemUnit");
   if(el === sel && !unitSel.value && opt.dataset.unit && PKG_UNITS.indexOf(opt.dataset.unit) !== -1) unitSel.value = opt.dataset.unit;   // পণ্যের নিজের একক আগে থেকে বসে
-  if(txt.dataset.manual === "1" && txt.value) return;
+  /* পণ্য, পরিমাণ বা একক — যেকোনোটা বদলালে লেখা নতুন করে বসে (হাতে বদলানো থাকলেও) */
   txt.value = [opt.dataset.name, row.querySelector(".itemQty").value.trim(), unitSel.value].filter(Boolean).join(" ");
 }
 
