@@ -821,7 +821,8 @@ function packsPerPackage(raw, size) {
   if (!s) return 1;
   const a = parseSizeText(s);
   if (a) return (size && size.u === a.u && size.v > 0) ? Math.round(a.v / size.v * 10000) / 10000 : a.v;
-  return Number(stockToEn(s)) || 1;
+  const n = parseFloat(stockToEn(s));   // "২ পিস" / "২ প্যাকেট" / "২" → ২
+  return n > 0 ? n : 1;
 }
 
 /* সংখ্যা + একক এবং বস্তা/বক্স হিসাব, যেমন "110 কেজি (2 বস্তা 10 কেজি)" */

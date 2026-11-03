@@ -238,6 +238,7 @@
   #pkgItems .item-row-v2 > input.itemNaamPoriman{ flex:1 1 180px; width:auto; min-width:110px; }
   #pkgItems .item-row-v2 > button{ flex:0 0 auto; padding:6px 9px; }
   #pkgItems .item-row-v2 > select.itemProduct{ flex:0 0 130px; width:130px; min-width:0; padding:7px 4px; font-size:0.85rem; }
+  #pkgItems .item-row-v2 > select.itemUnit{ flex:0 0 76px; width:76px; min-width:0; padding:7px 2px; font-size:0.85rem; }
   #pkgItems input[type=number]{ -moz-appearance:textfield; appearance:textfield; }
   #pkgItems input[type=number]::-webkit-inner-spin-button, #pkgItems input[type=number]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
   @media (max-width:600px){
@@ -246,6 +247,7 @@
     #pkgItems .item-row-v2 > input.itemNaamPoriman{ flex:1 1 90px; min-width:90px; padding:7px 6px; text-align:left; }
     #pkgItems .item-row-v2 > button{ padding:6px 7px; font-size:0.8rem; }
     #pkgItems .item-row-v2 > select.itemProduct{ flex:0 0 84px; width:84px; padding:7px 2px; font-size:0.75rem; }
+    #pkgItems .item-row-v2 > select.itemUnit{ flex:0 0 58px; width:58px; padding:7px 1px; font-size:0.72rem; }
   }
   .expense-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
   .expense-row > input{ flex:1 1 110px; min-width:0; }
@@ -611,7 +613,7 @@
         </div>
         <div id="pkgItems"></div>
         <button class="btn secondary small" onclick="addPkgItemRow()">+ পণ্য যোগ করুন</button>
-        <p style="font-size:0.82rem;color:var(--muted);">পণ্যের নাম ও পরিমাণ একই ঘরে লিখুন — যেমন: "চিনি - ১ কেজি"</p>
+        <p style="font-size:0.82rem;color:var(--muted);">প্রতিটি সারিতে পণ্য বাছুন, পরিমাণ ও একক দিন (যেমন ৫০০ গ্রাম) — "পণ্যের নাম ও পরিমাণ" নিজে ভরে যাবে।</p>
         <div class="btn-row">
           <button class="btn" id="pkgSubmitBtn" onclick="submitPackage()">প্যাকেজ সংরক্ষণ করুন</button>
           <button class="btn secondary" id="pkgCancelBtn" style="display:none;" onclick="cancelPkgEdit()">বাতিল</button>
@@ -3074,13 +3076,23 @@ async function saveAgency(){
 /* ================= এজেন্সি: প্যাকেজ ================= */
 let editingPackageId = null;
 
+const PKG_UNITS = ["কেজি", "গ্রাম", "পিস", "মি.লি", "প্যাকেট", "লিটার", "বোতল"];
+/* সংরক্ষিত "৫০০ গ্রাম" → { num: "৫০০", unit: "গ্রাম" } */
+function splitPkgQty(raw){
+  const m = String(raw == null ? "" : raw).trim().match(/^([\d০-৯.]+)\s*(.*)$/);
+  if(!m) return { num: String(raw || "").trim(), unit: "" };
+  const u = (m[2] || "").trim();
+  return { num: m[1], unit: PKG_UNITS.indexOf(u) !== -1 ? u : "" };
+}
 function addPkgItemRow(prefill){
   const wrap = document.getElementById("pkgItems");
+  const pq = prefill ? splitPkgQty(prefill.qty) : { num: "", unit: "" };
   const row = document.createElement("div");
   row.className = "item-row-v2";
   row.innerHTML = `
     <select class="itemProduct" title="স্টকের পণ্য (স্টক হিসাবের জন্য)" onchange="onPkgProductChange(this)">${pkgProductOptions(prefill ? prefill.productId : "")}</select>
-    <input placeholder="পরিমাণ" title="প্যাকেজে এই পণ্য কত — যেমন: ১ কেজি, ৫০০ গ্রাম" class="itemQty" oninput="onPkgProductChange(this)" value="${prefill?(prefill.qty||''):''}">
+    <input placeholder="পরিমাণ" title="প্যাকেজে এই পণ্য কত" class="itemQty" oninput="onPkgProductChange(this)" value="${pq.num}">
+    <select class="itemUnit" title="একক" onchange="onPkgProductChange(this)"><option value="">একক</option>${PKG_UNITS.map(u => `<option value="${u}"${u === pq.unit ? " selected" : ""}>${u}</option>`).join("")}</select>
     <input placeholder="পণ্যের নাম ও পরিমাণ" class="itemNaamPoriman" oninput="this.dataset.manual='1'" ${prefill ? 'data-manual="1"' : ''} value="${prefill?(prefill.naamPoriman||''):''}">
     <input placeholder="বাজার" title="বাজার মূল্য" type="number" min="0" class="itemBazar" oninput="updateItemSaving(this)" value="${prefill?(prefill.bazarMulyo||''):''}">
     <input placeholder="কম্বো" title="কম্বো মূল্য" type="number" min="0" class="itemCombo" oninput="updateItemSaving(this)" value="${prefill?(prefill.comboMulyo||''):''}">
@@ -3101,8 +3113,10 @@ function onPkgProductChange(el){
   const sel = row.querySelector(".itemProduct"), txt = row.querySelector(".itemNaamPoriman");
   const opt = sel.options[sel.selectedIndex];
   if(!opt || !opt.value) return;
+  const unitSel = row.querySelector(".itemUnit");
+  if(el === sel && !unitSel.value && opt.dataset.unit && PKG_UNITS.indexOf(opt.dataset.unit) !== -1) unitSel.value = opt.dataset.unit;   // পণ্যের নিজের একক আগে থেকে বসে
   if(txt.dataset.manual === "1" && txt.value) return;
-  txt.value = [opt.dataset.name, row.querySelector(".itemQty").value.trim()].filter(Boolean).join(" ");
+  txt.value = [opt.dataset.name, row.querySelector(".itemQty").value.trim(), unitSel.value].filter(Boolean).join(" ");
 }
 
 function updateItemSaving(el){
@@ -3113,15 +3127,20 @@ function updateItemSaving(el){
 }
 
 async function submitPackage(){
-  const items = [...document.querySelectorAll("#pkgItems .item-row-v2")].map(r => ({
-    "productId": r.querySelector(".itemProduct").value,
-    "qty": r.querySelector(".itemQty").value,
-    "naamPoriman": r.querySelector(".itemNaamPoriman").value.trim(),
-    "bazarMulyo": r.querySelector(".itemBazar").value,
-    "comboMulyo": r.querySelector(".itemCombo").value
-  })).filter(i => i["naamPoriman"]);
-
   const msgBox = document.getElementById("pkgMsg");
+  const items = []; let bad = "";
+  [...document.querySelectorAll("#pkgItems .item-row-v2")].forEach((r, i) => {
+    const pid = r.querySelector(".itemProduct").value, qty = r.querySelector(".itemQty").value.trim(), unit = r.querySelector(".itemUnit").value;
+    const txt = r.querySelector(".itemNaamPoriman").value.trim(), bazar = r.querySelector(".itemBazar").value, combo = r.querySelector(".itemCombo").value;
+    if(!pid && !qty && !txt && !bazar && !combo) return;   // একেবারে খালি সারি বাদ
+    if(bad) return;
+    if(!pid){ bad = "সারি " + (i + 1) + ": পণ্য বাছাই করুন"; return; }
+    if(!qty){ bad = "সারি " + (i + 1) + ": পরিমাণ দিন"; return; }
+    if(!unit){ bad = "সারি " + (i + 1) + ": একক বাছাই করুন"; return; }
+    items.push({ "productId": pid, "qty": qty + " " + unit, "naamPoriman": txt || (r.querySelector(".itemProduct").selectedOptions[0].dataset.name + " " + qty + " " + unit), "bazarMulyo": bazar, "comboMulyo": combo });
+  });
+  if(bad){ msgBox.textContent = bad; msgBox.className = "msg err"; return; }
+  if(items.length === 0){ msgBox.textContent = "অন্তত একটি পণ্য যোগ করুন — পণ্য ছাড়া প্যাকেজ সেভ হবে না"; msgBox.className = "msg err"; return; }
   markSaving("pkgMsg");
 
   if(editingPackageId){
@@ -3671,7 +3690,7 @@ function renderProductsTab(){
         <div class="field"><label>পরিমাণ (প্রতি প্যাকেট/পিসের সাইজ)</label><input id="prodPoriman" placeholder="যেমন: ৫০০"></div>
         <div class="field"><label>একক (সাইজের মাপ)</label><select id="prodUnit"><option value="">-- নির্বাচন --</option><option>গ্রাম</option><option>কেজি</option><option>মি.লি</option><option>লিটার</option><option>পিস</option><option>বোতল</option></select></div>
         <div class="field"><label>প্যাকিং ধরন</label><input id="prodPackType" list="prodPackList" placeholder="বস্তা / বক্স"><datalist id="prodPackList"><option value="বস্তা"><option value="বক্স"><option value="কার্টন"></datalist></div>
-        <div class="field"><label>প্যাকিং পরিমাণ (এক বস্তা/বক্সে কত পিস/প্যাকেট)</label><input id="prodPackSize" type="number" min="0" step="any" placeholder="যেমন: ৫০"></div>
+        <div class="field"><label>প্যাকিং পরিমাণ</label><input id="prodPackSize" type="number" min="0" step="any" placeholder="যেমন: ৫০"></div>
       </div>
       <div class="btn-row">
         <button class="btn" id="prodSubmitBtn" onclick="submitProduct()">সংরক্ষণ করুন</button>
