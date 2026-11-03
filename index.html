@@ -4986,7 +4986,7 @@ async function printSalesInvoiceById(invoiceNo){
       const nm = escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""));
       const l = sl[k], tq = l ? money(l.per * qty) : 0;
       orderRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
-      deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td>${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
+      deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td class="cell-left">${l ? tq + " " + escMsgHtml(l.unit||"") : "—"}</td><td class="cell-left">${l ? (packBreakdown(tq, l.unit, l.packType, l.packSize) || "—") : "—"}</td></tr>`;
     });
   });
   const commTotal = lines.reduce((s,e)=>s+(Number(e["কমিশন মূল্য"])||0),0);
@@ -5034,6 +5034,7 @@ async function printSalesInvoiceById(invoiceNo){
         <div class="sign-box"><div class="sign-line">ক্রেতার স্বাক্ষর</div></div>
         <div class="sign-box"><div class="sign-line">বিক্রয়কারীর স্বাক্ষর</div></div>
       </div>
+      <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
     </div>`;
 
   const orderCopy = copyHtml("অর্ডার ইনভয়েস",
@@ -5041,15 +5042,19 @@ async function printSalesInvoiceById(invoiceNo){
   const deliveryCopy = copyHtml("ডেলিভারি ইনভয়েস",
     '<tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr>', deliveryRows, "");
 
-  win.document.write(`<html><head><meta charset="utf-8"><title>অর্ডার ইনভয়েস — ${invoiceNo}</title>
+  win.document.write(`<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.2, maximum-scale=5, user-scalable=yes"><title>অর্ডার ইনভয়েস — ${invoiceNo}</title>
     <style>
-      @page{ size:A4 landscape; margin:0.35in; }
+      @page{ size:A4 landscape; margin:0; }
       html, body{ margin:0; padding:0; }
-      body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; font-size:11.5px; }
-      .sheets{ display:flex; align-items:stretch; }
-      .copy{ flex:1 1 0; min-width:0; box-sizing:border-box; padding:0 10px; }
-      .copy:first-child{ padding-left:0; border-right:1.5px dashed #888; }
-      .copy:last-child{ padding-right:0; }
+      body{ font-family:'Hind Siliguri',sans-serif; color:#1c2b28; font-size:11.5px; background:#8a8f8d; }
+      .toolbar{ position:sticky; top:0; z-index:10; display:flex; gap:8px; align-items:center; justify-content:center; padding:8px; background:#153f37; color:#fff; font-size:14px; }
+      .toolbar button{ border:0; border-radius:6px; padding:6px 14px; font-size:14px; font-family:inherit; cursor:pointer; background:#fff; color:#153f37; font-weight:600; }
+      .toolbar span{ min-width:46px; text-align:center; }
+      .stage{ overflow:auto; padding:10px 0; }
+      .sheets{ display:flex; align-items:stretch; width:297mm; margin:0 auto; background:#fff; box-shadow:0 0 8px rgba(0,0,0,.4); }
+      .copy{ flex:1 1 0; min-width:0; box-sizing:border-box; padding:0.5in; min-height:207mm; display:flex; flex-direction:column; }
+      .copy:first-child{ border-right:1.5px dashed #888; }
+      @media print{ body{ background:#fff; } .toolbar{ display:none; } .stage{ padding:0; overflow:visible; } .sheets{ zoom:1 !important; box-shadow:none; margin:0; } }
       .doc-title{ display:inline-block; text-align:center; font-size:14px; font-weight:700; margin:8px 0 0; padding:2px 18px; border:1.5px solid #153f37; border-radius:5px; background:transparent; }
       .letterhead{ text-align:center; border-bottom:3px solid #153f37; padding-bottom:8px; margin-bottom:10px; }
       .letterhead h1{ margin:0; color:#153f37; font-size:17px; }
@@ -5073,11 +5078,16 @@ async function printSalesInvoiceById(invoiceNo){
       .sign-row{ display:flex; justify-content:space-between; margin-top:50px; }
       .sign-box{ text-align:center; width:34%; }
       .sign-line{ border-top:1px solid #333; margin-top:30px; padding-top:3px; font-size:11px; }
-      .doc-footer{ margin-top:14px; font-size:9px; color:#6b7570; text-align:center; }
+      .doc-footer{ margin-top:auto; padding-top:14px; font-size:9px; color:#6b7570; text-align:right; }
     </style></head><body>
-    <div class="sheets">${orderCopy}${deliveryCopy}</div>
-    <div class="doc-footer">@Powered by: AM Shahed: 01605721296</div>
-    <script>window.onload=function(){window.print();}<\/script>
+    <div class="toolbar"><button onclick="setZ(z-0.1)">−</button><span id="zv">100%</span><button onclick="setZ(z+0.1)">+</button><button onclick="fitZ()">ফিট</button><button onclick="window.print()">🖨 প্রিন্ট</button></div>
+    <div class="stage"><div class="sheets" id="sheets">${orderCopy}${deliveryCopy}</div></div>
+    <script>
+      var z = 1, sh = document.getElementById("sheets");
+      function setZ(v){ z = Math.max(0.3, Math.min(3, v)); sh.style.zoom = z; document.getElementById("zv").textContent = Math.round(z * 100) + "%"; }
+      function fitZ(){ setZ(Math.min(1, (window.innerWidth - 20) / 1123)); }
+      window.onload = fitZ;
+    <\/script>
     </body></html>`);
   win.document.close();
 }
