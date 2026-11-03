@@ -3668,8 +3668,8 @@ function renderProductsTab(){
       <div class="form-grid">
         <div class="field"><label>পণ্যের নাম</label><input id="prodNaam"></div>
         <div class="field"><label>ব্র্যান্ড</label><input id="prodBrand"></div>
-        <div class="field"><label>পরিমাণ</label><input id="prodPoriman" placeholder="যেমন: ১ কেজি / ৫০০ গ্রাম"></div>
-        <div class="field"><label>একক (স্টক যে মাপে গোনা হয়)</label><input id="prodUnit" list="prodUnitList" placeholder="কেজি / বোতল / পিস / লিটার"><datalist id="prodUnitList"><option value="কেজি"><option value="লিটার"><option value="বোতল"><option value="পিস"><option value="প্যাকেট"></datalist></div>
+        <div class="field"><label>পরিমাণ (প্রতি পিস/প্যাকেটের সাইজ)</label><input id="prodPoriman" placeholder="যেমন: ১ কেজি / ৫০০ গ্রাম / ১২৫ গ্রাম"></div>
+        <div class="field"><label>একক (স্টক যে মাপে গোনা হয়)</label><input id="prodUnit" list="prodUnitList" placeholder="পিস / বোতল / কেজি / লিটার"><datalist id="prodUnitList"><option value="কেজি"><option value="লিটার"><option value="বোতল"><option value="পিস"><option value="প্যাকেট"></datalist></div>
         <div class="field"><label>প্যাকিং ধরন</label><input id="prodPackType" list="prodPackList" placeholder="বস্তা / বক্স"><datalist id="prodPackList"><option value="বস্তা"><option value="বক্স"><option value="কার্টন"></datalist></div>
         <div class="field"><label>প্যাকিং পরিমাণ (এক বস্তা/বক্সে কত একক)</label><input id="prodPackSize" type="number" min="0" step="any" placeholder="যেমন: ৫০"></div>
       </div>
@@ -3708,7 +3708,7 @@ function renderProductsTable(){
   if(list.length === 0){ tbody.innerHTML = emptyRowHtml(7, "এখনো কোনো পণ্য যোগ করা হয়নি"); return; }
   list.forEach((p, i) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["পরিমাণ"]||""}</td><td>${p["একক"]||""}</td><td>${p["প্যাকিং ধরন"] && p["প্যাকিং পরিমাণ"] ? ("১ " + p["প্যাকিং ধরন"] + " = " + p["প্যাকিং পরিমাণ"] + " " + (p["একক"]||"")) : ""}</td>
+    tr.innerHTML = `<td>${i+1}</td><td class="cell-left">${p["পণ্যের নাম"]}</td><td class="cell-left">${p["ব্র্যান্ড"]||""}</td><td>${p["পরিমাণ"]||""}</td><td>${p["একক"]||""}</td><td>${productPackLabel(p)}</td>
       <td class="no-print">
         <button class="btn icon small secondary" onclick="editProductRow('${p['ProductID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
         <button class="btn icon small danger" onclick="deleteProductRow('${p['ProductID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
@@ -3788,7 +3788,7 @@ function printProductsListOfficial(){
   if(q) list = list.filter(p => (p["পণ্যের নাম"]||"").toLowerCase().includes(q) || (p["ব্র্যান্ড"]||"").toLowerCase().includes(q));
   if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো পণ্য নেই"); return; }
   const headers = ["ক্রম", "পণ্যের নাম", "ব্র্যান্ড", "পরিমাণ", "একক", "প্যাকিং"];
-  const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["পরিমাণ"]||"", p["একক"]||"", (p["প্যাকিং ধরন"] && p["প্যাকিং পরিমাণ"]) ? ("১ " + p["প্যাকিং ধরন"] + " = " + p["প্যাকিং পরিমাণ"] + " " + (p["একক"]||"")) : ""]);
+  const rows = list.map((p, i) => [i+1, p["পণ্যের নাম"]||"", p["ব্র্যান্ড"]||"", p["পরিমাণ"]||"", p["একক"]||"", productPackLabel(p)]);
   printOfficialTable("পণ্য তালিকা", "মোট পণ্য: " + list.length, headers, rows, null, "@Powered by: AM Shahed: 01605721296", [1,2]);
 }
 
@@ -4373,6 +4373,29 @@ function onSiDealerChange(){
 }
 
 /* সংখ্যা + একক এবং বস্তা/বক্স হিসাব — "110 কেজি (2 বস্তা 10 কেজি)" */
+/* "৫০০ গ্রাম" / "১ কেজি" / "২৫০ মি.লি" লেখা থেকে সাইজ বের করা → { v: কেজি বা লিটারে মান, u: "কেজি"|"লিটার" } */
+function parseSizeText(text){
+  const t = toEnDigits(String(text || "")).replace(/,/g, "");
+  const m = t.match(/(\d+(?:\.\d+)?)\s*(কিলোগ্রাম|কেজি|কেজী|kgs?|গ্রাম|গ্রা|gms?|grams?|g|লিটার|ltr|liters?|litres?|l|মি\.?\s*লি|মিলি|ml)/i);
+  if(!m) return null;
+  const n = Number(m[1]), w = m[2].toLowerCase();
+  if(/^(কিলোগ্রাম|কেজি|কেজী|kgs?)$/.test(w)) return { v: n, u: "কেজি" };
+  if(/^(গ্রাম|গ্রা|gms?|grams?|g)$/.test(w)) return { v: n / 1000, u: "কেজি" };
+  if(/^(লিটার|ltr|liters?|litres?|l)$/.test(w)) return { v: n, u: "লিটার" };
+  return { v: n / 1000, u: "লিটার" };
+}
+/* প্যাকিং কলামের লেখা: "১ বস্তা = ২৫ কেজি (২৫ পিস)", "১ বস্তা = ৩০ কেজি (৬০ পিস)" — প্রতি পিসের সাইজ (পরিমাণ) অনুযায়ী ওজন বের হয় */
+function productPackLabel(p){
+  const type = p["প্যাকিং ধরন"], n = Number(toEnDigits(p["প্যাকিং পরিমাণ"])) || 0, unit = String(p["একক"] || "").trim();
+  if(!type || n <= 0) return "";
+  const weightUnit = /^(কেজি|কেজী|kg|লিটার|কিলোগ্রাম)$/i.test(unit);
+  const size = parseSizeText(p["পরিমাণ"]);
+  if(unit && !weightUnit && size){
+    const tot = Math.round(n * size.v * 1000) / 1000;
+    return "১ " + type + " = " + toBnDigits(tot) + " " + size.u + " (" + toBnDigits(n) + " " + unit + ")";
+  }
+  return "১ " + type + " = " + toBnDigits(n) + (unit ? " " + unit : "");
+}
 function packBreakdown(qty, unit, packType, packSize){
   qty = Math.round((Number(qty) || 0) * 100) / 100; packSize = Number(packSize) || 0;
   if(!packType || packSize <= 0 || qty < packSize) return "";
