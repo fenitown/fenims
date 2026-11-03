@@ -7701,12 +7701,20 @@ function printDealerReport(){
 })();
 </script>
 <script>
-/* সব ফরমে বাংলা-ইংরেজি দুই রকম সংখ্যা লেখা যাবে — number ঘর টেক্সট ঘরে বদলে বাংলা অঙ্ক নিজে ইংরেজিতে রূপান্তর হয় */
+/* সব ফরমে বাংলা-ইংরেজি দুই রকম সংখ্যা লেখা যাবে।
+   ঘরে যেভাবে লেখা হবে (বাংলা বা ইংরেজি) সেভাবেই দেখাবে; হিসাব/সেভের সময় কোড .value পড়লে অঙ্ক নিজে ইংরেজিতে রূপান্তরিত হয়ে যায় */
 (function(){
   const BN = "০১২৩৪৫৬৭৮৯";
+  function bn2en(v){ return String(v == null ? "" : v).replace(/[০-৯]/g, function(d){ return BN.indexOf(d); }); }
+  const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  Object.defineProperty(HTMLInputElement.prototype, "value", {
+    configurable: true, enumerable: desc.enumerable,
+    get: function(){ const v = desc.get.call(this); return (this.dataset && (this.dataset.num || this.dataset.tel)) ? bn2en(v) : v; },
+    set: function(v){ desc.set.call(this, v); }
+  });
   function conv(el){
     if(el.tagName !== "INPUT") return;
-    /* inputmode দেওয়া হয় না — দিলে মোবাইলে শুধু ইংরেজি অঙ্কের কীবোর্ড আসে, বাংলা অঙ্ক লেখা যায় না */
+    /* inputmode দেওয়া হয় না — দিলে মোবাইলে শুধু ইংরেজি অঙ্কের কীবোর্ড আসে */
     if(el.type === "number"){ el.type = "text"; el.dataset.num = "1"; el.autocomplete = "off"; }
     else if(el.type === "tel"){ el.type = "text"; el.dataset.tel = "1"; }
   }
@@ -7715,13 +7723,12 @@ function printDealerReport(){
     conv(root);
     if(root.querySelectorAll) root.querySelectorAll('input[type=number],input[type=tel]').forEach(conv);
   }
-  function bn2en(v){ return v.replace(/[০-৯]/g, function(d){ return BN.indexOf(d); }); }
   document.addEventListener("input", function(e){
     const t = e.target;
-    if(!t || t.tagName !== "INPUT" || !(t.dataset.num || t.dataset.tel)) return;
-    let v = bn2en(t.value);
-    if(t.dataset.num) v = v.replace(/[^0-9.\-]/g, "");
-    if(v !== t.value){ t.value = v; }
+    if(!t || t.tagName !== "INPUT" || !t.dataset.num) return;
+    const raw = desc.get.call(t);
+    const v = raw.replace(/[^0-9০-৯.\-]/g, "");   // অঙ্ক, দশমিক ও মাইনাস ছাড়া বাকি বাদ
+    if(v !== raw) desc.set.call(t, v);
   }, true);
   scan(document.body);
   new MutationObserver(function(muts){ muts.forEach(function(m){ m.addedNodes.forEach(scan); }); }).observe(document.body, { childList:true, subtree:true });
