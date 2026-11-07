@@ -581,10 +581,10 @@ const CACHEABLE_READS = {
   listInvests:1, listCashDeposits:1, listCashWithdraws:1, cashReport:1, depotFinanceReport:1
 };
 const READ_CACHE_TTL = 300;
-const READ_CACHE_SALT = "r7";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
+const READ_CACHE_SALT = "r8";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-11-07.2";
+const BACKEND_VERSION = "2026-11-07.3";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {

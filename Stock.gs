@@ -558,7 +558,8 @@ function agencySalesReport(data) {
   // প্রতিটি ইনভয়েস নং একবারই গোনা হবে সাবটোটাল/ডিসকাউন্ট/পরিশোধ/বকেয়ার জন্য,
   // কিন্তু "মোট মূল্য" প্রতিটি লাইন থেকেই যোগ হবে (পণ্য/প্যাকেজ-ভিত্তিক বিক্রি)
   if (data.dealerId) {
-    entries = entries.filter(function (e) { return e["DealerID"] === data.dealerId; });
+    const wantId = String(data.dealerId).trim();
+    entries = entries.filter(function (e) { return String(e["DealerID"] == null ? "" : e["DealerID"]).trim() === wantId; });
   }
 
   if (data.mode === "daily" && data.date) {
