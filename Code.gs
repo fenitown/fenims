@@ -556,7 +556,10 @@ const IDEMPOTENT_ACTIONS = {
   addSalesInvoice:1, updateSalesInvoiceEntry:1, updateSalesInvoiceFull:1, updateSalesInvoiceStatus:1, deleteSalesInvoice:1,
   confirmPendingOrder:1, rejectPendingOrder:1,
   addExpenseVoucher:1, updateExpenseVoucher:1, deleteExpenseVoucher:1,
-  addIncomeReceipt:1, updateIncomeReceiptEntry:1, deleteIncomeReceipt:1
+  addIncomeReceipt:1, updateIncomeReceiptEntry:1, deleteIncomeReceipt:1,
+  addInvest:1, updateInvest:1, deleteInvest:1,
+  addCashDeposit:1, updateCashDeposit:1, deleteCashDeposit:1,
+  addCashWithdraw:1, updateCashWithdraw:1, deleteCashWithdraw:1
 };
 
 /*******************************************************
@@ -574,13 +577,14 @@ const CACHEABLE_READS = {
   listProducts:1, listStockVouchers:1, listExpenses:1, listExpenseVouchers:1,
   listIncomeReceipts:1, listCommissions:1, listCustomersForDealer:1,
   getAgencyInfo:1, getAbout:1, listSales:1,
-  dealerReport:1, agencySalesReport:1, depotReport:1, dailyReport:1, monthlyReport:1, totalReport:1
+  dealerReport:1, agencySalesReport:1, depotReport:1, dailyReport:1, monthlyReport:1, totalReport:1,
+  listInvests:1, listCashDeposits:1, listCashWithdraws:1, cashReport:1, depotFinanceReport:1
 };
 const READ_CACHE_TTL = 300;
-const READ_CACHE_SALT = "r5";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
+const READ_CACHE_SALT = "r6";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-10-28.1";
+const BACKEND_VERSION = "2026-11-07.1";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {
@@ -1052,6 +1056,22 @@ function runAction(action, data) {
       case "deleteIncomeReceipt":
         result = deleteIncomeReceipt(data);
         break;
+
+      // ---- ইনভেস্ট ও ক্যাশ (ডিপু সাইট) + নতুন ডিপু রিপোর্ট ----
+      case "addInvest": result = addInvest(data); break;
+      case "listInvests": result = listInvests(data); break;
+      case "updateInvest": result = updateInvest(data); break;
+      case "deleteInvest": result = deleteInvest(data); break;
+      case "addCashDeposit": result = addCashDeposit(data); break;
+      case "listCashDeposits": result = listCashDeposits(data); break;
+      case "updateCashDeposit": result = updateCashDeposit(data); break;
+      case "deleteCashDeposit": result = deleteCashDeposit(data); break;
+      case "addCashWithdraw": result = addCashWithdraw(data); break;
+      case "listCashWithdraws": result = listCashWithdraws(data); break;
+      case "updateCashWithdraw": result = updateCashWithdraw(data); break;
+      case "deleteCashWithdraw": result = deleteCashWithdraw(data); break;
+      case "cashReport": result = cashReport(data); break;
+      case "depotFinanceReport": result = depotFinanceReport(data); break;
 
       // ---- এজেন্সি ড্যাশবোর্ড ----
       case "agencyDashboardSummary":

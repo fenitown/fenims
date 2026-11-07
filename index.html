@@ -170,12 +170,12 @@
   .cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:20px; }
   .card{ background:var(--card); border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:14px; padding:14px; }
   .card .num{ font-size:1.6rem; font-weight:700; color:var(--teal-dark); }
-  .card .label{ font-size:0.82rem; color:var(--muted); margin-top:2px; }
+  .card .label{ font-size:14px; color:var(--muted); margin-top:2px; }
   /* ডিপু ড্যাশবোর্ড — কার্ড আগের চেয়ে চওড়া, সবগুলো সমান সাইজ; লেখা বড় হলে JS ছোট করে কার্ডের ভেতরেই বসায় */
   #agencyDashboardCards{ grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-rows:104px; gap:10px; }
   #agencyDashboardCards .card{ display:flex; flex-direction:column; justify-content:center; min-width:0; overflow:hidden; padding:8px 14px; box-sizing:border-box; }
   #agencyDashboardCards .card .num{ line-height:1.15; white-space:nowrap; font-size:1.7rem; font-weight:800; color:#0b2520; }
-  #agencyDashboardCards .card .label{ line-height:1.25; overflow-wrap:anywhere; font-size:1rem; font-weight:600; color:#1c2b28; margin-top:2px; }
+  #agencyDashboardCards .card .label{ line-height:1.25; overflow-wrap:anywhere; font-size:14px; font-weight:600; color:#1c2b28; margin-top:2px; }
   @media (max-width:900px){ #agencyDashboardCards{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
   @media (max-width:640px){ #agencyDashboardCards{ grid-template-columns:1fr; grid-auto-rows:88px; gap:8px; } }
 
@@ -778,6 +778,51 @@
         <button class="btn secondary small" onclick="printSalesInvoicesListOfficial()">🖨 প্রিন্ট করুন</button>
       </div>
       <div class="table-wrap"><table id="salesInvoiceTable"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <!-- ================= ইনভেস্ট (ডিপু সাইট) ================= -->
+    <section class="section" id="sec-invest">
+      <h2>ইনভেস্ট</h2>
+      <div class="toolbar no-print"><button class="btn secondary" id="invToggleBtn" onclick="toggleFormBox('invFormBox','invToggleBtn')">ইনভেস্ট ফরম</button></div>
+      <div id="invFormBox" style="display:none;">
+      <fieldset class="no-print">
+        <legend>নতুন ইনভেস্ট (একাধিক এন্ট্রি যোগ করা যাবে)</legend>
+        <div class="form-grid">
+          <div class="field"><label>তারিখ</label><input id="invDate" type="date"></div>
+        </div>
+        <div class="table-wrap">
+          <table id="invEntryTable">
+            <thead><tr><th style="width:56px;">ক্রম</th><th class="cell-left" style="min-width:150px;">নাম</th><th style="min-width:120px;">মোবাইল নং</th><th style="min-width:110px;">পদবি</th><th class="cell-left" style="min-width:150px;">ঠিকানা</th><th style="width:120px;">টাকার পরিমাণ</th><th style="width:50px;"></th></tr></thead>
+            <tbody id="invEntryBody"></tbody>
+            <tfoot><tr style="font-weight:700;background:#eef0e9;"><td></td><td class="cell-left">সর্বমোট</td><td></td><td></td><td></td><td id="invTotalCell">0</td><td></td></tr></tfoot>
+          </table>
+        </div>
+        <button class="btn secondary small" style="margin-top:8px;" onclick="addInvestRow()">+ আরেকটি এন্ট্রি</button>
+        <div class="btn-row"><button class="btn" id="invSaveBtn" onclick="submitInvest()">সংরক্ষণ করুন</button></div>
+        <div id="invMsg" class="msg"></div>
+      </fieldset>
+      </div>
+      <div class="toolbar no-print">
+        <input type="text" id="invSearchBox" placeholder="🔍 সার্চ করুন (নাম/পদবি/মোবাইল)" oninput="renderInvestTable()" style="flex:1;min-width:160px;">
+        <button class="btn secondary small" onclick="printInvestList()">🖨 প্রিন্ট</button>
+      </div>
+      <div class="table-wrap"><table id="investTable"><thead></thead><tbody></tbody></table></div>
+    </section>
+
+    <!-- ================= ক্যাশ (ডিপু সাইট): জমা / উত্তোলন / রিপোর্ট ================= -->
+    <section class="section" id="sec-cash">
+      <h2>ক্যাশ</h2>
+      <div class="tabs no-print" id="cashTabs">
+        <button onclick="switchCashTab('dep', this)">জমা</button>
+        <button onclick="switchCashTab('wd', this)">উত্তোলন</button>
+        <button onclick="switchCashTab('report', this)">রিপোর্ট</button>
+      </div>
+      <div id="cashDepPane"></div>
+      <div id="cashWdPane" style="display:none;"></div>
+      <div id="cashReportPane" style="display:none;">
+        <div class="toolbar no-print"><button class="btn secondary small" onclick="printCashReport()">🖨 প্রিন্ট করুন</button></div>
+        <div id="cashReportResult"><p>লোড হচ্ছে...</p></div>
+      </div>
     </section>
 
     <!-- ================= ডিপু রিপোর্ট ================= -->
@@ -1514,7 +1559,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
       <div class="doc-title">${title}</div>
     </div>
     ${subtitle ? `<p class="doc-subtitle">${subtitle}</p>` : ''}
-    <table><thead>${theadHtml}</thead><tbody>${tbodyHtml}${tfootHtml}</tbody></table>
+    ${opts.rawHtml ? opts.rawHtml : `<table><thead>${theadHtml}</thead><tbody>${tbodyHtml}${tfootHtml}</tbody></table>`}
     ${footerNote ? `<div class="doc-footer">${footerNote}</div>` : ''}
     </div>
     <script>${shareScript}window.onload=function(){
@@ -1673,6 +1718,8 @@ function buildSideMenu(){
         <button class="menu-item sub" onclick="showSection('income')">আয় রশিদ</button>
         <button class="menu-item sub" onclick="showSection('agencyExpense')">খরচ ভাউচার</button>
       </div>
+      <button class="menu-item" onclick="showSection('invest')">ইনভেস্ট</button>
+      <button class="menu-item" onclick="showSection('cash')">ক্যাশ</button>
       <button class="menu-item" onclick="showSection('agencyReports')">রিপোর্ট</button>
       <button class="menu-item" onclick="doLogout()">লগআউট</button>`;
   } else {
@@ -2321,6 +2368,8 @@ function showSection(name){
     if(cb) cb.style.display = state.dealerId === "AGENCY" ? "" : "none";
   }
   if(name === "agencyReports") openReportsSection();
+  if(name === "invest") loadInvestSection();
+  if(name === "cash") openCashSection();
 
   if(name === "dashboard") loadDashboard();
   if(name === "about") loadAboutView();
@@ -2396,7 +2445,7 @@ function fitAgencyCards(){
     num.style.fontSize = ""; lab.style.fontSize = "";
     let nf = parseFloat(getComputedStyle(num).fontSize), lf = parseFloat(getComputedStyle(lab).fontSize), guard = 0;
     while((c.scrollHeight > c.clientHeight + 1 || num.scrollWidth > c.clientWidth - 28) && guard++ < 40){
-      if(lf > 9){ lf -= 0.5; lab.style.fontSize = lf + "px"; }
+      if(lf > 14){ lf -= 0.5; lab.style.fontSize = lf + "px"; }
       else if(nf > 14){ nf -= 1; num.style.fontSize = nf + "px"; }
       else break;
     }
@@ -3046,6 +3095,7 @@ function addManagerRow(prefill){
     <input placeholder="ব্যবস্থাপকের নাম" class="mgrName" value="${prefill?(prefill.name||''):''}">
     <input placeholder="পদবি" class="mgrTitle" value="${prefill?(prefill.title||''):''}">
     <input placeholder="মোবাইল নং" class="mgrMobile" value="${prefill?(prefill.mobile||''):''}">
+    <input placeholder="ঠিকানা" class="mgrAddr" value="${prefill?escAttr(prefill.address||''):''}">
     <button type="button" class="btn secondary small" onclick="this.parentElement.remove()">✕</button>`;
   wrap.appendChild(row);
 }
@@ -3055,7 +3105,8 @@ async function saveAgency(){
   const managers = [...document.querySelectorAll("#mManagerRows .item-row-v2")].map(r => ({
     name: r.querySelector(".mgrName").value.trim(),
     title: r.querySelector(".mgrTitle").value.trim(),
-    mobile: r.querySelector(".mgrMobile").value.trim()
+    mobile: r.querySelector(".mgrMobile").value.trim(),
+    address: r.querySelector(".mgrAddr").value.trim()
   })).filter(m => m.name);
 
   const data = {
@@ -5225,10 +5276,10 @@ async function loadDepotReport(){
   else if(depotReportCurrentTab === "monthly"){ data.year = document.getElementById("drYear").value; data.month = document.getElementById("drMonth").value; }
   else if(depotReportCurrentTab === "yearly"){ data.year = document.getElementById("drYear").value; }
 
-  const res = await apiCall("depotReport", data);
+  const res = await apiCall("depotFinanceReport", data);
   if(!res.success){ box.innerHTML = res.message; return; }
   depotReportCache = res.report;
-  box.innerHTML = depotReportTableHtml(res.report);
+  box.innerHTML = financeReportHtml(res.report);
 }
 
 function depotReportTableHtml(r){
@@ -5266,33 +5317,11 @@ function periodSubtitle(tab, data){
 
 function printDepotReportTable(){
   if(!depotReportCache){ alert("প্রিন্ট করার জন্য কোনো ডাটা নেই"); return; }
-  const r = depotReportCache;
   const data = { mode: depotReportCurrentTab };
   if(depotReportCurrentTab === "daily") data.date = document.getElementById("drDate").value;
   else if(depotReportCurrentTab === "monthly"){ data.year = document.getElementById("drYear").value; data.month = document.getElementById("drMonth").value; }
   else if(depotReportCurrentTab === "yearly"){ data.year = document.getElementById("drYear").value; }
-
-  const headers = ["বিবরণ", "পরিমাণ"];
-  const rows = [
-    ["মোট পণ্য স্টক (সংখ্যা)", r.totalStockQty],
-    ["মোট পণ্য স্টক ক্রয় মূল্য", r.totalStockPurchaseValue],
-    ["মোট পণ্য বিক্রি (সংখ্যা)", r.totalProductsSoldQty],
-    ["মোট পণ্য বিক্রি — বিক্রয় মূল্য", r.totalSalesValue],
-    ["বর্তমান স্টক (সংখ্যা)", r.currentStockQty],
-    ["বর্তমান স্টক — আনুমানিক ক্রয় মূল্য", r.currentStockValue],
-    ["মোট খরচ", r.totalExpense],
-    ["মোট লাভ", r.totalProfit],
-    ["মোট লস", r.totalLoss],
-    ["কোম্পানিকে পরিশোধ", r.totalPaidToCompany],
-    ["মোট কোম্পানীর বকেয়া", r.totalDueToCompany],
-    ["মোট ডিলার", r.totalDealers],
-    ["মোট অর্ডার", r.totalOrders],
-    ["মোট ডেলিভারি", r.totalDelivered],
-    ["বর্তমান পেন্ডিং", r.totalPending],
-    ["মোট বিক্রি মূল্য", r.totalSalesAmount],
-    ["মোট বকেয়া (ডিলারদের কাছে)", r.totalDueFromDealers]
-  ];
-  printOfficialTable("ডিপু রিপোর্ট", periodSubtitle(depotReportCurrentTab, data), headers, rows, null, "@Powered by: AM Shahed: 01605721296", [0]);
+  printFinanceSections("ডিপু রিপোর্ট", periodSubtitle(depotReportCurrentTab, data) + " (ক্যাশ ও স্টক মূল্য আজ পর্যন্ত)", financeReportSections(depotReportCache));
 }
 
 async function loadAgencyReportSetup(){
@@ -5334,7 +5363,29 @@ async function runAgencyReport(){
   if(r.byDealer.length === 0) html += emptyRowHtml(8, "এই সময়ে কোনো বিক্রি নেই");
   html += `<tr style="font-weight:700;"><td class="cell-left">সর্বমোট</td><td>${r.totalOrders}</td><td>${r.totalDelivered}</td><td>${r.totalPending}</td><td>${r.totalSale}</td><td>${r.totalPaid}</td><td>${r.totalDue}</td><td>${Math.round(r.totalCommission||0)}</td></tr>`;
   html += `</tbody></table></div>`;
+
+  // সংশ্লিষ্ট ডিলারের (ডিলার না বাছলে সবার) সকল অর্ডার তালিকা — শেষ সারিতে মোট
+  const sec = dealerOrdersSection(r.orders || [], !!data.dealerId, dealerReportSelectedName());
+  html += finSectionHtml(sec, false);
   box.innerHTML = html;
+}
+
+function dealerReportSelectedName(){
+  const sel = document.getElementById("arDealerSelect");
+  return sel && sel.value ? sel.options[sel.selectedIndex].text : "";
+}
+
+/* ডিলার রিপোর্টের অর্ডার তালিকা: ক্রম, ইনভয়েস নং, তারিখ, (ডিলার), প্যাকেজ, মোট মূল্য, কমিশন, ডিসকাউন্ট, পরিশোধযোগ্য, পরিশোধ, বকেয়া, স্ট্যাটাস */
+function dealerOrdersSection(orders, single, dealerName){
+  const e = escMsgHtml;
+  const sum = k => orders.reduce((a, o) => a + (Number(o[k]) || 0), 0);
+  const headers = ["ক্রম", "ইনভয়েস নং", "তারিখ"].concat(single ? [] : ["ডিলার"]).concat(["প্যাকেজ", "মোট মূল্য", "কমিশন", "ডিসকাউন্ট", "পরিশোধযোগ্য", "পরিশোধ", "বকেয়া", "স্ট্যাটাস"]);
+  const rows = orders.map((o, i) => [i + 1, e(o.invoiceNo), finDt(o.date)].concat(single ? [] : [e(o.dealerName)])
+    .concat([e(o.packages), o.gross, Math.round(o.commission), o.discount, o.net, o.paid, o.due, e(o.status)]));
+  const lead = single ? 4 : 5;   // মোট মূল্য কলামের আগের কলাম সংখ্যা
+  const footer = [["", "মোট (" + orders.length + " টি অর্ডার)"].concat(new Array(lead - 2).fill("")).concat([sum("gross"), Math.round(sum("commission")), sum("discount"), sum("net"), sum("paid"), sum("due"), ""])];
+  const left = single ? [1, 3] : [1, 3, 4];
+  return { title: "অর্ডার তালিকা" + (single && dealerName ? " — " + e(dealerName) : " (সব ডিলার)"), headers, rows, footer, left };
 }
 
 function printDealerReportTable(){
@@ -5345,6 +5396,12 @@ function printDealerReportTable(){
   else if(agencyReportCurrentTab === "monthly"){ data.year = document.getElementById("arYear").value; data.month = document.getElementById("arMonth").value; }
   else if(agencyReportCurrentTab === "yearly"){ data.year = document.getElementById("arYear").value; }
 
+  // নির্দিষ্ট ডিলার বাছা থাকলে তার সকল অর্ডার তালিকা (শেষ সারিতে মোট), নাহলে ডিলার-ভিত্তিক সারাংশ
+  if(document.getElementById("arDealerSelect").value){
+    const sec = dealerOrdersSection(r.orders || [], true, dealerReportSelectedName());
+    printFinanceSections("ডিলার রিপোর্ট — " + escMsgHtml(dealerReportSelectedName()), periodSubtitle(agencyReportCurrentTab, data), [sec]);
+    return;
+  }
   const headers = ["ডিলার", "অর্ডার", "ডেলিভারী", "পেন্ডিং", "মোট মূল্য", "পরিশোধ", "বকেয়া", "কমিশন"];
   const rows = r.byDealer.map(d => [d.dealerName, d.totalOrders, d.totalDelivered, d.totalPending, d.totalSale, d.totalPaid, d.totalDue, Math.round(d.totalCommission||0)]);
   printOfficialTable("ডিলার রিপোর্ট", periodSubtitle(agencyReportCurrentTab, data), headers, rows,
@@ -5352,6 +5409,407 @@ function printDealerReportTable(){
     "@Powered by: AM Shahed: 01605721296", [0]);
 }
 
+
+/* ================= ডিপু: ইনভেস্ট ================= */
+let investCache = [];
+let investManagers = [];
+
+function finDt(d){ return d ? new Date(d).toLocaleDateString("bn-BD") : ""; }
+
+async function loadInvestManagers(){
+  const res = await cachedApiCall("getAgencyInfo", {}, 60000);
+  investManagers = (res.success && res.agency && res.agency.managers) ? res.agency.managers.filter(m => m.name) : [];
+}
+function invManagerOptions(){
+  return `<option value="">-- নাম সিলেক্ট করুন --</option>` + investManagers.map((m, i) => `<option value="${i}">${escAttr(m.name)}</option>`).join("");
+}
+function addInvestRow(){
+  const body = document.getElementById("invEntryBody");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="inv-sl"></td>
+    <td class="cell-left"><select class="invName" onchange="onInvNameChange(this)" style="width:100%;">${invManagerOptions()}</select></td>
+    <td><input class="invMobile" placeholder="মোবাইল নং" style="width:100%;"></td>
+    <td><input class="invTitle" placeholder="পদবি" style="width:100%;"></td>
+    <td class="cell-left"><input class="invAddr" placeholder="ঠিকানা" style="width:100%;"></td>
+    <td><input class="invAmount" type="number" min="0" placeholder="টাকা" oninput="updateInvestTotal()" style="width:100%;"></td>
+    <td><button type="button" class="btn secondary small" onclick="removeInvestRow(this)">✕</button></td>`;
+  body.appendChild(tr);
+  renumberInvestRows();
+}
+function onInvNameChange(sel){
+  const tr = sel.closest("tr");
+  const m = sel.value === "" ? null : investManagers[Number(sel.value)];
+  tr.querySelector(".invMobile").value = m ? (m.mobile || "") : "";
+  tr.querySelector(".invTitle").value = m ? (m.title || "") : "";
+  tr.querySelector(".invAddr").value = m ? (m.address || "") : "";
+}
+function removeInvestRow(btn){
+  btn.closest("tr").remove();
+  if(!document.querySelector("#invEntryBody tr")) addInvestRow();
+  renumberInvestRows(); updateInvestTotal();
+}
+function renumberInvestRows(){
+  document.querySelectorAll("#invEntryBody tr").forEach((tr, i) => { tr.querySelector(".inv-sl").textContent = toBnDigits(i + 1); });
+}
+function updateInvestTotal(){
+  let total = 0;
+  document.querySelectorAll("#invEntryBody .invAmount").forEach(inp => { total += Number(inp.value) || 0; });
+  document.getElementById("invTotalCell").textContent = total;
+}
+function resetInvestForm(){
+  document.getElementById("invEntryBody").innerHTML = "";
+  addInvestRow(); updateInvestTotal();
+  document.getElementById("invDate").value = new Date().toISOString().slice(0, 10);
+}
+
+async function loadInvestSection(){
+  document.getElementById("invMsg").textContent = "";
+  await loadInvestManagers();
+  if(!document.getElementById("invEntryBody").children.length) resetInvestForm();
+  else {
+    // নামের তালিকা বদলে থাকলে (ব্যবস্থাপনায় নতুন ব্যবস্থাপক যোগ) ড্রপডাউন নতুন করে সাজানো
+    document.querySelectorAll("#invEntryBody .invName").forEach(sel => { const v = sel.value; sel.innerHTML = invManagerOptions(); sel.value = v; });
+  }
+  const res = await cachedApiCall("listInvests", {}, 60000);
+  if(!res.success){ document.getElementById("investTable").innerHTML = "<tbody><tr><td>" + res.message + "</td></tr></tbody>"; return; }
+  investCache = res.invests;
+  renderInvestTable();
+}
+
+async function submitInvest(){
+  const btn = document.getElementById("invSaveBtn");
+  const msgBox = document.getElementById("invMsg");
+  if(btn.disabled) return;
+  const entries = [...document.querySelectorAll("#invEntryBody tr")].map(tr => {
+    const sel = tr.querySelector(".invName");
+    const m = sel.value === "" ? null : investManagers[Number(sel.value)];
+    return {
+      "নাম": m ? m.name : "",
+      "মোবাইল নং": tr.querySelector(".invMobile").value.trim(),
+      "পদবি": tr.querySelector(".invTitle").value.trim(),
+      "ঠিকানা": tr.querySelector(".invAddr").value.trim(),
+      "টাকা": tr.querySelector(".invAmount").value
+    };
+  }).filter(e => e["নাম"] || Number(e["টাকা"]) > 0);
+  if(entries.length === 0 || entries.some(e => !e["নাম"] || !(Number(e["টাকা"]) > 0))){
+    msgBox.textContent = "প্রতিটি এন্ট্রিতে নাম সিলেক্ট করুন ও টাকার পরিমাণ দিন"; msgBox.className = "msg err"; return;
+  }
+  btn.disabled = true; markSaving("invMsg");
+  let res;
+  try{ res = await apiCall("addInvest", { date: document.getElementById("invDate").value, entries }); }
+  finally{ btn.disabled = false; }
+  msgBox.textContent = res.message + (res.success ? " — সর্বমোট: " + res.total : "");
+  msgBox.className = "msg " + (res.success ? "ok" : "err");
+  if(res.success){
+    clearCache();
+    resetInvestForm();
+    const r = await cachedApiCall("listInvests", {}, 60000);
+    if(r.success) investCache = r.invests;
+    renderInvestTable();
+  }
+}
+
+function investFilteredList(){
+  const q = (document.getElementById("invSearchBox")?.value || "").trim().toLowerCase();
+  let list = investCache.slice().reverse();
+  if(q) list = list.filter(e => [e["নাম"], e["পদবি"], e["মোবাইল নং"], e["ঠিকানা"]].some(v => String(v || "").toLowerCase().includes(q)));
+  return list;
+}
+
+function renderInvestTable(){
+  const table = document.getElementById("investTable");
+  if(!table) return;
+  const list = investFilteredList();
+  table.innerHTML = "<thead><tr><th>ক্রম</th><th>তারিখ</th><th class='cell-left'>নাম</th><th>মোবাইল নং</th><th>পদবি</th><th class='cell-left'>ঠিকানা</th><th>টাকা</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>";
+  const tbody = table.querySelector("tbody");
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(8, "এখনো কোনো ইনভেস্ট নেই"); return; }
+  let total = 0;
+  list.forEach((e, i) => {
+    total += Number(e["টাকা"]) || 0;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i + 1}</td><td>${finDt(e["তারিখ"])}</td><td class="cell-left">${escMsgHtml(e["নাম"])}</td><td>${escMsgHtml(e["মোবাইল নং"])}</td><td>${escMsgHtml(e["পদবি"])}</td><td class="cell-left">${escMsgHtml(e["ঠিকানা"])}</td><td>${e["টাকা"]}</td>
+      <td class="no-print">
+        <button class="btn icon small secondary" onclick="editInvest('${e['InvestID']}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small danger" onclick="deleteInvestEntry('${e['InvestID']}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  const tf = document.createElement("tr");
+  tf.style.fontWeight = "700"; tf.style.background = "#eef0e9";
+  tf.innerHTML = `<td></td><td></td><td class="cell-left">সর্বমোট ইনভেস্ট</td><td></td><td></td><td></td><td>${total}</td><td class="no-print"></td>`;
+  tbody.appendChild(tf);
+}
+
+function editInvest(id){
+  const e = investCache.find(x => x["InvestID"] === id);
+  if(!e) return;
+  openEditModal("ইনভেস্ট এডিট", [
+    { key:"নাম", label:"নাম", value:e["নাম"] },
+    { key:"মোবাইল নং", label:"মোবাইল নং", value:e["মোবাইল নং"] },
+    { key:"পদবি", label:"পদবি", value:e["পদবি"] },
+    { key:"ঠিকানা", label:"ঠিকানা", value:e["ঠিকানা"] },
+    { key:"টাকা", label:"টাকার পরিমাণ", value:e["টাকা"], type:"number" }
+  ], async (values) => {
+    const res = await apiCall("updateInvest", { investId: id, fields: values });
+    if(res.success){ clearCache(); loadInvestSection(); }
+    return res;
+  });
+}
+async function deleteInvestEntry(id){
+  if(!confirm("এই ইনভেস্ট এন্ট্রি ডিলিট করবেন?")) return;
+  const res = await apiCall("deleteInvest", { investId: id });
+  if(res.success){ clearCache(); loadInvestSection(); } else alert(res.message);
+}
+function printInvestList(){
+  const list = investFilteredList();
+  if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো ডাটা নেই"); return; }
+  let total = 0; list.forEach(e => { total += Number(e["টাকা"]) || 0; });
+  printOfficialTable("ইনভেস্ট তালিকা", "মোট এন্ট্রি: " + list.length,
+    ["ক্রম", "তারিখ", "নাম", "মোবাইল নং", "পদবি", "ঠিকানা", "টাকা"],
+    list.map((e, i) => [i + 1, finDt(e["তারিখ"]), escMsgHtml(e["নাম"]), escMsgHtml(e["মোবাইল নং"]), escMsgHtml(e["পদবি"]), escMsgHtml(e["ঠিকানা"]), e["টাকা"]]),
+    [["", "", "সর্বমোট ইনভেস্ট", "", "", "", total]],
+    "@Powered by: AM Shahed: 01605721296", [2, 5]);
+}
+
+/* ================= ডিপু: ক্যাশ (জমা / উত্তোলন / রিপোর্ট) ================= */
+const CASH_CFG = {
+  dep: { pre:"cashDep", title:"জমা", who:"জমাকারীর নাম", list:"listCashDeposits", listKey:"deposits", add:"addCashDeposit", upd:"updateCashDeposit", del:"deleteCashDeposit", idKey:"DepositID", btn:"জমা ফরম", listTitle:"জমার তালিকা", pane:"cashDepPane" },
+  wd:  { pre:"cashWd",  title:"উত্তোলন", who:"উত্তোলনকারীর নাম", list:"listCashWithdraws", listKey:"withdraws", add:"addCashWithdraw", upd:"updateCashWithdraw", del:"deleteCashWithdraw", idKey:"WithdrawID", btn:"উত্তোলন ফরম", listTitle:"উত্তোলন তালিকা", pane:"cashWdPane" }
+};
+const cashCache = { dep: [], wd: [] };
+let cashBuilt = false;
+let cashReportCache = null;
+
+function buildCashPanes(){
+  if(cashBuilt) return;
+  cashBuilt = true;
+  Object.keys(CASH_CFG).forEach(k => {
+    const c = CASH_CFG[k], p = c.pre;
+    document.getElementById(c.pane).innerHTML = `
+      <div class="toolbar no-print"><button class="btn secondary" id="${p}ToggleBtn" onclick="toggleFormBox('${p}FormBox','${p}ToggleBtn')">${c.btn}</button></div>
+      <div id="${p}FormBox" style="display:none;">
+        <fieldset class="no-print">
+          <legend>নতুন ${c.title}</legend>
+          <div class="form-grid">
+            <div class="field"><label>তারিখ</label><input id="${p}Date" type="date"></div>
+            <div class="field"><label>টাকার পরিমাণ</label><input id="${p}Amount" type="number" min="0"></div>
+            <div class="field"><label>${c.who}</label><input id="${p}Name"></div>
+            <div class="field"><label>মোবাইল নং</label><input id="${p}Mobile" maxlength="11" inputmode="numeric" oninput="this.value=toEnDigits(this.value)"></div>
+          </div>
+          <div class="btn-row"><button class="btn" id="${p}SaveBtn" onclick="submitCash('${k}')">সংরক্ষণ করুন</button></div>
+          <div id="${p}Msg" class="msg"></div>
+        </fieldset>
+      </div>
+      <h3 style="margin:14px 0 6px;font-size:1rem;color:var(--teal-dark);">${c.listTitle}</h3>
+      <div class="toolbar no-print">
+        <input type="text" id="${p}Search" placeholder="🔍 সার্চ করুন (নাম/মোবাইল)" oninput="renderCashTable('${k}')" style="flex:1;min-width:160px;">
+        <button class="btn secondary small" onclick="printCashList('${k}')">🖨 প্রিন্ট</button>
+      </div>
+      <div class="table-wrap"><table id="${p}Table"><thead></thead><tbody></tbody></table></div>`;
+    document.getElementById(p + "Date").value = new Date().toISOString().slice(0, 10);
+  });
+}
+
+function openCashSection(){
+  buildCashPanes();
+  switchCashTab("dep", document.querySelector("#cashTabs button"));
+}
+function switchCashTab(tab, btn){
+  document.querySelectorAll("#cashTabs button").forEach(b => b.classList.remove("active"));
+  if(btn) btn.classList.add("active");
+  document.getElementById("cashDepPane").style.display = tab === "dep" ? "" : "none";
+  document.getElementById("cashWdPane").style.display = tab === "wd" ? "" : "none";
+  document.getElementById("cashReportPane").style.display = tab === "report" ? "" : "none";
+  if(tab === "report") loadCashReport(); else loadCashList(tab);
+}
+
+async function loadCashList(k){
+  const c = CASH_CFG[k];
+  const res = await cachedApiCall(c.list, {}, 60000);
+  if(!res.success){ document.getElementById(c.pre + "Table").innerHTML = "<tbody><tr><td>" + res.message + "</td></tr></tbody>"; return; }
+  cashCache[k] = res[c.listKey];
+  renderCashTable(k);
+}
+
+async function submitCash(k){
+  const c = CASH_CFG[k], p = c.pre;
+  const btn = document.getElementById(p + "SaveBtn");
+  const msgBox = document.getElementById(p + "Msg");
+  if(btn.disabled) return;
+  const data = {
+    date: document.getElementById(p + "Date").value,
+    amount: document.getElementById(p + "Amount").value,
+    name: document.getElementById(p + "Name").value.trim(),
+    mobile: document.getElementById(p + "Mobile").value.trim()
+  };
+  if(!(Number(data.amount) > 0)){ msgBox.textContent = "টাকার পরিমাণ দিন"; msgBox.className = "msg err"; return; }
+  if(!data.name){ msgBox.textContent = c.who + " দিন"; msgBox.className = "msg err"; return; }
+  btn.disabled = true; markSaving(p + "Msg");
+  let res;
+  try{ res = await apiCall(c.add, data); }
+  finally{ btn.disabled = false; }
+  msgBox.textContent = res.message;
+  msgBox.className = "msg " + (res.success ? "ok" : "err");
+  if(res.success){
+    clearCache();
+    document.getElementById(p + "Amount").value = "";
+    document.getElementById(p + "Name").value = "";
+    document.getElementById(p + "Mobile").value = "";
+    loadCashList(k);
+  }
+}
+
+function cashFilteredList(k){
+  const c = CASH_CFG[k];
+  const q = (document.getElementById(c.pre + "Search")?.value || "").trim().toLowerCase();
+  let list = cashCache[k].slice().reverse();
+  if(q) list = list.filter(e => String(e[c.who] || "").toLowerCase().includes(q) || String(e["মোবাইল নং"] || "").includes(q));
+  return list;
+}
+
+function renderCashTable(k){
+  const c = CASH_CFG[k];
+  const table = document.getElementById(c.pre + "Table");
+  if(!table) return;
+  const list = cashFilteredList(k);
+  table.innerHTML = `<thead><tr><th>ক্রম</th><th>তারিখ</th><th class='cell-left'>${c.who}</th><th>মোবাইল নং</th><th>টাকা</th><th class='no-print'>একশন</th></tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+  if(list.length === 0){ tbody.innerHTML = emptyRowHtml(6, "এখনো কোনো " + c.title + " নেই"); return; }
+  let total = 0;
+  list.forEach((e, i) => {
+    total += Number(e["টাকা"]) || 0;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i + 1}</td><td>${finDt(e["তারিখ"])}</td><td class="cell-left">${escMsgHtml(e[c.who])}</td><td>${escMsgHtml(e["মোবাইল নং"])}</td><td>${e["টাকা"]}</td>
+      <td class="no-print">
+        <button class="btn icon small secondary" onclick="editCash('${k}','${e[c.idKey]}')" title="এডিট" aria-label="এডিট">${IC.edit}</button>
+        <button class="btn icon small danger" onclick="deleteCashEntry('${k}','${e[c.idKey]}')" title="ডিলিট" aria-label="ডিলিট">${IC.del}</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+  const tf = document.createElement("tr");
+  tf.style.fontWeight = "700"; tf.style.background = "#eef0e9";
+  tf.innerHTML = `<td></td><td></td><td class="cell-left">সর্বমোট ${c.title}</td><td></td><td>${total}</td><td class="no-print"></td>`;
+  tbody.appendChild(tf);
+}
+
+function editCash(k, id){
+  const c = CASH_CFG[k];
+  const e = cashCache[k].find(x => x[c.idKey] === id);
+  if(!e) return;
+  openEditModal(c.title + " এডিট", [
+    { key:c.who, label:c.who, value:e[c.who] },
+    { key:"মোবাইল নং", label:"মোবাইল নং", value:e["মোবাইল নং"] },
+    { key:"টাকা", label:"টাকার পরিমাণ", value:e["টাকা"], type:"number" }
+  ], async (values) => {
+    const res = await apiCall(c.upd, { id, fields: values });
+    if(res.success){ clearCache(); loadCashList(k); }
+    return res;
+  });
+}
+async function deleteCashEntry(k, id){
+  const c = CASH_CFG[k];
+  if(!confirm("এই " + c.title + " এন্ট্রি ডিলিট করবেন?")) return;
+  const res = await apiCall(c.del, { id });
+  if(res.success){ clearCache(); loadCashList(k); } else alert(res.message);
+}
+function printCashList(k){
+  const c = CASH_CFG[k];
+  const list = cashFilteredList(k);
+  if(list.length === 0){ alert("প্রিন্ট করার জন্য কোনো ডাটা নেই"); return; }
+  let total = 0; list.forEach(e => { total += Number(e["টাকা"]) || 0; });
+  printOfficialTable(c.listTitle, "মোট এন্ট্রি: " + list.length,
+    ["ক্রম", "তারিখ", c.who, "মোবাইল নং", "টাকা"],
+    list.map((e, i) => [i + 1, finDt(e["তারিখ"]), escMsgHtml(e[c.who]), escMsgHtml(e["মোবাইল নং"]), e["টাকা"]]),
+    [["", "", "সর্বমোট " + c.title, "", total]],
+    "@Powered by: AM Shahed: 01605721296", [2]);
+}
+
+function cashReportSections(r){
+  return [
+    { title:"মোট জমা তথ্য", headers:["বিবরণ", "সংখ্যা", "টাকা"], rows:[["মোট জমা", r.depositCount, r.depositTotal]], left:[0] },
+    { title:"মোট উত্তোলন তথ্য", headers:["বিবরণ", "সংখ্যা", "টাকা"], rows:[["মোট উত্তোলন", r.withdrawCount, r.withdrawTotal]], left:[0] },
+    { title:"বর্তমান ক্যাশ", headers:["বিবরণ", "টাকা"], rows:[["মোট জমা", r.depositTotal], ["মোট উত্তোলন", r.withdrawTotal]], footer:[["বর্তমান ক্যাশ (জমা − উত্তোলন)", r.cash]], left:[0] }
+  ];
+}
+async function loadCashReport(){
+  const box = document.getElementById("cashReportResult");
+  box.innerHTML = "<p>লোড হচ্ছে...</p>";
+  const res = await apiCall("cashReport", {});
+  if(!res.success){ box.innerHTML = res.message; return; }
+  cashReportCache = res.report;
+  box.innerHTML = cashReportSections(res.report).map(s => finSectionHtml(s, false)).join("");
+}
+function printCashReport(){
+  if(!cashReportCache){ alert("প্রিন্ট করার জন্য কোনো ডাটা নেই"); return; }
+  printFinanceSections("ক্যাশ রিপোর্ট", "শুরু থেকে আজ পর্যন্ত", cashReportSections(cashReportCache));
+}
+
+/* ---- খাত-ভিত্তিক টেবিল (স্ক্রিন ও প্রিন্ট দুটোর জন্য একই কাঠামো) ----
+   section: { title, headers, rows, footer (ঐচ্ছিক বোল্ড সারি), left: [বাম-অ্যালাইন কলামের ইনডেক্স] } */
+function finSectionHtml(sec, forPrint){
+  const left = sec.left || [];
+  const th = sec.headers.map(h => `<th>${h}</th>`).join("");
+  const td = (r, bold) => "<tr" + (bold && !forPrint ? ' style="font-weight:700;background:#eef0e9;"' : "") + ">" + r.map((v, ci) => {
+    const cell = (v === undefined || v === null) ? "" : v;
+    if(forPrint) return `<td style="text-align:${left.includes(ci) ? "left" : "center"};${bold ? "font-weight:700;" : ""}">${cell}</td>`;
+    return `<td${left.includes(ci) ? ' class="cell-left"' : ""}>${cell}</td>`;
+  }).join("") + "</tr>";
+  let body = sec.rows.length ? sec.rows.map(r => td(r, false)).join("") : `<tr><td colspan="${sec.headers.length}" style="text-align:center;color:#6b7570;padding:10px;">কোনো তথ্য নেই</td></tr>`;
+  body += (sec.footer || []).map(r => td(r, true)).join("");
+  if(forPrint) return `<div style="font-weight:700;margin:16px 0 4px;color:#153f37;">${sec.title}</div><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>`;
+  return `<h3 style="margin:18px 0 6px;font-size:1rem;color:var(--teal-dark);">${sec.title}</h3><div class="table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function printFinanceSections(title, subtitle, sections){
+  printOfficialTable(title, subtitle, [], [], null, "@Powered by: AM Shahed: 01605721296", null,
+    { rawHtml: sections.map(s => finSectionHtml(s, true)).join("") });
+}
+
+/* ---- নতুন ডিপু রিপোর্ট: খাত ভিত্তিক ৮টি টেবিল + নিচে সারাংশ টেবিল ---- */
+function financeReportSections(r){
+  const e = escMsgHtml;
+  const pl = r.profitLoss;
+  const netLabel = pl.net >= 0 ? "লাভ" : "লস";
+  return [
+    { title:"ইনভেস্ট তথ্য", headers:["ক্রম", "তারিখ", "নাম", "পদবি", "টাকা"],
+      rows: r.invest.rows.map((x, i) => [i + 1, finDt(x.date), e(x.name), e(x.title), x.amount]),
+      footer: [["", "", "মোট ইনভেস্ট", "", r.invest.total]], left:[2, 3] },
+    { title:"পণ্য ক্রয় (স্টক ভাউচার)", headers:["ক্রম", "ভাউচার নং", "তারিখ", "সর্বমোট", "পরিশোধ", "বকেয়া"],
+      rows: r.purchase.rows.map((x, i) => [i + 1, e(x.voucherNo), finDt(x.date), x.total, x.paid, x.due]),
+      footer: [["", "মোট পণ্য ক্রয়", "", r.purchase.total, r.purchase.paid, r.purchase.due]], left:[1] },
+    { title:"পণ্য বিক্রয় (অর্ডার ইনভয়েস)", headers:["ক্রম", "ইনভয়েস নং", "তারিখ", "ডিলার", "মোট মূল্য", "কমিশন", "ডিসকাউন্ট", "নেট বিক্রয়", "পরিশোধ", "বকেয়া"],
+      rows: r.sales.rows.map((x, i) => [i + 1, e(x.invoiceNo), finDt(x.date), e(x.dealer), x.gross, Math.round(x.commission), x.discount, x.net, x.paid, x.due]),
+      footer: [["", "মোট পণ্য বিক্রয়", "", "",
+        r.sales.rows.reduce((a, x) => a + x.gross, 0), Math.round(r.sales.rows.reduce((a, x) => a + x.commission, 0)),
+        r.sales.rows.reduce((a, x) => a + x.discount, 0), r.sales.total, r.sales.paid, r.sales.due]], left:[1, 3] },
+    { title:"ব্যয় (খরচের ভাউচার)", headers:["ক্রম", "ভাউচার নং", "তারিখ", "সর্বমোট", "পরিশোধ", "বকেয়া"],
+      rows: r.expense.rows.map((x, i) => [i + 1, e(x.voucherNo), finDt(x.date), x.total, x.paid, x.due]),
+      footer: [["", "মোট ব্যয়", "", r.expense.total, r.expense.paid, r.expense.due]], left:[1] },
+    { title:"অন্যান্য আয় (আয় রশিদ)", headers:["ক্রম", "রশিদ নং", "তারিখ", "টাকা"],
+      rows: r.otherIncome.rows.map((x, i) => [i + 1, e(x.receiptNo), finDt(x.date), x.total]),
+      footer: [["", "মোট অন্যান্য আয়", "", r.otherIncome.total]], left:[1] },
+    { title:"লাভ/লস", headers:["বিবরণ", "টাকা"],
+      rows: [["মোট বিক্রি (অর্ডার ইনভয়েস)", pl.sales], ["অন্যান্য আয় (আয় রশিদ)", pl.otherIncome], ["মোট বিক্রি + অন্যান্য আয়", pl.income], ["মোট খরচ", pl.expense]],
+      footer: [[netLabel + " ((মোট বিক্রি + অন্যান্য আয়) − মোট খরচ)", Math.abs(pl.net)]], left:[0] },
+    { title:"বর্তমান ক্যাশ (ক্যাশ মেনুর রিপোর্ট)", headers:["বিবরণ", "টাকা"],
+      rows: [["মোট জমা", r.cash.depositTotal], ["মোট উত্তোলন", r.cash.withdrawTotal]],
+      footer: [["বর্তমান ক্যাশ", r.cash.cash]], left:[0] },
+    { title:"স্টক মূল্য", headers:["বিবরণ", "টাকা"],
+      rows: [["বর্তমান স্টকের মোট মূল্য", r.stockValue]], left:[0] },
+    { title:"সারাংশ", headers:["বিবরণ", "টাকা"],
+      rows: [
+        ["মোট ইনভেস্ট", r.invest.total],
+        ["মোট পণ্য ক্রয় (স্টক ভাউচার)", r.purchase.total],
+        ["মোট আয় (অর্ডার ইনভয়েস)", r.sales.total],
+        ["মোট অন্যান্য আয় (আয় রশিদ)", r.otherIncome.total],
+        ["মোট ব্যয়", r.expense.total],
+        ["বর্তমান ক্যাশ (ক্যাশ মেনুর রিপোর্ট)", r.cash.cash],
+        ["স্টক মূল্য", r.stockValue]
+      ], left:[0] }
+  ];
+}
+function financeReportHtml(r){
+  return financeReportSections(r).map(s => finSectionHtml(s, false)).join("");
+}
 
 /* ================= ডিলার: গ্রাহক কার্ড ================= */
 let ccCustomersCache = [];

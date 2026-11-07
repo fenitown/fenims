@@ -580,6 +580,7 @@ function agencySalesReport(data) {
   // mode === "total" হলে ফিল্টার ছাড়াই সব
 
   const seenInvoices = {};
+  const orderMap = {}, orderList = [];   // ইনভয়েস-ভিত্তিক অর্ডার তালিকা (ডিলার রিপোর্টের নিচের টেবিলের জন্য)
   let totalSale = 0, totalDiscount = 0, totalPaid = 0, totalDue = 0, totalCommission = 0;
   let totalOrders = 0, totalDelivered = 0, totalPending = 0;
   const byDealer = {};
@@ -598,6 +599,23 @@ function agencySalesReport(data) {
     }
     byDealer[dealerKey].totalSale += Number(e["মোট মূল্য"]) || 0;
     byDealer[dealerKey].totalCommission += Number(e["কমিশন মূল্য"]) || 0;
+
+    // ইনভয়েস-ভিত্তিক অর্ডার সারি: প্রতিটি লাইনের মূল্য/কমিশন যোগ, ডিসকাউন্ট/পরিশোধ/বকেয়া একবার
+    const ordKey = e["ইনভয়েস নং"];
+    if (!orderMap[ordKey]) {
+      orderMap[ordKey] = {
+        invoiceNo: ordKey, date: e["তারিখ"], dealerId: e["DealerID"], dealerName: e["ডিলার নাম"],
+        packages: [], gross: 0, commission: 0, payable: 0,
+        discount: Number(e["ডিসকাউন্ট"]) || 0, paid: Number(e["পরিশোধ"]) || 0, due: Number(e["বকেয়া"]) || 0,
+        status: e["স্ট্যাটাস"] || "পেন্ডিং"
+      };
+      orderList.push(orderMap[ordKey]);
+    }
+    const ord = orderMap[ordKey];
+    ord.gross += Number(e["মোট মূল্য"]) || 0;
+    ord.commission += Number(e["কমিশন মূল্য"]) || 0;
+    ord.payable += Number(e["পরিশোধযোগ্য মূল্য"]) || 0;
+    ord.packages.push(String(e["প্যাকেজ"] || "") + " × " + (Number(e["সংখ্যা"]) || 0));
 
     // ইনভয়েস-লেভেল মান (সাবটোটাল/ডিসকাউন্ট/পরিশোধ/বকেয়া/অর্ডার/স্ট্যাটাস) প্রতিটি ইনভয়েসে একবারই গোনা
     const invKey = e["ইনভয়েস নং"];
@@ -630,7 +648,13 @@ function agencySalesReport(data) {
       totalPaid: totalPaid,
       totalDue: totalDue,
       totalCommission: totalCommission,
-      byDealer: Object.keys(byDealer).map(function (k) { return byDealer[k]; })
+      byDealer: Object.keys(byDealer).map(function (k) { return byDealer[k]; }),
+      // সংশ্লিষ্ট ডিলারের (বা সব ডিলারের) সকল অর্ডার — তারিখ অনুযায়ী পুরনো থেকে নতুন
+      orders: orderList.map(function (o) {
+        o.packages = o.packages.join(", ");
+        o.net = o.payable - o.discount;
+        return o;
+      }).sort(function (a, b) { return new Date(a.date) - new Date(b.date); })
     }
   };
 }
