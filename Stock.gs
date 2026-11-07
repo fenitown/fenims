@@ -551,7 +551,8 @@ function agencySalesReport(data) {
 
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "SalesInvoice");
-  let entries = genericListRows(sheet);
+  // কনফার্মেশনের অপেক্ষায় থাকা (অপেক্ষমান) অর্ডার বিক্রি হিসেবে ধরা হয় না
+  let entries = genericListRows(sheet).filter(function (e) { return e["স্ট্যাটাস"] !== "অপেক্ষমান"; });
 
   // একই ইনভয়েসের একাধিক লাইন থেকে ডুপ্লিকেট সাবটোটাল এড়াতে,
   // প্রতিটি ইনভয়েস নং একবারই গোনা হবে সাবটোটাল/ডিসকাউন্ট/পরিশোধ/বকেয়ার জন্য,

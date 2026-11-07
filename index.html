@@ -5356,14 +5356,7 @@ async function runAgencyReport(){
   dealerReportCache = res.report;
 
   const r = res.report;
-  let html = `<div class="table-wrap"><table><thead><tr><th class="cell-left">ডিলার</th><th>অর্ডার</th><th>ডেলিভারী</th><th>পেন্ডিং</th><th>মোট মূল্য</th><th>পরিশোধ</th><th>বকেয়া</th><th>কমিশন</th></tr></thead><tbody>`;
-  r.byDealer.forEach(d => {
-    html += `<tr><td class="cell-left">${d.dealerName}</td><td>${d.totalOrders}</td><td>${d.totalDelivered}</td><td>${d.totalPending}</td><td>${d.totalSale}</td><td>${d.totalPaid}</td><td>${d.totalDue}</td><td>${Math.round(d.totalCommission||0)}</td></tr>`;
-  });
-  if(r.byDealer.length === 0) html += emptyRowHtml(8, "এই সময়ে কোনো বিক্রি নেই");
-  html += `<tr style="font-weight:700;"><td class="cell-left">সর্বমোট</td><td>${r.totalOrders}</td><td>${r.totalDelivered}</td><td>${r.totalPending}</td><td>${r.totalSale}</td><td>${r.totalPaid}</td><td>${r.totalDue}</td><td>${Math.round(r.totalCommission||0)}</td></tr>`;
-  html += `</tbody></table></div>`;
-
+  let html = "";
   // সংশ্লিষ্ট ডিলারের (ডিলার না বাছলে সবার) সকল অর্ডার তালিকা — শেষ সারিতে মোট
   const sec = dealerOrdersSection(r.orders || [], !!data.dealerId, dealerReportSelectedName());
   html += finSectionHtml(sec, false);
@@ -5396,17 +5389,10 @@ function printDealerReportTable(){
   else if(agencyReportCurrentTab === "monthly"){ data.year = document.getElementById("arYear").value; data.month = document.getElementById("arMonth").value; }
   else if(agencyReportCurrentTab === "yearly"){ data.year = document.getElementById("arYear").value; }
 
-  // নির্দিষ্ট ডিলার বাছা থাকলে তার সকল অর্ডার তালিকা (শেষ সারিতে মোট), নাহলে ডিলার-ভিত্তিক সারাংশ
-  if(document.getElementById("arDealerSelect").value){
-    const sec = dealerOrdersSection(r.orders || [], true, dealerReportSelectedName());
-    printFinanceSections("ডিলার রিপোর্ট — " + escMsgHtml(dealerReportSelectedName()), periodSubtitle(agencyReportCurrentTab, data), [sec]);
-    return;
-  }
-  const headers = ["ডিলার", "অর্ডার", "ডেলিভারী", "পেন্ডিং", "মোট মূল্য", "পরিশোধ", "বকেয়া", "কমিশন"];
-  const rows = r.byDealer.map(d => [d.dealerName, d.totalOrders, d.totalDelivered, d.totalPending, d.totalSale, d.totalPaid, d.totalDue, Math.round(d.totalCommission||0)]);
-  printOfficialTable("ডিলার রিপোর্ট", periodSubtitle(agencyReportCurrentTab, data), headers, rows,
-    [["সর্বমোট", r.totalOrders, r.totalDelivered, r.totalPending, r.totalSale, r.totalPaid, r.totalDue, Math.round(r.totalCommission||0)]],
-    "@Powered by: AM Shahed: 01605721296", [0]);
+  // শুধু অর্ডার তালিকা (শেষ সারিতে মোট)
+  const single = !!document.getElementById("arDealerSelect").value;
+  const sec = dealerOrdersSection(r.orders || [], single, dealerReportSelectedName());
+  printFinanceSections("ডিলার রিপোর্ট" + (single ? " — " + escMsgHtml(dealerReportSelectedName()) : ""), periodSubtitle(agencyReportCurrentTab, data), [sec]);
 }
 
 
@@ -5795,6 +5781,12 @@ function financeReportSections(r){
       footer: [["বর্তমান ক্যাশ", r.cash.cash]], left:[0] },
     { title:"স্টক মূল্য", headers:["বিবরণ", "টাকা"],
       rows: [["বর্তমান স্টকের মোট মূল্য", r.stockValue]], left:[0] },
+    { title:"কোম্পানীর বকেয়া", headers:["ক্রম", "ভাউচার নং", "তারিখ", "সর্বমোট", "পরিশোধ", "বকেয়া"],
+      rows: ((r.companyDue || {}).rows || []).map((x, i) => [i + 1, e(x.voucherNo), finDt(x.date), x.total, x.paid, x.due]),
+      footer: [["", "মোট কোম্পানীর বকেয়া", "", (r.companyDue || {}).total || 0, (r.companyDue || {}).paid || 0, (r.companyDue || {}).due || 0]], left:[1] },
+    { title:"ডিলারদের নিকট বকেয়া", headers:["ক্রম", "ইনভয়েস নং", "তারিখ", "ডিলার", "নেট বিক্রয়", "পরিশোধ", "বকেয়া"],
+      rows: ((r.dealerDue || {}).rows || []).map((x, i) => [i + 1, e(x.invoiceNo), finDt(x.date), e(x.dealer), x.net, x.paid, x.due]),
+      footer: [["", "মোট ডিলারদের নিকট বকেয়া", "", "", (r.dealerDue || {}).total || 0, (r.dealerDue || {}).paid || 0, (r.dealerDue || {}).due || 0]], left:[1, 3] },
     { title:"সারাংশ", headers:["বিবরণ", "টাকা"],
       rows: [
         ["মোট ইনভেস্ট", r.invest.total],
@@ -5803,7 +5795,9 @@ function financeReportSections(r){
         ["মোট অন্যান্য আয় (আয় রশিদ)", r.otherIncome.total],
         ["মোট ব্যয়", r.expense.total],
         ["বর্তমান ক্যাশ (ক্যাশ মেনুর রিপোর্ট)", r.cash.cash],
-        ["স্টক মূল্য", r.stockValue]
+        ["স্টক মূল্য", r.stockValue],
+        ["কোম্পানীর বকেয়া", (r.companyDue || {}).due || 0],
+        ["ডিলারদের নিকট বকেয়া", (r.dealerDue || {}).due || 0]
       ], left:[0] }
   ];
 }

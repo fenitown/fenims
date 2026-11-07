@@ -189,24 +189,26 @@ function depotFinanceReport(data) {
   invests.forEach(function (r) { investTotal += r.amount; });
 
   // ---- পণ্য ক্রয় (স্টক ভাউচার) ----
-  const vouchers = finGroupBy(genericListRows(getSheet(masterSS, "StockInVoucher")), "ভাউচার নং", function (r) {
+  const allVouchers = finGroupBy(genericListRows(getSheet(masterSS, "StockInVoucher")), "ভাউচার নং", function (r) {
     const o = { voucherNo: r["ভাউচার নং"], date: r["তারিখ"], total: finNum(r["মোট মূল্য"]), paid: finNum(r["পরিশোধ"]), due: finNum(r["বকেয়া"]) };
     o._add = function (x) { o.total += finNum(x["মোট মূল্য"]); };
     return o;
-  }).filter(function (v) { return inPeriod(v.date); });
+  });
+  const vouchers = allVouchers.filter(function (v) { return inPeriod(v.date); });
   let purchaseTotal = 0, purchasePaid = 0, purchaseDue = 0;
   vouchers.forEach(function (v) { v.total = finR2(v.total); purchaseTotal += v.total; purchasePaid += v.paid; purchaseDue += v.due; });
 
   // ---- পণ্য বিক্রয় (অর্ডার ইনভয়েস, অপেক্ষমান বাদ) ----
   const invoiceLines = genericListRows(getSheet(masterSS, "SalesInvoice"))
     .filter(function (e) { return e["স্ট্যাটাস"] !== "অপেক্ষমান"; });
-  const orders = finGroupBy(invoiceLines, "ইনভয়েস নং", function (r) {
+  const allOrders = finGroupBy(invoiceLines, "ইনভয়েস নং", function (r) {
     const o = { invoiceNo: r["ইনভয়েস নং"], date: r["তারিখ"], dealer: r["ডিলার নাম"], status: r["স্ট্যাটাস"] || "পেন্ডিং",
                 gross: finNum(r["মোট মূল্য"]), commission: finNum(r["কমিশন মূল্য"]), payable: finNum(r["পরিশোধযোগ্য মূল্য"]),
                 discount: finNum(r["ডিসকাউন্ট"]), paid: finNum(r["পরিশোধ"]), due: finNum(r["বকেয়া"]) };
     o._add = function (x) { o.gross += finNum(x["মোট মূল্য"]); o.commission += finNum(x["কমিশন মূল্য"]); o.payable += finNum(x["পরিশোধযোগ্য মূল্য"]); };
     return o;
-  }).filter(function (o) { return inPeriod(o.date); });
+  });
+  const orders = allOrders.filter(function (o) { return inPeriod(o.date); });
   let salesTotal = 0, salesPaid = 0, salesDue = 0;
   orders.forEach(function (o) {
     o.net = finR2(o.payable - o.discount);
@@ -247,6 +249,19 @@ function depotFinanceReport(data) {
 
   function clean(list) { list.forEach(function (x) { delete x._add; }); return list; }
 
+  // ---- কোম্পানীর বকেয়া (স্টক ভাউচারের বকেয়া) ও ডিলারদের নিকট বকেয়া (অর্ডার ইনভয়েসের বকেয়া) — আজ পর্যন্ত মোট বকেয়া ----
+  const companyDueRows = [];
+  allVouchers.forEach(function (v) {
+    if (v.due > 0.0001) companyDueRows.push({ voucherNo: v.voucherNo, date: v.date, total: finR2(v.total), paid: v.paid, due: v.due });
+  });
+  const dealerDueRows = [];
+  allOrders.forEach(function (o) {
+    if (o.due > 0.0001) dealerDueRows.push({ invoiceNo: o.invoiceNo, date: o.date, dealer: o.dealer, net: finR2(o.payable - o.discount), paid: o.paid, due: o.due });
+  });
+  let companyDueTotal = 0, companyDueAmt = 0, companyPaidAmt = 0, dealerDueTotal = 0, dealerPaidAmt = 0, dealerDueAmt = 0;
+  companyDueRows.forEach(function (x) { companyDueTotal += x.total; companyPaidAmt += x.paid; companyDueAmt += x.due; });
+  dealerDueRows.forEach(function (x) { dealerDueTotal += x.net; dealerPaidAmt += x.paid; dealerDueAmt += x.due; });
+
   return {
     success: true,
     report: {
@@ -256,6 +271,8 @@ function depotFinanceReport(data) {
       expense: { rows: clean(expenses), total: finR2(expenseTotal), paid: finR2(expensePaid), due: finR2(expenseDue) },
       otherIncome: { rows: clean(receipts), total: finR2(otherIncomeTotal) },
       profitLoss: { sales: finR2(salesTotal), otherIncome: finR2(otherIncomeTotal), income: finR2(sellPlusIncome), expense: finR2(expenseTotal), net: finR2(net) },
+      companyDue: { rows: companyDueRows, total: finR2(companyDueTotal), paid: finR2(companyPaidAmt), due: finR2(companyDueAmt) },
+      dealerDue: { rows: dealerDueRows, total: finR2(dealerDueTotal), paid: finR2(dealerPaidAmt), due: finR2(dealerDueAmt) },
       cash: cash,
       stockValue: finR2(stockValue)
     }
