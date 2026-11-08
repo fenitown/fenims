@@ -7438,13 +7438,15 @@ function saleDayOf(sale){
 }
 /* নির্বাচিত তারিখে এই গ্রাহকের এই প্যাকেজের বিক্রি (থাকলে) */
 let _saleBatchCtx = null;   // বিক্রি ফর্মে ব্যাচ বাছা থাকলে সেই ব্যাচ (সব তারিখের বিক্রি সহ)
-function findSaleFor(customerId, pkgId){
+/* একজন গ্রাহকের এই প্যাকেজের সব বিক্রি (একাধিক প্যাকেট / একাধিকবার হলে একাধিক) */
+function findSalesFor(customerId, pkgId){
   if(_saleBatchCtx && _saleBatchCtx.packageId === pkgId){
-    return _saleBatchCtx.sales.find(s => s["CustomerID"] === customerId);
+    return _saleBatchCtx.sales.filter(s => s["CustomerID"] === customerId);
   }
   const day = saleSelectedDate();
-  return allSalesCache.find(s => s["CustomerID"] === customerId && s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত" && saleDayOf(s) === day);
+  return allSalesCache.filter(s => s["CustomerID"] === customerId && s["PackageID"] === pkgId && s["স্ট্যাটাস"] === "বিক্রিত" && saleDayOf(s) === day);
 }
+function findSaleFor(customerId, pkgId){ return findSalesFor(customerId, pkgId)[0]; }
 /* অন্যান্য খরচ — প্যাকেজ মূল্যের সাথে যোগ হয়ে বিক্রির মূল্য (নতুন বিক্রির ডিফল্ট মূল্য) হয় */
 function saleOtherExpense(){
   const el = document.getElementById("saleOtherExpense");
@@ -7701,21 +7703,24 @@ function renderSalesTable(){
   let subtotal = 0;
 
   customers.forEach((c, ci) => {
-    const sale = findSaleFor(c["CustomerID"], pkgId);
+    const sales = findSalesFor(c["CustomerID"], pkgId);
+    const sale = sales[sales.length - 1];   // সর্বশেষ বিক্রি — বাতিল ও (একক) মূল্য দেখানো এটার উপর
     const cJson = JSON.stringify(c).replace(/'/g, "&#39;");
     const priceValue = sale ? (sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? sale["মূল্য"] : defaultPrice) : defaultPrice;
-    subtotal += Number(priceValue) || 0;
+    subtotal += sales.length ? sales.reduce((t, s) => t + (Number(s["মূল্য"]) || 0), 0) : (Number(defaultPrice) || 0);
     const priceInputId = "salePrice_" + c["CustomerID"];
+    const qtyInputId = "saleQty_" + c["CustomerID"];
+    const saleIdsCsv = sales.map(s => s["SaleID"]).join(",");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${ci + 1}</td><td>${escMsgHtml(c["CustomerID"]||"")}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td>
       <td><input type="number" class="price-input" id="${priceInputId}" value="${priceValue}" ${!pkgId?"disabled":""}
-        ${sale ? `onchange="updateSalePriceHandler('${sale['SaleID']}', this.value)"` : ""}></td>
-      <td>${sale ? "বিক্রিত" + (sale["তারিখ"] && saleDayOf(sale) !== saleSelectedDate() ? " (" + new Date(sale["তারিখ"]).toLocaleDateString("en-GB") + ")" : "") : "—"}</td>
+        ${sale ? `onchange="updateSalePriceHandler('${saleIdsCsv}', this.value)"` : ""}></td>
+      <td>${sale ? "বিক্রিত" + (sales.length > 1 ? " ×" + sales.length : "") + (sale["তারিখ"] && saleDayOf(sale) !== saleSelectedDate() ? " (" + new Date(sale["তারিখ"]).toLocaleDateString("en-GB") + ")" : "") : "—"}</td>
       <td class="no-print">
-        ${!sale
-          ? `<button class="btn icon small" ${!pkgId?"disabled":""} onclick="makeSale('${c['CustomerID']}','${pkgId}','${priceInputId}')" title="বিক্রয়" aria-label="বিক্রয়">${IC.sale}</button>`
-          : `<button class="btn icon small danger" onclick="undoSale('${sale['SaleID']}')" title="বাতিল" aria-label="বাতিল">${IC.x}</button>`}
+        <input type="number" min="1" step="1" value="1" id="${qtyInputId}" ${!pkgId?"disabled":""} title="প্যাকেট সংখ্যা" aria-label="প্যাকেট সংখ্যা" style="width:52px;padding:4px 6px;text-align:center;border:1px solid #b9c4bf;border-radius:6px;background:#fff">
+        <button class="btn icon small" ${!pkgId?"disabled":""} onclick="makeSale('${c['CustomerID']}','${pkgId}','${priceInputId}','${qtyInputId}')" title="${sale ? "আরও বিক্রয় (পরিমাণ অনুযায়ী)" : "বিক্রয়"}" aria-label="বিক্রয়">${IC.sale}</button>
+        ${sale ? `<button class="btn icon small danger" onclick="undoSale('${sale['SaleID']}')" title="${sales.length > 1 ? "সর্বশেষ বিক্রি বাতিল" : "বাতিল"}" aria-label="বাতিল">${IC.x}</button>` : ""}
         <button class="btn icon small secondary" ${!pkgId?"disabled":""} onclick='printThermalReceipt(${cJson}, "${pkgId}")' title="প্রিন্ট" aria-label="প্রিন্ট">${IC.print}</button>
       </td>`;
     tbody.appendChild(tr);
@@ -7730,12 +7735,15 @@ function renderSalesTable(){
   }
 }
 
-async function updateSalePriceHandler(saleId, newPrice){
-  const sale = allSalesCache.find(s => s["SaleID"] === saleId);
-  if(sale) sale["মূল্য"] = newPrice;
+async function updateSalePriceHandler(saleIds, newPrice){
+  const ids = String(saleIds).split(",").filter(Boolean);   // এই গ্রাহকের সব প্যাকেটের একক মূল্য একসাথে বদলায়
+  ids.forEach(id => { const s = allSalesCache.find(x => x["SaleID"] === id); if(s) s["মূল্য"] = newPrice; });
   clearCache();
-  const res = await apiCall("updateSalePrice", { saleId: saleId, price: newPrice });
-  if(!res.success){ alert(res.message); }
+  for(const id of ids){
+    if(id.indexOf("tmp-") === 0) continue;
+    const res = await apiCall("updateSalePrice", { saleId: id, price: newPrice });
+    if(!res.success){ alert(res.message); break; }
+  }
   renderSalesTable();
 }
 
@@ -7744,7 +7752,9 @@ async function updateSalePriceHandler(saleId, newPrice){
  *******************************************************/
 function printThermalReceipt(c, packageId){
   const pkg = allPackagesCache.find(p => p["PackageID"] === packageId);
-  const sale = findSaleFor(c["CustomerID"], packageId);
+  const sales = findSalesFor(c["CustomerID"], packageId);
+  const sale = sales[0];
+  const qty = sales.length || 1;   // কতগুলো প্যাকেট নিয়েছেন
   const selDay = saleSelectedDate().split("-");
   const dtObj = sale && sale["তারিখ"] ? new Date(sale["তারিখ"]) : new Date(+selDay[0], +selDay[1]-1, +selDay[2]);
   const bn = n => (Number(n) || 0).toLocaleString("bn-BD");
@@ -7766,13 +7776,13 @@ function printThermalReceipt(c, packageId){
     sumCombo = Number(pkg["সর্বমোট কম্বো মূল্য (সর্বমোট মূল্য)"]) || sumCombo;
     sumSave = Number(pkg["সর্বমোট সাশ্রয়"]) || sumSave;
   }
-  const payable = sale && sale["মূল্য"] !== undefined && sale["মূল্য"] !== "" ? Number(sale["মূল্য"]) || 0 : sumCombo + saleOtherExpense();
-  const extra = payable - sumCombo;
+  const payable = sale ? sales.reduce((t, s) => t + (Number(s["মূল্য"]) || 0), 0) : sumCombo + saleOtherExpense();
+  const extra = payable - sumCombo * qty;
   const itemsHtml = items.map((r, i) => `<tr><td class="c">${bn(i + 1)}</td><td class="l">${e(r[0])}</td><td class="r">${bn(r[1])}</td><td class="r">${bn(r[2])}</td><td class="r">${bn(r[3])}</td></tr>`).join("")
     || `<tr><td colspan="5" class="c">পণ্যের তথ্য পাওয়া যায়নি</td></tr>`;
   const addr = [c["বাড়ির নাম"], c["গ্রাম"], c["ওয়ার্ড নং"] ? "ওয়ার্ড " + c["ওয়ার্ড নং"] : "", c["ইউনিয়ন/পৌরসভা"]].filter(x => x && String(x).trim()).join(", ");
-  const batch = sale && sale["ব্যাচ"] ? sale["ব্যাচ"] : "";
-  const rcpNo = sale && sale["SaleID"] && String(sale["SaleID"]).indexOf("tmp-") !== 0 ? sale["SaleID"] : "";
+  const batch = [...new Set(sales.map(s => s["ব্যাচ"]).filter(Boolean))].join(", ");
+  const rcpNo = sales.map(s => s["SaleID"]).filter(id => id && String(id).indexOf("tmp-") !== 0).join(", ");
 
   const info = [
     ["গ্রাহকের নাম", c["নাম"]], ["পিতার নাম", c["পিতার নাম"]],
@@ -7823,18 +7833,19 @@ function printThermalReceipt(c, packageId){
       <div class="title">বিক্রয় রশিদ</div>
       <div class="meta"><span>রশিদ নং: <b>${e(rcpNo || "—")}</b>${batch ? " | ব্যাচ: <b>" + e(batch) + "</b>" : ""}</span><span>তারিখ: <b>${dtObj.toLocaleDateString("bn-BD")}</b></span></div>
       <div class="box">${infoHtml}</div>
-      <div class="pk">প্যাকেজ: ${e(pkg ? pkg["নাম"] : "")}</div>
+      <div class="pk">প্যাকেজ: ${e(pkg ? pkg["নাম"] : "")}${qty > 1 ? " × " + bn(qty) + " প্যাকেট" : ""}</div>
       <div class="tw"><div class="stamp">${sale ? "বিক্রিত" : "অপেক্ষমান"}</div>
       <table>
         <thead><tr><th class="c">ক্রম</th><th class="l">পণ্যের নাম</th><th class="r">বাজার মূল্য</th><th class="r">কম্বো মূল্য</th><th class="r">সাশ্রয়</th></tr></thead>
         <tbody>${itemsHtml}</tbody>
         <tfoot>
           <tr><td colspan="2" class="r">সর্বমোট</td><td class="r">${bn(sumMarket)}</td><td class="r">${bn(sumCombo)}</td><td class="r">${bn(sumSave)}</td></tr>
+          ${qty > 1 ? `<tr><td colspan="2" class="r">প্যাকেট সংখ্যা: ${bn(qty)} টি × কম্বো মূল্য</td><td class="r">${bn(sumMarket * qty)}</td><td class="r">${bn(sumCombo * qty)}</td><td class="r">${bn(sumSave * qty)}</td></tr>` : ""}
           ${extra !== 0 ? `<tr><td colspan="4" class="r">${extra > 0 ? "অন্যান্য খরচ" : "ছাড়"}</td><td class="r">${bn(Math.abs(extra))}</td></tr>` : ""}
           <tr class="grand"><td colspan="4" class="r">সর্বমোট প্রদেয় (টাকা)</td><td class="r">৳ ${bn(payable)}</td></tr>
         </tfoot>
       </table></div>
-      ${sumSave > 0 ? `<div class="note">আপনি এই প্যাকেজে মোট ৳ ${bn(sumSave)} সাশ্রয় করেছেন</div>` : ""}
+      ${sumSave > 0 ? `<div class="note">আপনি এই প্যাকেজে মোট ৳ ${bn(sumSave * qty)} সাশ্রয় করেছেন</div>` : ""}
       <div class="sign"><div>গ্রাহকের স্বাক্ষর</div><div>বিক্রেতার স্বাক্ষর</div></div>
       <p class="foot">@Powered by: AM Shahed: 01605721296</p>
     </div>
@@ -7843,34 +7854,61 @@ function printThermalReceipt(c, packageId){
   win.document.close();
 }
 
-async function makeSale(customerId, packageId, priceInputId){
+async function makeSale(customerId, packageId, priceInputId, qtyInputId){
   if(!packageId){ alert("আগে প্যাকেজ সিলেক্ট করুন"); return; }
-  if(saleStockLeft(packageId) <= 0){
-    const m = document.getElementById("salesMsg");
-    m.textContent = "এই প্যাকেজের পণ্য স্টকে নেই, বিক্রি করা যাবে না"; m.className = "msg err";
-    return;
+  const msgEl = document.getElementById("salesMsg");
+  const fail = t => { msgEl.textContent = t; msgEl.className = "msg err"; };
+
+  const qtyInput = qtyInputId ? document.getElementById(qtyInputId) : null;
+  const qty = Math.max(1, Math.floor(Number(qtyInput ? qtyInput.value : 1) || 1));
+  const stockLeft = saleStockLeft(packageId);
+  if(stockLeft <= 0){ fail("এই প্যাকেজের পণ্য স্টকে নেই, বিক্রি করা যাবে না"); return; }
+  if(stockLeft < qty){ fail("স্টকে মাত্র " + stockLeft + " টি আছে, " + qty + " টি বিক্রি করা যাবে না"); return; }
+
+  // কোন ব্যাচ থেকে কতগুলো — ব্যাচ বাছা থাকলে সেটা থেকে, "অটো" হলে পুরোনো ব্যাচ আগে (দরকারে একাধিক ব্যাচে ভাগ হয়)
+  const chosen = document.getElementById("saleBatch").value;
+  const allocations = [];
+  if(chosen){
+    const b = batchStats(packageId).find(x => x.batchId === chosen);
+    if(b && b.left < qty){ fail("এই ব্যাচে মাত্র " + Math.max(b.left, 0) + " টি বাকি, " + qty + " টি বিক্রি করা যাবে না"); return; }
+    allocations.push({ batchId: chosen, qty: qty });
+  } else {
+    let need = qty;
+    batchStats(packageId).forEach(b => {
+      if(need <= 0 || b.left <= 0) return;
+      const take = Math.min(b.left, need);
+      allocations.push({ batchId: b.batchId, qty: take });
+      need -= take;
+    });
+    if(need > 0) allocations.push({ batchId: "", qty: need });
   }
+
   const priceInput = priceInputId ? document.getElementById(priceInputId) : null;
-  const price = priceInput ? priceInput.value : 0;
+  const price = priceInput ? priceInput.value : 0;   // প্রতি প্যাকেটের মূল্য
 
   // অপটিমিস্টিক আপডেট — সাথে সাথে UI বদলে যাবে, সার্ভার রেসপন্সের অপেক্ষা না করে
   const saleDay = saleSelectedDate();   // YYYY-MM-DD
   const dp = saleDay.split("-");
-  const tempSale = { SaleID:"tmp-"+Date.now(), CustomerID:customerId, PackageID:packageId, "তারিখ": new Date(Date.UTC(+dp[0], +dp[1]-1, +dp[2], 12)).toISOString(), "মূল্য":price, "স্ট্যাটাস":"বিক্রিত" };
-  tempSale["ব্যাচ"] = currentSaleBatch(packageId);
-  allSalesCache.push(tempSale);
+  const when = new Date(Date.UTC(+dp[0], +dp[1]-1, +dp[2], 12)).toISOString();
+  const temps = [];
+  allocations.forEach(a => {
+    for(let i = 0; i < a.qty; i++){
+      temps.push({ SaleID:"tmp-" + Date.now() + "-" + temps.length, CustomerID:customerId, PackageID:packageId, "তারিখ": when, "মূল্য":price, "স্ট্যাটাস":"বিক্রিত", "ব্যাচ": a.batchId });
+    }
+  });
+  temps.forEach(t => allSalesCache.push(t));
   renderSalesTable();
 
-  const res = await apiCall("addSale", { customerId, packageId, price, date: saleDay, batchId: tempSale["ব্যাচ"] });
-  document.getElementById("salesMsg").textContent = res.message;
-  document.getElementById("salesMsg").className = "msg " + (res.success?"ok":"err");
+  const res = await apiCall("addSale", { customerId, packageId, price, date: saleDay, allocations });
+  msgEl.textContent = res.message;
+  msgEl.className = "msg " + (res.success?"ok":"err");
 
   if(res.success){ clearCache();
-    tempSale.SaleID = res.saleId; // আসল আইডি বসিয়ে দেওয়া
-    renderSalesTable(); // বাটনের onclick এ সঠিক SaleID বসাতে পুনরায় রেন্ডার (নেটওয়ার্ক কল ছাড়াই, তাই দ্রুত)
+    (res.saleIds || [res.saleId]).forEach((id, i) => { if(temps[i] && id) temps[i].SaleID = id; });   // আসল আইডি বসিয়ে দেওয়া
+    renderSalesTable();
   } else {
-    // ব্যর্থ হলে অপটিমিস্টিক এন্ট্রি বাতিল করে আগের অবস্থায় ফেরত
-    allSalesCache = allSalesCache.filter(s => s !== tempSale);
+    // ব্যর্থ হলে অপটিমিস্টিক এন্ট্রিগুলো বাতিল করে আগের অবস্থায় ফেরত
+    allSalesCache = allSalesCache.filter(s => temps.indexOf(s) === -1);
     renderSalesTable();
   }
 }

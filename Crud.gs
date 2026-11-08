@@ -659,9 +659,32 @@ function parseSaleDate(v) {
   return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
 }
 
+/*******************************************************
+ * বিক্রি যোগ — একজন গ্রাহক একসাথে একাধিক প্যাকেট নিতে পারবেন, এবং
+ * একই ব্যাচ/প্যাকেজ থেকে একাধিকবারও নিতে পারবেন (প্রতিটি প্যাকেট = ১টি সারি)
+ *
+ * data: { token, customerId, packageId, price (প্রতি প্যাকেটের মূল্য), date,
+ *         batchId + qty                       → একটি ব্যাচ থেকে qty টি
+ *         অথবা allocations: [{batchId, qty}] → একাধিক ব্যাচ থেকে ভাগ করে }
+ *******************************************************/
 function addSale(data) {
   const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
   if (!perm.ok) return { success: false, message: perm.message };
+
+  // বিক্রির বণ্টন (কোন ব্যাচ থেকে কতগুলো)
+  const allocs = [];
+  if (Array.isArray(data.allocations) && data.allocations.length > 0) {
+    data.allocations.forEach(function (a) {
+      const q = Math.floor(Number(a.qty) || 0);
+      if (q > 0) allocs.push({ batchId: a.batchId || "", qty: q });
+    });
+  } else {
+    allocs.push({ batchId: data.batchId || "", qty: Math.max(1, Math.floor(Number(data.qty) || 1)) });
+  }
+  let totalQty = 0;
+  allocs.forEach(function (a) { totalQty += a.qty; });
+  if (totalQty < 1) return { success: false, message: "প্যাকেটের সংখ্যা সঠিক নয়" };
+  if (totalQty > 200) return { success: false, message: "একবারে সর্বোচ্চ ২০০ টি প্যাকেট বিক্রি করা যাবে" };
 
   const ss = getDealerSpreadsheet(perm.payload.dealerId);
   const sheet = getSheet(ss, "Sales");
@@ -670,40 +693,72 @@ function addSale(data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
+    const existing = genericListRows(sheet);
+
     // স্টক যাচাই — প্যাকেজের পণ্য স্টকে না থাকলে বিক্রি হবে না
     const delivered = getDealerDeliveredQtyMap(getMasterSS(), perm.payload.dealerId)[data.packageId] || 0;
     let sold = 0;
-    genericListRows(sheet).forEach(function (s) {
-      if (s["PackageID"] === data.packageId && s["স্ট্যাটাস"] === "বিক্রিত") sold++;
+    const soldInBatchMap = {};
+    existing.forEach(function (s) {
+      if (s["PackageID"] === data.packageId && s["স্ট্যাটাস"] === "বিক্রিত") {
+        sold++;
+        if (s["ব্যাচ"]) soldInBatchMap[s["ব্যাচ"]] = (soldInBatchMap[s["ব্যাচ"]] || 0) + 1;
+      }
     });
-    if (delivered - sold <= 0) {
+    const left = delivered - sold;
+    if (left <= 0) {
       return { success: false, message: "এই প্যাকেজের পণ্য স্টকে নেই, বিক্রি করা যাবে না" };
+    }
+    if (left < totalQty) {
+      return { success: false, message: "স্টকে মাত্র " + left + " টি আছে, " + totalQty + " টি বিক্রি করা যাবে না" };
     }
 
     // নির্দিষ্ট স্টক ব্যাচ থেকে বিক্রি হলে সেই ব্যাচের সংখ্যা যাচাই
-    if (data.batchId) {
-      const batch = getDealerDeliveredBatches(getMasterSS(), perm.payload.dealerId).filter(function (b) {
-        return b.batchId === data.batchId && b.packageId === data.packageId;
-      })[0];
-      if (!batch) return { success: false, message: "স্টক ব্যাচ পাওয়া যায়নি" };
-      let soldInBatch = 0;
-      genericListRows(sheet).forEach(function (s) {
-        if (s["ব্যাচ"] === data.batchId && s["PackageID"] === data.packageId && s["স্ট্যাটাস"] === "বিক্রিত") soldInBatch++;
-      });
-      if (soldInBatch >= batch.qty) return { success: false, message: "এই স্টক ব্যাচের পণ্য শেষ, অন্য ব্যাচ বাছুন" };
+    if (allocs.some(function (a) { return a.batchId; })) {
+      const batches = getDealerDeliveredBatches(getMasterSS(), perm.payload.dealerId);
+      for (let k = 0; k < allocs.length; k++) {
+        const a = allocs[k];
+        if (!a.batchId) continue;
+        const batch = batches.filter(function (b) {
+          return b.batchId === a.batchId && b.packageId === data.packageId;
+        })[0];
+        if (!batch) return { success: false, message: "স্টক ব্যাচ পাওয়া যায়নি" };
+        const batchLeft = batch.qty - (soldInBatchMap[a.batchId] || 0);
+        if (batchLeft <= 0) return { success: false, message: "এই স্টক ব্যাচের পণ্য শেষ, অন্য ব্যাচ বাছুন" };
+        if (batchLeft < a.qty) {
+          return { success: false, message: "ব্যাচ " + a.batchId + " এ মাত্র " + batchLeft + " টি বাকি, " + a.qty + " টি বিক্রি করা যাবে না" };
+        }
+      }
     }
 
-    const saleId = generateId(sheet, "S");
-    genericAddRow(sheet, {
-      "SaleID": saleId,
-      "CustomerID": data.customerId,
-      "PackageID": data.packageId,
-      "তারিখ": parseSaleDate(data.date),
-      "মূল্য": data.price || 0,
-      "স্ট্যাটাস": "বিক্রিত",
-      "ব্যাচ": data.batchId || ""
+    // সব সারি একবারেই লেখা (ধারাবাহিক নতুন SaleID সহ)
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    let nextNum = Number(generateId(sheet, "S").slice(1));
+    const saleDate = parseSaleDate(data.date);
+    const saleIds = [];
+    const rows = [];
+    allocs.forEach(function (a) {
+      for (let i = 0; i < a.qty; i++) {
+        const saleId = "S" + Utilities.formatString("%04d", nextNum++);
+        saleIds.push(saleId);
+        const obj = {
+          "SaleID": saleId,
+          "CustomerID": data.customerId,
+          "PackageID": data.packageId,
+          "তারিখ": saleDate,
+          "মূল্য": data.price || 0,
+          "স্ট্যাটাস": "বিক্রিত",
+          "ব্যাচ": a.batchId || ""
+        };
+        rows.push(headers.map(function (h) { return obj.hasOwnProperty(h) ? obj[h] : ""; }));
+      }
     });
-    return { success: true, saleId: saleId, message: "বিক্রি সম্পন্ন হয়েছে" };
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
+
+    return {
+      success: true, saleId: saleIds[0], saleIds: saleIds, qty: totalQty,
+      message: totalQty > 1 ? totalQty + " টি প্যাকেট বিক্রি সম্পন্ন হয়েছে" : "বিক্রি সম্পন্ন হয়েছে"
+    };
   } finally {
     lock.releaseLock();
   }
