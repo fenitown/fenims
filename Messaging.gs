@@ -504,7 +504,7 @@ function sendCustomerMessage(data) {
 
   const ss = getDealerSpreadsheet(dealerId);
   const custSheet = getSheet(ss, "Customers");
-  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ"]);
+  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ", "WhatsApp আছে"]);
   const customers = genericListRows(custSheet);
 
   // তিন ধরনের মেসেজ: সকল গ্রাহক / প্রাপ্তির স্থান ভিত্তিক / ওয়ার্ড ভিত্তিক (+ নতুন গ্রাহকের একক মেসেজ)
@@ -546,13 +546,11 @@ function sendCustomerMessage(data) {
 
   // "যাদের নিকট WhatsApp মেসেজ যায়নি" — এই একই মেসেজ WhatsApp এ যাদের কাছে গেছে তাদের বাদ
   if (channel === "sms_nowa") {
-    targeted = targeted.filter(function (c) {
-      return !(c["মেসেজ আইডি"] === rec.id && c["WhatsApp"] === MSG_STATUS_OK);
-    });
+    targeted = targeted.filter(function (c) { return !hasWhatsApp_(c); });
     if (targeted.length === 0) {
       return {
         success: true, total: 0, invalid: 0, smsEnabled: true, smsSent: 0, smsFailed: 0, waEnabled: false, waSent: 0, waFailed: 0,
-        message: "সবার কাছেই WhatsApp এ মেসেজ গেছে — SMS পাঠানোর কেউ নেই"
+        message: "সবার নম্বরেই WhatsApp আছে — SMS পাঠানোর কেউ নেই"
       };
     }
   }
@@ -610,6 +608,11 @@ const MSG_STATUS_OK = "গেছে";
 const MSG_STATUS_FAIL = "যায়নি";
 const MSG_TYPE_NEW_CUSTOMER = "নতুন গ্রাহক";
 const MSG_REUSE_WINDOW_MS = 6 * 60 * 60 * 1000;   // একই মেসেজের ফলো-আপ (WhatsApp→SMS) ৬ ঘণ্টার মধ্যে ধরা হয়
+
+/* গ্রাহকের নম্বরে WhatsApp আছে কিনা — গ্রাহক তালিকার "WhatsApp আছে" টিক (হ্যাঁ) */
+function hasWhatsApp_(c) {
+  return String(c["WhatsApp আছে"] === undefined || c["WhatsApp আছে"] === null ? "" : c["WhatsApp আছে"]).trim() !== "";
+}
 
 /*******************************************************
  * শীটে কলাম না থাকলে শেষে যোগ করে (বিদ্যমান ডিলারদের শীটের জন্য)
@@ -887,7 +890,7 @@ function prepareCustomerMessageInner_(data, dealerId) {
 
   const ss = getDealerSpreadsheet(dealerId);
   const custSheet = getSheet(ss, "Customers");
-  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ"]);
+  ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ", "WhatsApp আছে"]);
   const customers = genericListRows(custSheet);
 
   const sel = selectMessageTargets_(data, customers);
@@ -898,10 +901,10 @@ function prepareCustomerMessageInner_(data, dealerId) {
   const rec = resolveMessageRecord(msgSheet, mainText, data.type, statusText, data.baseMessageId);
 
   if (channel === "sms_nowa") {
-    targeted = targeted.filter(function (c) { return !(c["মেসেজ আইডি"] === rec.id && c["WhatsApp"] === MSG_STATUS_OK); });
+    targeted = targeted.filter(function (c) { return !hasWhatsApp_(c); });
     if (targeted.length === 0) {
       return { success: true, total: 0, invalid: 0, units: [], jobId: "", messageId: rec.id, channel: channel,
-        message: "সবার কাছেই WhatsApp এ মেসেজ গেছে — SMS পাঠানোর কেউ নেই" };
+        message: "সবার নম্বরেই WhatsApp আছে — SMS পাঠানোর কেউ নেই" };
     }
   }
 

@@ -45,3 +45,48 @@ function setCustomerCards(data) {
     lock.releaseLock();
   }
 }
+
+/*******************************************************
+ * গ্রাহক তালিকার "WhatsApp আছে" চেকবক্স — যাদের নম্বরে WhatsApp আছে
+ * Customers শীটে "WhatsApp আছে" কলাম না থাকলে নিজে থেকে যোগ হয়
+ * (আগের "WhatsApp" কলামটি মেসেজ পাঠানোর স্ট্যাটাসের — সেটা আলাদা)
+ *
+ * data: { token, customerIds: [...], has: true|false }
+ *   has=true  → "WhatsApp আছে" কলামে "হ্যাঁ"
+ *   has=false → কলাম খালি
+ *******************************************************/
+function setCustomerWhatsApp(data) {
+  const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
+  if (!perm.ok) return { success: false, message: perm.message };
+  const ids = Array.isArray(data.customerIds) ? data.customerIds : [];
+  if (ids.length === 0) return { success: false, message: "কোনো গ্রাহক নির্বাচন করা হয়নি" };
+
+  const ss = getDealerSpreadsheet(perm.payload.dealerId);
+  const sheet = getSheet(ss, "Customers");
+  ensureSheetColumns(sheet, ["WhatsApp আছে"]);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { success: false, message: "গ্রাহক পাওয়া যায়নি" };
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const iId = headers.indexOf("CustomerID"), iWa = headers.indexOf("WhatsApp আছে");
+    if (iId === -1 || iWa === -1) return { success: false, message: "WhatsApp আছে কলাম পাওয়া যায়নি" };
+
+    const n = lastRow - 1;
+    const idCol = sheet.getRange(2, iId + 1, n, 1).getValues();
+    const waCol = sheet.getRange(2, iWa + 1, n, 1).getValues();
+    const want = {};
+    ids.forEach(function (id) { want[String(id)] = true; });
+    const value = data.has ? "হ্যাঁ" : "";
+    let count = 0;
+    for (let r = 0; r < n; r++) {
+      if (want[String(idCol[r][0])]) { waCol[r][0] = value; count++; }
+    }
+    sheet.getRange(2, iWa + 1, n, 1).setValues(waCol);
+    return { success: true, updated: count, message: "আপডেট হয়েছে" };
+  } finally {
+    lock.releaseLock();
+  }
+}

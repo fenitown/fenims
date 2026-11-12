@@ -125,7 +125,9 @@ const DEALER_SHEETS_DEF = {
     // সর্বশেষ মেসেজ কার কাছে গেছে (মেসেজ পাঠালে নিজে থেকে আপডেট হয়)
     "WhatsApp", "SMS", "মেসেজ আইডি",
     // রেফারেন্স — শীটের শেষে যোগ হয় (বিদ্যমান কলামের জায়গা বদলায় না); ফরম/তালিকায় কার্ড ফি এর পরে দেখায়
-    "রেফারেন্স"
+    "রেফারেন্স",
+    // WhatsApp আছে — টিক (হ্যাঁ) থাকলে ঐ নম্বরে WhatsApp আছে; SMS "যাদের WhatsApp নাই" ফিল্টার এটা দেখে
+    "WhatsApp আছে"
   ],
   "Sales": [
     "SaleID", "CustomerID", "PackageID", "তারিখ", "মূল্য", "স্ট্যাটাস",
@@ -1093,6 +1095,9 @@ function runAction(action, data) {
         break;
       case "setCustomerCards":
         result = setCustomerCards(data);
+        break;
+      case "setCustomerWhatsApp":
+        result = setCustomerWhatsApp(data);
         break;
       case "prepareCustomerMessage":
         result = prepareCustomerMessage(data);

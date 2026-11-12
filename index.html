@@ -1062,12 +1062,12 @@
             <label class="radio-line"><input type="radio" name="msgChannel" value="sms" onchange="onMsgChannelChange()"> SMS</label>
             <div id="msgSmsModeBox" style="display:none;margin-left:24px;">
               <label class="radio-line"><input type="radio" name="msgSmsMode" value="all" checked onchange="updateMsgPreview()"> সকল গ্রাহক</label>
-              <label class="radio-line"><input type="radio" name="msgSmsMode" value="nowa" onchange="updateMsgPreview()"> শুধুমাত্র যাদের WhatsApp নাই</label>
+              <label class="radio-line"><input type="radio" name="msgSmsMode" value="nowa" onchange="updateMsgPreview()"> শুধুমাত্র যাদের WhatsApp নাই (গ্রাহক তালিকার "WhatsApp আছে" টিক নেই)</label>
             </div>
           </div>
           <p id="msgChannelNote" style="font-size:0.78rem;color:var(--muted);">
             প্রতিটি মেসেজের প্রথম লাইনে শুধু <b>গ্রাহকের নাম</b> নিজে থেকে বসে যাবে; বাকি মেসেজ ও আপনার <b>নাম/এরিয়া</b> নিজে লিখবেন। যে মাধ্যম বাছবেন শুধু সেটাতেই যাবে, দুটোতে একসাথে যাবে না।
-            আগের মেসেজ তালিকা থেকে বেছে লেখা এডিট করে অন্য এরিয়াতেও পাঠানো যায়। WhatsApp এ পাঠিয়ে পরে একই মেসেজ <b>SMS → শুধুমাত্র যাদের WhatsApp নাই</b> বেছে পাঠালে শুধু বাকিদের কাছে SMS যাবে।
+            আগের মেসেজ তালিকা থেকে বেছে লেখা এডিট করে অন্য এরিয়াতেও পাঠানো যায়। গ্রাহক তালিকায় যাদের নম্বরে WhatsApp আছে তাদের "WhatsApp আছে" ঘরে টিক দিন। <b>SMS → শুধুমাত্র যাদের WhatsApp নাই</b> বাছলে শুধু টিক-ছাড়া গ্রাহকদের কাছে SMS যাবে।
           </p>
           <div id="msgPreviewBox" style="font-size:0.8rem;background:#f6f3ea;border:1px dashed #d8d2c2;border-radius:8px;padding:8px 10px;margin-bottom:8px;white-space:pre-wrap;"></div>
           <div id="msgCostBox" style="font-size:0.85rem;background:#fff7e6;border:1px solid #e8d3a0;border-radius:8px;padding:8px 10px;margin-bottom:8px;display:none;"></div>
@@ -2062,8 +2062,7 @@ function countMsgRecipients(rawText){
   const aud = getMsgAudience();
   let list = aud.list;
   if(getMsgChannel() === "sms_nowa"){
-    const id = clientResolveMsgId(rawText, aud.statusText);
-    if(id) list = list.filter(c => !(c["মেসেজ আইডি"] === id && c["WhatsApp"] === "গেছে"));
+    list = list.filter(c => !waHas(c));   // যাদের WhatsApp নাই (টিক নাই) শুধু তারা
   }
   const seen = {};
   list.forEach(c => { const n = normMobileBD(c["মোবাইল নং"]); if(/^8801[0-9]{9}$/.test(n)) seen[n] = true; });
@@ -5988,6 +5987,20 @@ async function toggleCustomerCard(id, checked, el){
   clearCache();
 }
 
+/* "WhatsApp আছে" — গ্রাহকের নম্বরে WhatsApp আছে কিনা (টিক = আছে) */
+function waHas(c){ return String(c["WhatsApp আছে"] == null ? "" : c["WhatsApp আছে"]).trim() !== ""; }
+async function toggleCustomerWhatsApp(id, checked, el){
+  el.disabled = true;
+  const r = await apiCall("setCustomerWhatsApp", { customerIds: [id], has: checked });
+  el.disabled = false;
+  if(!r.success){ el.checked = !checked; alert(r.message || "আপডেট হয়নি"); return; }
+  [window.__customersCache, ccCustomersCache, allCustomersCache].forEach(arr => {
+    const c = (arr || []).find(x => x["CustomerID"] === id);
+    if(c) c["WhatsApp আছে"] = checked ? "হ্যাঁ" : "";
+  });
+  clearCache();
+}
+
 /*******************************************************
  * গ্রাহক তথ্য কার্ড — ৩.২in x ২.২in, QR সহ
  * হেডার: সংস্থার নাম + ডিলারের এরিয়া; ফুটার: ডিলারের নাম | মোবাইল নং
@@ -6689,7 +6702,7 @@ function enqueueNewCustomer(data, msgBox){
 }
 
 function pendingCustomerRowsHtml(searchQ){
-  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td class="no-print">—</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -7078,10 +7091,10 @@ function renderCustomersTable(customers){
   const _info = document.getElementById("cusSearchInfo");
   if(_info) _info.textContent = (_q || (_fk && _fv)) ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
   const table = document.getElementById("customersTable");
-  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th>তারিখ</th><th class='no-print'>কার্ড</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
+  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp আছে</th><th>তারিখ</th><th class='no-print'>কার্ড</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
   const pendHtml = pendingCustomerRowsHtml(_q);
-  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(18, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
-  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
+  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(19, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td class="no-print"><input type="checkbox" ${waHas(c) ? "checked" : ""} onchange="toggleCustomerWhatsApp('${c["CustomerID"]}', this.checked, this)" title="এই নম্বরে WhatsApp আছে"></td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
       <td class="no-print"><input type="checkbox" ${ccGiven(c) ? "checked" : ""} onchange="toggleCustomerCard('${c["CustomerID"]}', this.checked, this)" title="কার্ড দেওয়া হয়েছে"></td>
       <td class="no-print" style="white-space:nowrap;">${escMsgHtml(c["মেসেজ তারিখ"] || "—")}</td><td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
@@ -7169,6 +7182,7 @@ function openPrintOpt(ctx){
   // বিক্রয় তথ্য: নির্দিষ্ট গ্রাহক / সকল / ওয়ার্ড / রেফারেন্স ভিত্তিক
   const modes = ctx === "salesinfo" ? [["one","নির্দিষ্ট গ্রাহক"],["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]] : [["all","সকল গ্রাহক"],["ward","ওয়ার্ড ভিত্তিক"]];
   modes.push(["loc","প্রাপ্তির স্থান ভিত্তিক"]); modes.push(["ref","রেফারেন্স ভিত্তিক"]);
+  if(ctx === "customers") modes.push(["noref","রেফারেন্স ছাড়া"]);
   document.getElementById("poSoldWrap").style.display = ctx === "salesinfo" ? "" : "none";
   document.getElementById("poMode").innerHTML = modes.map(m => `<option value="${m[0]}">${m[1]}</option>`).join("");
   refreshPrintOptValues();
@@ -7190,7 +7204,7 @@ function refreshPrintOptValues(){
   const mode = document.getElementById("poMode").value;
   const wrap = document.getElementById("poValueWrap");
   document.getElementById("poSearchWrap").style.display = mode === "one" ? "" : "none";
-  if(mode === "all"){ wrap.style.display = "none"; return; }
+  if(mode === "all" || mode === "noref"){ wrap.style.display = "none"; return; }
   const customers = poCustomers();
   if(mode === "one"){
     document.getElementById("poSearch").value = "";
@@ -7215,6 +7229,7 @@ function refreshPrintOptValues(){
 /* গ্রাহকদের গ্রুপে ভাগ করা — ফেরত: { groups:[{label, items}], desc } */
 function groupCustomersForPrint(customers, mode, value){
   if(mode === "all") return { groups: [{ label: "", items: customers }], desc: "সকল গ্রাহক" };
+  if(mode === "noref") return { groups: [{ label: "", items: customers.filter(c => poKey(c, "ref") === "") }], desc: "রেফারেন্স ছাড়া" };
   const fmt = k => k === "" ? "(" + PO_KEY_LABELS[mode] + " নেই)" : (mode === "ward" ? wardLabel(k) : (PO_KEY_LABELS[mode] + ": " + k));
   if(value !== "__all__"){
     const target = value === "__none__" ? "" : value;
@@ -7231,7 +7246,7 @@ function groupCustomersForPrint(customers, mode, value){
 
 function runPrintOpt(share){
   const mode = document.getElementById("poMode").value;
-  const value = mode === "all" ? "" : document.getElementById("poValue").value;
+  const value = (mode === "all" || mode === "noref") ? "" : document.getElementById("poValue").value;
   if(mode === "one" && !value){ alert("আগে একজন গ্রাহক সিলেক্ট করুন"); return; }
   const grouped = mode === "one"
     ? { groups: [{ label: "", items: poCustomers().filter(c => c["CustomerID"] === value) }], desc: "নির্দিষ্ট গ্রাহক" }
