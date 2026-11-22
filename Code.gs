@@ -1099,6 +1099,9 @@ function runAction(action, data) {
       case "setCustomerWhatsApp":
         result = setCustomerWhatsApp(data);
         break;
+      case "setCustomerStatus":
+        result = setCustomerStatus(data);
+        break;
       case "prepareCustomerMessage":
         result = prepareCustomerMessage(data);
         break;

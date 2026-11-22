@@ -214,6 +214,10 @@
   table td.cell-left{ text-align:left; }
   table th.cell-left{ text-align:center; } /* হেডার সবসময় সেন্টার */
   .table-wrap{ overflow-x:auto; margin-top:10px; }
+  /* গ্রাহক তালিকা: টেবিল স্ক্রিনের উচ্চতার মধ্যে থাকে, তাই অনুভূমিক স্ক্রলবার সব সময় নিচে দৃশ্যমান; হেডারও আটকে থাকে */
+  .table-wrap.cus-scroll{ overflow:auto; max-height:calc(100vh - 170px); }
+  .table-wrap.cus-scroll thead th{ position:sticky; top:0; z-index:5; box-shadow:0 1px 0 #cfd8d3; }
+  @media print{ .table-wrap.cus-scroll{ max-height:none; overflow:visible; } }
   .table-wrap td.no-print{ white-space:nowrap; }
   .table-wrap td.no-print .btn{ display:inline-block; margin-right:5px; }
   .table-wrap td.no-print .btn:last-child{ margin-right:0; }
@@ -931,7 +935,7 @@
         <select id="cusFilterValue" onchange="renderCustomersTable(window.__customersCache || [])" style="display:none;padding:9px 10px;border:1px solid #cfd8d3;"></select>
         <span id="cusSearchInfo" style="font-size:0.85rem;color:var(--muted);"></span>
       </div>
-      <div class="table-wrap"><table id="customersTable"><thead></thead><tbody></tbody></table></div>
+      <div class="table-wrap cus-scroll"><table id="customersTable"><thead></thead><tbody></tbody></table></div>
     </section>
 
     <section class="section" id="sec-messages">
@@ -2013,8 +2017,9 @@ async function loadMsgBatchData(){
   if([...sel.options].some(o => o.value === prev)) sel.value = prev;
   updateMsgPreview();
 }
+function custIsActive(c){ return String(c["স্ট্যাটাস"] == null ? "" : c["স্ট্যাটাস"]).trim() !== "ডিএক্টিভ"; }
 function getMsgAudience(){
-  const customers = window.__customersCache || [];
+  const customers = (window.__customersCache || []).filter(custIsActive);
   const type = document.getElementById("msgType").value;
   let list = customers, label = "সকল গ্রাহক";
   if(type === "location" || type === "ward" || type === "ref"){
@@ -5987,6 +5992,21 @@ async function toggleCustomerCard(id, checked, el){
   clearCache();
 }
 
+/* গ্রাহকের স্ট্যাটাস (এক্টিভ/ডিএক্টিভ) — ডিএক্টিভ হলে বিক্রি তালিকায় দেখাবে না ও মেসেজ যাবে না */
+async function changeCustomerStatus(id, status, el){
+  const prev = status === "ডিএক্টিভ" ? "এক্টিভ" : "ডিএক্টিভ";
+  el.disabled = true;
+  const r = await apiCall("setCustomerStatus", { customerIds: [id], status: status });
+  el.disabled = false;
+  if(!r.success){ el.value = prev; alert(r.message || "আপডেট হয়নি"); return; }
+  [window.__customersCache, ccCustomersCache, allCustomersCache].forEach(arr => {
+    const c = (arr || []).find(x => x["CustomerID"] === id);
+    if(c) c["স্ট্যাটাস"] = status;
+  });
+  el.style.color = status === "ডিএক্টিভ" ? "#b3261e" : "";
+  clearCache();
+}
+
 /* "WhatsApp আছে" — গ্রাহকের নম্বরে WhatsApp আছে কিনা (টিক = আছে) */
 function waHas(c){ return String(c["WhatsApp আছে"] == null ? "" : c["WhatsApp আছে"]).trim() !== ""; }
 async function toggleCustomerWhatsApp(id, checked, el){
@@ -6702,7 +6722,7 @@ function enqueueNewCustomer(data, msgBox){
 }
 
 function pendingCustomerRowsHtml(searchQ){
-  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td class="no-print">—</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
+  return _cusQueue.filter(q => !searchQ || cusMatches(q.data["নাম"], q.data.mobile, q.data.nid, searchQ)).map(q => `<tr style="color:var(--muted);background:#fafaf6"><td>⏳</td><td class="cell-left name-cell">${cusFit(escMsgHtml(q.data["নাম"]))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["পিতারনাম"]||""))}</td><td>${telLink(q.data.mobile, cusFit(escMsgHtml(q.data.mobile||"")))}</td><td>${cusFit(escMsgHtml(q.data.nid||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["বাড়িরনাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(q.data.ward||""))}</td><td class="cell-left">${cusFit(escMsgHtml(q.data.union||""))}</td><td>${cusFit(escMsgHtml(q.data.praptirsthan||""))}</td><td>${q.data.cardFee||0}</td><td>${cusFit(escMsgHtml(q.data.reference||""))}</td><td class="no-print">—</td><td class="no-print">এক্টিভ</td><td>—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">—</td><td class="no-print">${q.status === "failed" ? "সংরক্ষণ হয়নি" : "সংরক্ষণ হচ্ছে…"}</td></tr>`).join("");
 }
 
 function refreshCusQueueUI(){
@@ -7091,10 +7111,10 @@ function renderCustomersTable(customers){
   const _info = document.getElementById("cusSearchInfo");
   if(_info) _info.textContent = (_q || (_fk && _fv)) ? (_list.length + " জন পাওয়া গেছে (মোট " + customers.length + ")") : "";
   const table = document.getElementById("customersTable");
-  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp আছে</th><th>তারিখ</th><th class='no-print'>কার্ড</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
+  const head = "<thead><tr><th>আইডি</th><th class='cell-left'>নাম</th><th class='cell-left'>পিতার নাম</th><th>মোবাইল</th><th>NID/জন্মসনদ নং</th><th class='cell-left'>বাড়ির নাম</th><th class='cell-left'>গ্রাম</th><th>ওয়ার্ড</th><th class='cell-left'>ইউনিয়ন/পৌরসভা</th><th>প্রাপ্তির স্থান</th><th>কার্ড ফি</th><th>রেফারেন্স</th><th class='no-print'>WhatsApp আছে</th><th class='no-print'>স্ট্যাটাস</th><th>তারিখ</th><th class='no-print'>কার্ড</th><th class='no-print'>মেসেজ তারিখ</th><th class='no-print'>WhatsApp</th><th class='no-print'>SMS</th><th class='no-print'>একশন</th></tr></thead>";
   const pendHtml = pendingCustomerRowsHtml(_q);
-  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(19, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
-  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td class="no-print"><input type="checkbox" ${waHas(c) ? "checked" : ""} onchange="toggleCustomerWhatsApp('${c["CustomerID"]}', this.checked, this)" title="এই নম্বরে WhatsApp আছে"></td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
+  if(_list.length === 0 && !pendHtml){ table.innerHTML = head + "<tbody>" + emptyRowHtml(20, _q ? "এই তথ্যে কোনো গ্রাহক পাওয়া যায়নি" : "এখনো কোনো গ্রাহক যোগ করা হয়নি") + "</tbody>"; return; }
+  const rows = _list.map(c => `<tr><td>${c["CustomerID"]}</td><td class="cell-left name-cell">${cusFit(escMsgHtml(c["নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["পিতার নাম"]||""))}</td><td>${telLink(c["মোবাইল নং"], cusFit(escMsgHtml(c["মোবাইল নং"]||"")))}</td><td>${cusFit(escMsgHtml(c["NID/জন্মসনদ নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["বাড়ির নাম"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["গ্রাম"]||""))}</td><td>${cusFit(escMsgHtml(c["ওয়ার্ড নং"]||""))}</td><td class="cell-left">${cusFit(escMsgHtml(c["ইউনিয়ন/পৌরসভা"]||""))}</td><td>${cusFit(escMsgHtml(c["প্রাপ্তির স্থান"]||""))}</td><td>${c["কার্ড ফি"]||0}</td><td>${cusFit(escMsgHtml(c["রেফারেন্স"]||""))}</td><td class="no-print"><input type="checkbox" ${waHas(c) ? "checked" : ""} onchange="toggleCustomerWhatsApp('${c["CustomerID"]}', this.checked, this)" title="এই নম্বরে WhatsApp আছে"></td><td class="no-print"><select onchange="changeCustomerStatus('${c["CustomerID"]}', this.value, this)" style="padding:4px 6px;${custIsActive(c) ? "" : "color:#b3261e;"}"><option value="এক্টিভ"${custIsActive(c) ? " selected" : ""}>এক্টিভ</option><option value="ডিএক্টিভ"${custIsActive(c) ? "" : " selected"}>ডিএক্টিভ</option></select></td><td>${cusFit(escMsgHtml(cusDateText(c)))}</td>
       <td class="no-print"><input type="checkbox" ${ccGiven(c) ? "checked" : ""} onchange="toggleCustomerCard('${c["CustomerID"]}', this.checked, this)" title="কার্ড দেওয়া হয়েছে"></td>
       <td class="no-print" style="white-space:nowrap;">${escMsgHtml(c["মেসেজ তারিখ"] || "—")}</td><td class="no-print">${msgStatusChip(c["WhatsApp"])}</td><td class="no-print">${msgStatusChip(c["SMS"])}</td>
       <td class="no-print"><div class="act-row">
@@ -7171,7 +7191,7 @@ let printOptCtx = null;
 const PO_KEY_LABELS = { ward:"ওয়ার্ড নং", loc:"প্রাপ্তির স্থান", ref:"রেফারেন্স" };
 const PO_FIELD = { ward:"ওয়ার্ড নং", loc:"প্রাপ্তির স্থান", ref:"রেফারেন্স" };
 
-function poCustomers(){ return (printOptCtx === "sales" || printOptCtx === "salesinfo") ? allCustomersCache : (window.__customersCache || []); }
+function poCustomers(){ return (printOptCtx === "sales" || printOptCtx === "salesinfo") ? allCustomersCache.filter(custIsActive) : (window.__customersCache || []); }
 function poKey(c, mode){ const v = c[PO_FIELD[mode]]; return String(v == null ? "" : v).trim(); }
 
 function openPrintOpt(ctx){
@@ -7578,7 +7598,7 @@ async function loadSalesView(){
 function getSalesViewData(){
   const pkgId = document.getElementById("saleFilterPackage").value;
   const sel = document.getElementById("saleFilterLocation").value;
-  let customers = allCustomersCache;
+  let customers = allCustomersCache.filter(custIsActive);
   let filterText = "";
   if(sel.indexOf("loc:") === 0){
     const loc = sel.slice(4);

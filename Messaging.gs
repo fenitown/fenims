@@ -505,7 +505,7 @@ function sendCustomerMessage(data) {
   const ss = getDealerSpreadsheet(dealerId);
   const custSheet = getSheet(ss, "Customers");
   ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ", "WhatsApp আছে"]);
-  const customers = genericListRows(custSheet);
+  const customers = genericListRows(custSheet).filter(function (c) { return !isCustomerDeactive(c); });   // ডিএক্টিভ গ্রাহক মেসেজ পাবে না
 
   // তিন ধরনের মেসেজ: সকল গ্রাহক / প্রাপ্তির স্থান ভিত্তিক / ওয়ার্ড ভিত্তিক (+ নতুন গ্রাহকের একক মেসেজ)
   let targeted = customers;
@@ -891,7 +891,7 @@ function prepareCustomerMessageInner_(data, dealerId) {
   const ss = getDealerSpreadsheet(dealerId);
   const custSheet = getSheet(ss, "Customers");
   ensureSheetColumns(custSheet, ["WhatsApp", "SMS", "মেসেজ আইডি", "মেসেজ তারিখ", "WhatsApp আছে"]);
-  const customers = genericListRows(custSheet);
+  const customers = genericListRows(custSheet).filter(function (c) { return !isCustomerDeactive(c); });   // ডিএক্টিভ গ্রাহক মেসেজ পাবে না
 
   const sel = selectMessageTargets_(data, customers);
   let targeted = sel.targeted;
@@ -1007,7 +1007,7 @@ function sendMessageChunkInner_(data, dealerId) {
 
   const ss = getDealerSpreadsheet(dealerId);
   const custSheet = getSheet(ss, "Customers");
-  const customers = genericListRows(custSheet);
+  const customers = genericListRows(custSheet).filter(function (c) { return !isCustomerDeactive(c); });
   const byId = {};
   customers.forEach(function (c) { byId[c["CustomerID"]] = c; });
 

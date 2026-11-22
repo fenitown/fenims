@@ -90,3 +90,51 @@ function setCustomerWhatsApp(data) {
     lock.releaseLock();
   }
 }
+
+/*******************************************************
+ * গ্রাহকের "স্ট্যাটাস" (এক্টিভ / ডিএক্টিভ) — গ্রাহক তালিকার ড্রপডাউন
+ * Customers শীটে "স্ট্যাটাস" কলাম না থাকলে নিজে থেকে যোগ হয় (খালি = এক্টিভ)
+ * ডিএক্টিভ গ্রাহক বিক্রি তালিকায় দেখায় না এবং মেসেজ পায় না
+ *
+ * data: { token, customerIds: [...], status: "এক্টিভ" | "ডিএক্টিভ" }
+ *******************************************************/
+const CUSTOMER_STATUS_DEACTIVE = "ডিএক্টিভ";
+function isCustomerDeactive(c) {
+  return String(c["স্ট্যাটাস"] === undefined || c["স্ট্যাটাস"] === null ? "" : c["স্ট্যাটাস"]).trim() === CUSTOMER_STATUS_DEACTIVE;
+}
+
+function setCustomerStatus(data) {
+  const perm = checkPermission(data.token, ["Admin", "প্রতিনিধি"]);
+  if (!perm.ok) return { success: false, message: perm.message };
+  const ids = Array.isArray(data.customerIds) ? data.customerIds : [];
+  if (ids.length === 0) return { success: false, message: "কোনো গ্রাহক নির্বাচন করা হয়নি" };
+  const status = data.status === CUSTOMER_STATUS_DEACTIVE ? CUSTOMER_STATUS_DEACTIVE : "এক্টিভ";
+
+  const ss = getDealerSpreadsheet(perm.payload.dealerId);
+  const sheet = getSheet(ss, "Customers");
+  ensureSheetColumns(sheet, ["স্ট্যাটাস"]);
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { success: false, message: "গ্রাহক পাওয়া যায়নি" };
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const iId = headers.indexOf("CustomerID"), iSt = headers.indexOf("স্ট্যাটাস");
+    if (iId === -1 || iSt === -1) return { success: false, message: "স্ট্যাটাস কলাম পাওয়া যায়নি" };
+
+    const n = lastRow - 1;
+    const idCol = sheet.getRange(2, iId + 1, n, 1).getValues();
+    const stCol = sheet.getRange(2, iSt + 1, n, 1).getValues();
+    const want = {};
+    ids.forEach(function (id) { want[String(id)] = true; });
+    let count = 0;
+    for (let r = 0; r < n; r++) {
+      if (want[String(idCol[r][0])]) { stCol[r][0] = status; count++; }
+    }
+    sheet.getRange(2, iSt + 1, n, 1).setValues(stCol);
+    return { success: true, updated: count, message: "আপডেট হয়েছে" };
+  } finally {
+    lock.releaseLock();
+  }
+}
