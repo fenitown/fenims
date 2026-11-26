@@ -264,6 +264,8 @@
   .si-totals input{ width:100%; padding:2px 8px; height:26px; box-sizing:border-box; font-size:0.9rem; line-height:1.2; margin:0; text-align:right; border:1px solid #cfd8d3; background:#fff; }
   .si-totals input[readonly]{ background:#f4f7f5; font-weight:700; }
   .si-totals input:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 2px rgba(21,63,55,0.12); }
+  .si-changed{ color:#b5502f; font-size:0.78rem; font-weight:600; }
+  .si-edit-btn.active{ background:#153f37; color:#fff; }
   /* অর্ডার ইনভয়েস — প্যাকেজ ব্লক (ভাউচার ধাঁচ): প্যাকেজ সিলেক্ট করলে পণ্য তালিকা বসে */
   .si-pkg-block{ border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px; background:#fff; }
   .si-pkg-head{ display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px; }
@@ -393,7 +395,7 @@
 <div id="loginScreen">
   <div class="login-box">
     <div class="login-avatar">fenims</div>
-    <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+    <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
     <p class="tagline">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
     <p class="sub">ইউজার, ইউজারনেম ও পাসওয়ার্ড দিয়ে প্রবেশ করুন</p>
     <div class="field">
@@ -772,7 +774,7 @@
         <div class="btn-row">
           <button class="btn" id="siSubmitBtn" onclick="submitSalesInvoice()">সংরক্ষণ করুন</button>
           <button class="btn secondary" type="button" onclick="addSiItemRow()">+ আরেকটি প্যাকেজ যোগ করুন</button>
-          <button class="btn secondary" id="siCancelBtn" onclick="cancelSiEdit()" style="display:none;">বাতিল</button>
+          <button class="btn secondary" id="siCancelBtn" onclick="closeSiForm()">বাতিল</button>
         </div>
         <div id="siMsg" class="msg"></div>
       </fieldset>
@@ -1135,7 +1137,7 @@
    ============================================================ */
 /* বাংলা অঙ্ক → ইংরেজি অঙ্ক; শপের পুরনো নাম → নতুন নাম (সব API উত্তরে) */
 function toEnDigits(v){ return String(v == null ? "" : v).replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d))); }
-function fixOrgName(t){ return t.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)"); }
+function fixOrgName(t){ return t.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, "ফেনী মানবিক সহায়তা স্বস্তির বাজার"); }
 function fixCustDigits(c){
   if(!c || typeof c !== "object") return;
   ["মোবাইল নং", "NID/জন্মসনদ নং", "ওয়ার্ড নং"].forEach(k => { if(c[k] != null && c[k] !== "") c[k] = toEnDigits(c[k]); });
@@ -1558,7 +1560,7 @@ function printOfficialTable(title, subtitle, headers, rows, extraFooterRows, foo
     ${opts.shareSpecs ? '<div class="share-bar no-print"><button onclick="doShare()">শেয়ার (ছবি)</button></div>' : ''}
     <div class="sheet">
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">${title}</div>
     </div>
@@ -1652,7 +1654,7 @@ async function doLogin(){
 
 async function applyAgencyBranding(){
   const agencyRes = await cachedApiCall("getAgencyInfo", {}, 60000);
-  const agencyName = (agencyRes.success && agencyRes.agency["নাম"]) ? agencyRes.agency["নাম"] : "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)";
+  const agencyName = (agencyRes.success && agencyRes.agency["নাম"]) ? agencyRes.agency["নাম"] : "ফেনী মানবিক সহায়তা স্বস্তির বাজার";
   const agencyLogoUrl = (agencyRes.success && agencyRes.agency["লোগো(URL)"]) ? agencyRes.agency["লোগো(URL)"] : "";
   if(!state.token) return;   // এর মধ্যে লগআউট হয়ে গেলে কিছু করবে না
 
@@ -1796,6 +1798,24 @@ function toggleSiForm(){
   const show = wrap.style.display === "none";
   wrap.style.display = show ? "block" : "none";
   btn.textContent = show ? "✕ ফরম বন্ধ করুন" : "+ অর্ডার ইনভয়েস ফরম";
+  if(!show) siDiscardProductChanges();   // সংরক্ষণ ছাড়া ফরম বন্ধ করলে পণ্য-বদল থাকে না — মূল প্যাকেজই ফিরে আসে
+}
+/* "বাতিল" — ফরম রিসেট করে বন্ধ করা */
+function closeSiForm(){
+  cancelSiEdit();
+  document.getElementById("siFormWrap").style.display = "none";
+  document.getElementById("siFormToggleBtn").textContent = "+ অর্ডার ইনভয়েস ফরম";
+}
+/* সংরক্ষণ না করা পণ্য-বদল ফেলে দেওয়া (মূল প্যাকেজ অপরিবর্তিত থাকে) */
+function siDiscardProductChanges(){
+  if(window.__siEditingInvoiceNo){ cancelSiEdit(); return; }
+  document.querySelectorAll("#siItems .si-pkg-block").forEach(b => {
+    if(b._custom && Object.keys(b._custom).length === 0 && b.dataset.edit !== "1") return;
+    b._custom = {}; b.dataset.edit = "0";
+    const eb = b.querySelector(".si-edit-btn"); if(eb){ eb.textContent = "✎ পণ্য এডিট"; eb.classList.remove("active"); }
+    renderSiBlock(b);
+  });
+  updateSiTotalsPreview();
 }
 function showSiForm(){
   document.getElementById("siFormWrap").style.display = "block";
@@ -2530,7 +2550,7 @@ function renderRegisterForm(box){
   if(box && box.id === "dealerMgmtContent") markDealerMgmtTab("register");
   box.innerHTML = `
     <div class="official-letterhead">
-      <div class="ol-title">ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</div>
+      <div class="ol-title">ফেনী মানবিক সহায়তা স্বস্তির বাজার</div>
       <div class="ol-tagline">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</div>
       <div class="ol-formtitle" id="registerFormLegend">ডিলার নিয়োগ / রেজিস্ট্রেশন ফরম</div>
     </div>
@@ -3014,7 +3034,7 @@ function printOfficialDealerForm(d){
       .sign-line{ border-top:1px solid #333; margin-top:40px; padding-top:4px; font-size:12px; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
     </div>
     <div class="form-title">ডিলার নিয়োগ / রেজিস্ট্রেশন ফরম</div>
@@ -4371,7 +4391,7 @@ function printStockVoucherById(voucherNo){
       .doc-footer{ margin-top:30px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">স্টক ভাউচার</div>
     </div>
@@ -4512,6 +4532,7 @@ function addSiItemRow(){
       <select class="siPackage" onchange="onSiPackageChange(this)"><option value="">-- প্যাকেজ সিলেক্ট করুন --</option>${packages.map(p => `<option value="${p['PackageID']}">${p['নাম']}</option>`).join("")}</select>
       <div class="si-qty-wrap"><label>প্যাকেজ সংখ্যা</label><input type="number" min="1" value="1" class="siQty" oninput="onSiQtyChange(this)"></div>
       ${isFirst ? `<div class="si-qty-wrap" style="width:170px;"><label>বিক্রয়কারী</label><select id="siSeller">${siSellerOptions("")}</select></div>` : ""}
+      <button type="button" class="btn secondary small si-edit-btn" onclick="toggleSiProdEdit(this)" title="এই প্যাকেজের পণ্য বদলান — দাম নিজে থেকে বদলাবে">✎ পণ্য এডিট</button>
       ${isFirst ? "" : `<button type="button" class="btn secondary small" onclick="this.closest('.si-pkg-block').remove(); updateSiTotalsPreview();">✕</button>`}
     </div>
     <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
@@ -4534,6 +4555,7 @@ async function loadSiManagers(){
 }
 
 function onSiPackageChange(sel){
+  sel.closest(".si-pkg-block")._custom = {};   // প্যাকেজ বদলালে আগের পণ্য-বদল মুছে যায়
   renderSiBlock(sel.closest(".si-pkg-block"));
   updateSiTotalsPreview();
 }
@@ -4542,21 +4564,124 @@ function onSiQtyChange(inp){
   updateSiTotalsPreview();
 }
 
+/* প্যাকেজের একটি পণ্য-লাইনে অন্য পণ্য বসানো (অর্ডার ইনভয়েস এডিট মোড) — block._custom = { লাইনের ক্রম: {productId, per, price, text} } */
+function siPacksPer(raw, size){
+  const s = String(raw == null ? "" : raw).trim();
+  if(!s) return 1;
+  const a = parseSizeText(s);
+  if(a) return (size && size.u === a.u && size.v > 0) ? Math.round(a.v / size.v * 10000) / 10000 : a.v;
+  const n = parseFloat(toEnDigits(s));
+  return n > 0 ? n : 1;
+}
+/* প্যাকেজ লাইনের "১ কেজি" / "৪ পিস" লেখা থেকে সংখ্যা ও একক আলাদা করা */
+function siSplitQty(raw){
+  const m = toEnDigits(String(raw == null ? "" : raw)).trim().match(/^([\d.]+)\s*(.*)$/);
+  return m ? { qty: m[1], unit: m[2].trim() } : { qty: "", unit: "" };
+}
+/* নির্বাচিত পণ্য + পরিমাণের জন্য লাইনের তথ্য: মূল্য = পণ্যের কম্বো মূল্য × পরিমাণ (পিস/প্যাকেট হিসাবে) */
+function siBuildCustom(p, qty, unit){
+  const size = productSize({ "পরিমাণ": p.poriman, "একক": p.unitRaw });
+  const per = siPacksPer(qty + (unit ? " " + unit : ""), size);
+  return { productId: p.productId, qty: String(qty), unit: unit || "", per: per, price: siMoney((Number(p.combo) || 0) * per), text: p.name + " " + toBnDigits(qty) + (unit ? " " + unit : "") };
+}
+/* বদলানো পণ্যের স্টক-লাইন (স্টক চেক ও প্রিন্টের জন্য) */
+function siCustomStockLine(c){
+  const ps = (window.__siProdStock || {})[c.productId];
+  if(!ps) return null;
+  return { productId: ps.productId, name: ps.name, avail: ps.avail, unit: ps.unit, per: c.per, packType: ps.packType, packSize: ps.packSize, sizeV: ps.sizeV, sizeU: ps.sizeU };
+}
+/* একটি প্যাকেজ-ব্লকের কার্যকর স্টক-লাইন (বদল প্রয়োগ করা) */
+function siBlockLines(block, pid){
+  const pkg = (window.__siPackagesCache || []).find(p => p["PackageID"] === pid);
+  const base = ((window.__siStock || {})[pid] || []);
+  const n = pkg ? (pkg.items || []).length : base.length;
+  const out = [];
+  for(let k = 0; k < n; k++){
+    const c = block._custom && block._custom[k];
+    out.push(c ? siCustomStockLine(c) : (base[k] || null));
+  }
+  return out;
+}
+async function toggleSiProdEdit(btn){
+  const block = btn.closest(".si-pkg-block");
+  const on = block.dataset.edit !== "1";
+  if(on && Object.keys(window.__siProdStock || {}).length === 0){
+    btn.disabled = true;
+    await loadSiStock(window.__siEditingInvoiceNo || "");   // পণ্য তালিকা না এসে থাকলে আবার আনা
+    if(Object.keys(window.__siProdStock || {}).length === 0 && (productsCache || []).length){
+      // সার্ভার থেকে না এলে (পুরনো ব্যাকএন্ড) পণ্য তালিকা থেকে বানানো — স্টকের সীমা এ ক্ষেত্রে সার্ভার সংরক্ষণের সময় যাচাই করবে
+      window.__siProdStock = {};
+      productsCache.forEach(p => { window.__siProdStock[p["ProductID"]] = { productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), avail: 1e12, unit: String(p["একক"] || "পিস"), combo: Number(p["কম্বো মূল্য"]) || 0, poriman: String(p["পরিমাণ"] == null ? "" : p["পরিমাণ"]), unitRaw: String(p["একক"] || ""), packType: "", packSize: 0, sizeV: 0, sizeU: "" }; });
+    }
+    btn.disabled = false;
+    if(Object.keys(window.__siProdStock || {}).length === 0){ alert("পণ্য তালিকা আনা যায়নি। Apps Script-এ নতুন Stock.gs Deploy করা আছে কিনা দেখুন (অ্যাপের নিচের ব্যাকএন্ড ভার্সন যাচাই করুন), তারপর পেজ রিফ্রেশ করুন।"); return; }
+  }
+  block.dataset.edit = on ? "1" : "0";
+  btn.textContent = on ? "✔ এডিট শেষ" : "✎ পণ্য এডিট";
+  btn.classList.toggle("active", on);
+  renderSiBlock(block);
+}
+/* এডিট মোডে একটি লাইনের পণ্য/পরিমাণ/একক বদলালে */
+function onSiLineChange(el){
+  const tr = el.closest("tr"), block = el.closest(".si-pkg-block");
+  const k = Number(tr.dataset.k);
+  const pkg = (window.__siPackagesCache || []).find(p => p["PackageID"] === block.querySelector(".siPackage").value);
+  const it = pkg && (pkg.items || [])[k];
+  if(!it) return;
+  block._custom = block._custom || {};
+  const prods = window.__siProdStock || {};
+  const orig = siSplitQty(it["পণ্যের সংখ্যা"]);
+  const origQty = orig.qty || "1";
+  let pid = tr.querySelector(".siProdSel").value || it["ProductID"] || "";
+  const qty = (tr.querySelector(".siLineQty").value || "").trim();
+  const unit = tr.querySelector(".siLineUnit").value;
+  const sameProduct = !tr.querySelector(".siProdSel").value || pid === it["ProductID"];
+  const sameQty = Number(qty) === Number(origQty) && unit === orig.unit;
+  const p = prods[pid];
+  if(!p || (sameProduct && sameQty) || !(Number(qty) > 0)) delete block._custom[k];
+  else block._custom[k] = siBuildCustom(p, qty, unit);
+  renderSiBlock(block);
+  updateSiTotalsPreview();
+}
+
 function renderSiBlock(block){
   const pid = block.querySelector(".siPackage").value;
   const qty = Number(block.querySelector(".siQty").value) || 0;
   const tbody = block.querySelector("tbody"), tfoot = block.querySelector("tfoot");
   const pkg = (window.__siPackagesCache || []).find(p => p["PackageID"] === pid);
-  if(!pkg){ tbody.innerHTML = ""; tfoot.innerHTML = ""; block.dataset.unit = "0"; return; }
+  if(!pkg){ tbody.innerHTML = ""; tfoot.innerHTML = ""; block.dataset.unit = "0"; block._custom = {}; return; }
   const items = pkg.items || [];
+  const custom = block._custom = block._custom || {};
+  const editing = block.dataset.edit === "1";
   const sumItems = items.reduce((s, it) => s + (Number(it["কম্বো মূল্য"]) || 0), 0);
-  const unit = Number(pkg["সর্বমোট মূল্য"]) || sumItems;
-  block.dataset.unit = String(unit);
-  const sl = (window.__siStock || {})[pid] || [];
+  let unit = Number(pkg["সর্বমোট মূল্য"]) || sumItems;
+  items.forEach((it, k) => { if(custom[k]) unit += custom[k].price - (Number(it["কম্বো মূল্য"]) || 0); });
+  block.dataset.unit = String(siMoney(unit));
+  const lines = siBlockLines(block, pid);
   tbody.innerHTML = items.map((it, k) => {
-    const price = Number(it["কম্বো মূল্য"]) || 0;
-    const lt = siLineTotals(sl[k], qty);
-    return `<tr><td>${k + 1}</td><td class="cell-left">${escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td><td>${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td>${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;
+    const c = custom[k];
+    const price = c ? c.price : (Number(it["কম্বো মূল্য"]) || 0);
+    const lt = siLineTotals(lines[k], qty);
+    let nameCell;
+    if(editing){
+      const orig = siSplitQty(it["পণ্যের সংখ্যা"]);
+      const curQty = c ? c.qty : (orig.qty || "1"), curUnit = c ? c.unit : orig.unit;
+      const units = PKG_UNITS.slice(); if(curUnit && units.indexOf(curUnit) === -1) units.push(curUnit);
+      const plist = Object.values(window.__siProdStock || {}).sort((x, y) => String(x.name).localeCompare(String(y.name), "bn"));
+      const origId = it["ProductID"] || "";
+      const selId = c ? c.productId : origId;
+      const noOrigId = !origId && !c;
+      const curText = c ? c.text : String(it["পণ্যের নাম ও পরিমাণ"] || "");
+      nameCell = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <select class="siProdSel" title="পণ্য" onchange="onSiLineChange(this)" style="min-width:140px;max-width:200px;">${origId ? "" : `<option value="">-- পণ্য --</option>`}${plist.map(p => `<option value="${escAttr(p.productId)}"${selId === p.productId ? " selected" : ""}>${escAttr(p.name)}</option>`).join("")}</select>
+        <input type="number" class="siLineQty" placeholder="পরিমাণ" title="পরিমাণ" min="0" step="any" value="${escAttr(curQty)}" onchange="onSiLineChange(this)" style="width:80px;"${noOrigId ? " disabled" : ""}>
+        <select class="siLineUnit" title="একক" onchange="onSiLineChange(this)"${noOrigId ? " disabled" : ""}>${units.map(u => `<option value="${escAttr(u)}"${u === curUnit ? " selected" : ""}>${escAttr(u)}</option>`).join("")}</select>
+        <input class="siLineName" title="পণ্যের নাম ও পরিমাণ" value="${escAttr(curText)}" readonly style="flex:1 1 160px;min-width:150px;background:#f4f6f1;">
+      </div>`;
+    } else {
+      nameCell = escMsgHtml(c ? c.text : String(it["পণ্যের নাম ও পরিমাণ"] || "")) + (c ? ` <span class="si-changed" title="প্যাকেজের মূল পণ্য: ${escAttr(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}">(পরিবর্তিত)</span>` : "");
+    }
+    return `<tr data-k="${k}"><td>${k + 1}</td><td class="cell-left">${nameCell}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td><td>${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td>${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;
   }).join("");
   tfoot.innerHTML = "";
 }
@@ -4571,7 +4696,7 @@ function siCheckStock(){
     const pid = b.querySelector(".siPackage").value;
     const q = Number(b.querySelector(".siQty").value) || 0;
     if(!pid || q <= 0) return;
-    (stock[pid] || []).forEach(l => {
+    siBlockLines(b, pid).forEach(l => {
       if(!l) return;
       need[l.productId] = (need[l.productId] || 0) + q * (Number(l.per) || 1);
       meta[l.productId] = l;
@@ -4588,7 +4713,7 @@ function siCheckStock(){
   blocks.forEach(b => {
     const pid = b.querySelector(".siPackage").value;
     const trs = b.querySelectorAll("tbody tr");
-    (stock[pid] || []).forEach((l, i) => { if(l && over[l.productId] && trs[i]) trs[i].classList.add("si-over"); });
+    siBlockLines(b, pid).forEach((l, i) => { if(l && over[l.productId] && trs[i]) trs[i].classList.add("si-over"); });
   });
   document.getElementById("siStockMsg").innerHTML = msgs.map(m => escMsgHtml(m)).join("<br>");
   return msgs.length === 0;
@@ -4597,6 +4722,7 @@ function siCheckStock(){
 async function loadSiStock(excludeInvoice){
   const res = await apiCall("orderStockInfo", { excludeInvoice: excludeInvoice || "" });
   window.__siStock = res.success ? res.packages : {};
+  window.__siProdStock = res.success && res.products ? res.products : {};
   document.querySelectorAll("#siItems .si-pkg-block").forEach(renderSiBlock);   // পরিমাণ কলাম নতুন স্টক তথ্যে ভরে
   siCheckStock();
 }
@@ -4631,6 +4757,7 @@ async function submitSalesInvoice(){
     packageId: r.querySelector(".siPackage").value,
     packageName: r.querySelector(".siPackage").selectedOptions[0]?.textContent || "",
     unitPrice: r.dataset.unit,
+    custom: Object.keys(r._custom || {}).map(k => ({ i: Number(k), productId: r._custom[k].productId, qty: r._custom[k].qty, unit: r._custom[k].unit })),
     quantity: r.querySelector(".siQty").value,
     commissionPercent: commissionPct
   })).filter(i => i.packageId && Number(i.quantity) > 0);
@@ -4672,7 +4799,6 @@ function cancelSiEdit(){
   window.__siEditingInvoiceNo = null;
   document.getElementById("siFormLegend").textContent = "নতুন অর্ডার ইনভয়েস";
   document.getElementById("siSubmitBtn").textContent = "সংরক্ষণ করুন";
-  document.getElementById("siCancelBtn").style.display = "none";
   if(isAgency){
     document.getElementById("siDealerSelect").value = "";
     document.getElementById("siDealerMobile").value = "";
@@ -4905,6 +5031,8 @@ async function editSalesInvoiceByNo(invoiceNo){
     const row = document.getElementById("siItems").lastElementChild;
     row.querySelector(".siPackage").value = line["PackageID"] || "";
     row.querySelector(".siQty").value = line["সংখ্যা"] || 1;
+    row._custom = {};
+    try{ (JSON.parse(line["পণ্য পরিবর্তন"] || "[]") || []).forEach(c => { row._custom[c.i] = { productId: c.productId, qty: c.qty || "", unit: c.unit || "", per: Number(c.per) || 1, price: Number(c.price) || 0, text: c.text || c.name || "" }; }); }catch(e){}
     renderSiBlock(row);
   });
   setSiSeller(window.__siSellerPending || "");
@@ -5093,10 +5221,13 @@ async function printSalesInvoiceById(invoiceNo){
     const qty = Number(e["সংখ্যা"]) || 0;
     const items = pkg ? (pkg.items || []) : [];
     const sl = (window.__siStock || {})[e["PackageID"]] || [];
+    let cmap = {};
+    try{ (JSON.parse(e["পণ্য পরিবর্তন"] || "[]") || []).forEach(c => { cmap[c.i] = { productId: c.productId, per: Number(c.per) || 1, price: Number(c.price) || 0, text: c.text || c.name || "" }; }); }catch(err){}
     items.forEach((it, k) => {
-      const price = Number(it["কম্বো মূল্য"]) || 0;
-      const nm = escMsgHtml(String(it["পণ্যের নাম ও পরিমাণ"]||""));
-      const lt = siLineTotals(sl[k], qty);
+      const cc = cmap[k];
+      const price = cc ? cc.price : (Number(it["কম্বো মূল্য"]) || 0);
+      const nm = escMsgHtml(cc ? cc.text : String(it["পণ্যের নাম ও পরিমাণ"]||""));
+      const lt = siLineTotals(cc ? siCustomStockLine(cc) : sl[k], qty);
       orderRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
       deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td class="cell-left">${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td class="cell-left">${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;
     });
@@ -5123,7 +5254,7 @@ async function printSalesInvoiceById(invoiceNo){
   const copyHtml = (title, theadHtml, tbodyHtml, extraHtml) => `
     <div class="copy">
       <div class="letterhead">
-        <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+        <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
         <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
         ${depotAddr ? `<p style="color:#1c2b28;font-weight:500;">${escMsgHtml(depotAddr)}</p>` : ""}
         <div class="doc-title">${title}</div>
@@ -6467,7 +6598,7 @@ function printPackagesOfficial(packages, subtitle){
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">প্যাকেজ তালিকা (পণ্যভিত্তিক)</div>
     </div>
@@ -6935,7 +7066,7 @@ function shareSalesInvoiceById(invoiceNo){
   const net = lines.reduce((s, e) => s + (Number(e["পরিশোধযোগ্য মূল্য"]) || 0), 0) - (Number(first["ডিসকাউন্ট"]) || 0);
   shareCardImage({
     width: 1240, minHeight: 1754,   // A4 পোর্ট্রেট — প্রিন্টের পাতার সমান অনুপাত
-    org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
+    org: "ফেনী মানবিক সহায়তা স্বস্তির বাজার",
     sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
     title: "অর্ডার ইনভয়েস",
     blocks: [
@@ -6971,7 +7102,7 @@ function customerListShareSpecs(grouped, total){
       cur.rows.push(it.row);
     });
     return {
-      width: 2480, minHeight: 1754, fs: 0.46, org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
+      width: 2480, minHeight: 1754, fs: 0.46, org: "ফেনী মানবিক সহায়তা স্বস্তির বাজার",
       sub: "ডিলার: " + (state.dealerName || "") + " — " + grouped.desc + " — মোট গ্রাহক: " + total,
       title: "গ্রাহক তালিকা" + (pages.length > 1 ? " (পাতা " + (pi + 1) + "/" + pages.length + ")" : ""),
       blocks: blocks, footer: "@Powered by: AM Shahed: 01605721296"
@@ -6984,7 +7115,7 @@ function packageShareSpec(p, sub){
   const orgEl = document.getElementById("hdrDealerName");
   return {
     width: 1240, minHeight: 1754,   // A4 পোর্ট্রেট — প্রিন্টের পাতার সমান অনুপাত
-    org: (orgEl && orgEl.textContent.trim()) || "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
+    org: (orgEl && orgEl.textContent.trim()) || "ফেনী মানবিক সহায়তা স্বস্তির বাজার",
     sub: sub || "",
     title: p["নাম"] || "",
     blocks: [{ t: "table",
@@ -7010,7 +7141,7 @@ function customerShareSpec(c){
   const ward = c["ওয়ার্ড নং"] ? wardLabel(c["ওয়ার্ড নং"]) : "";
   return {
     width: 1240, minHeight: 1754,   // A4 পোর্ট্রেট — প্রিন্টের পাতার সমান অনুপাত
-    org: "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)",
+    org: "ফেনী মানবিক সহায়তা স্বস্তির বাজার",
     sub: "সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা",
     sub2: "ডিলার: " + (state.dealerName || "") + (state.dealerMobile ? " | মোবাইল: " + state.dealerMobile : ""),
     title: "গ্রাহক নিবন্ধন ফরম",
@@ -7381,7 +7512,7 @@ function printCustomerFormOfficial(c){
     </style></head><body>
     <div class="share-bar no-print"><button onclick="doShare()">শেয়ার (ছবি)</button></div>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <p class="dealer">ডিলার: ${escMsgHtml(state.dealerName||"")}${state.dealerMobile ? " | মোবাইল: " + escMsgHtml(state.dealerMobile) : ""}</p>
     </div>
@@ -7860,7 +7991,7 @@ function printThermalReceipt(c, packageId){
     </style></head><body>
     <div class="rc">
       <div class="head">
-        <p class="org">ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</p>
+        <p class="org">ফেনী মানবিক সহায়তা স্বস্তির বাজার</p>
         <p class="tag">সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
         <p class="dl">${e(state.dealerName || "")}</p>
         <p class="dd">${state.dealerUnion ? "ঠিকানা: " + e(state.dealerUnion) : ""}${state.dealerUnion && state.dealerMobile ? " | " : ""}${state.dealerMobile ? "মোবাইল: " + e(state.dealerMobile) : ""}</p>
@@ -8262,7 +8393,7 @@ function printDealerReport(){
       .doc-footer{ margin-top:26px; font-size:9px; color:#6b7570; text-align:center; }
     </style></head><body>
     <div class="letterhead">
-      <h1>ফেনী মানবিক সহায়তা (স্বস্তির বাজার)</h1>
+      <h1>ফেনী মানবিক সহায়তা স্বস্তির বাজার</h1>
       <p>সাশ্রয়ী মূল্যে পণ্য বিক্রি সংস্থা</p>
       <div class="doc-title">রিপোর্ট</div>
     </div>

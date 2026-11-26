@@ -586,7 +586,7 @@ const READ_CACHE_TTL = 300;
 const READ_CACHE_SALT = "r8";   // তালিকা/রিপোর্টের কাঠামো বদলালে এটা বদলান — পুরনো ক্যাশ আর মিলবে না
 
 /* সার্ভার কোডের সংস্করণ — অ্যাপের নিচে দেখায়; নতুন ভার্সন ডিপ্লয় হয়েছে কিনা বোঝার জন্য */
-const BACKEND_VERSION = "2026-11-07.3";
+const BACKEND_VERSION = "2026-11-26.1";
 const MUTATING_RE = /^(add|update|delete|cancel|confirm|reject|set|save|send|register)/;
 
 function getDataVersion(cache) {
@@ -702,7 +702,7 @@ function runIdempotentFine(action, data, reqKey, cache) {
 }
 
 /* শপের নাম একরূপ রাখা — শীটের ডাটায় পুরনো নাম থাকলেও সব উত্তরে নতুন নাম যায় */
-const ORG_NAME_NEW = "ফেনী মানবিক সহায়তা (স্বস্তির বাজার)";
+const ORG_NAME_NEW = "ফেনী মানবিক সহায়তা স্বস্তির বাজার";
 function normalizeOrgName(str) {
   if (typeof str !== "string") return str;
   return str.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, ORG_NAME_NEW);

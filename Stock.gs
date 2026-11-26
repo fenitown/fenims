@@ -204,7 +204,8 @@ function buildSalesInvoiceRows(invoiceNo, dealerInfo, dealerMobile, dealerThikan
       "পরিশোধ": paid,
       "বকেয়া": due,
       "স্ট্যাটাস": status,
-      "বিক্রয়কারী": seller || ""
+      "বিক্রয়কারী": seller || "",
+      "পণ্য পরিবর্তন": lc.item.customJson || ""
     };
   });
 
@@ -252,9 +253,13 @@ function addSalesInvoice(data) {
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "SalesInvoice");
   const dealersSheet = getSheet(masterSS, "Dealers");
-  ensureSheetColumns(sheet, ["বিক্রয়কারী"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
+  ensureSheetColumns(sheet, ["বিক্রয়কারী", "পণ্য পরিবর্তন"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
   const dealerInfo = getDealerRow(dealersSheet, targetDealerId);
   if (!dealerInfo) return { success: false, message: "ডিলার পাওয়া যায়নি" };
+
+  // প্যাকেজের পণ্য বদল (থাকলে) যাচাই করে দাম বসানো
+  const customErr = applyInvoiceCustomItems(masterSS, data.items || []);
+  if (customErr) return { success: false, message: customErr };
 
   // স্টকের বেশি অর্ডার করা যাবে না
   const stockErr = checkOrderStock(masterSS, data.items || [], "");
@@ -293,7 +298,7 @@ function updateSalesInvoiceFull(data) {
   const sheet = getSheet(masterSS, "SalesInvoice");
   const dealersSheet = getSheet(masterSS, "Dealers");
 
-  ensureSheetColumns(sheet, ["বিক্রয়কারী"]);
+  ensureSheetColumns(sheet, ["বিক্রয়কারী", "পণ্য পরিবর্তন"]);
   // পুরনো স্ট্যাটাস ও মালিকানা (DealerID) যাচাই
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
@@ -314,6 +319,10 @@ function updateSalesInvoiceFull(data) {
     return { success: false, message: "এই ইনভয়েস এডিট করার অনুমতি আপনার নেই" };
   }
   const targetDealerId = scopeDealerId === null ? (data.dealerId || existingDealerId) : scopeDealerId;
+
+  // প্যাকেজের পণ্য বদল (থাকলে) যাচাই করে দাম বসানো
+  const customErr = applyInvoiceCustomItems(masterSS, data.items || []);
+  if (customErr) return { success: false, message: customErr };
 
   // স্টকের বেশি অর্ডার করা যাবে না (এই ইনভয়েসের নিজের পুরনো সংখ্যা বাদ দিয়ে হিসাব)
   const stockErr = checkOrderStock(masterSS, data.items || [], data.invoiceNo);
@@ -818,6 +827,9 @@ function stockUnitFromText(text) {
   return u.length <= 12 ? u : "";
 }
 
+/* ইংরেজি অঙ্ক → বাংলা */
+function stockToBn(v) { return String(v == null ? "" : v).replace(/[0-9]/g, function (d) { return "০১২৩৪৫৬৭৮৯"[d]; }); }
+
 /* বাংলা অঙ্ক → ইংরেজি */
 function stockToEn(v) { return String(v == null ? "" : v).replace(/[০-৯]/g, function (d) { return "০১২৩৪৫৬৭৮৯".indexOf(d); }); }
 
@@ -879,6 +891,7 @@ function computeStockState(masterSS, excludeInvoiceNo) {
     const r = { productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), brand: String(p["ব্র্যান্ড"] || ""),
                 unitRaw: String(p["একক"] || ""), packType: String(p["প্যাকিং ধরন"] || ""), packSize: Number(stockToEn(p["প্যাকিং পরিমাণ"])) || 0,
                 size: productSizeOf(p["পরিমাণ"], p["একক"]),
+                combo: Number(p["কম্বো মূল্য"]) || 0, poriman: String(p["পরিমাণ"] == null ? "" : p["পরিমাণ"]),
                 qtyIn: 0, valueIn: 0, sold: 0, key: stockNormName(p["পণ্যের নাম"]) };
     r.unit = r.size ? "পিস" : (r.unitRaw || "পিস");   // স্টক গোনা হয় পিস/প্যাকেটে; সাইজ না থাকলে পণ্যের এককে
     byId[r.productId] = r;
@@ -920,10 +933,89 @@ function computeStockState(masterSS, excludeInvoiceNo) {
   genericListRows(getSheet(masterSS, "SalesInvoice")).forEach(function (e) {
     if (excludeInvoiceNo && e["ইনভয়েস নং"] === excludeInvoiceNo) return;
     const q = Number(e["সংখ্যা"]) || 0;
-    (pkgLines[e["PackageID"]] || []).forEach(function (l) { if (l.r) l.r.sold += q * l.per; });
+    effectiveInvoiceLines({ pkgLines: pkgLines, byId: byId }, e["PackageID"], e["পণ্য পরিবর্তন"]).forEach(function (l) { if (l.r) l.r.sold += q * l.per; });
   });
 
-  return { list: list, pkgLines: pkgLines, unmatched: unmatched };
+  return { list: list, pkgLines: pkgLines, unmatched: unmatched, byId: byId };
+}
+
+/*******************************************************
+ * অর্ডার ইনভয়েসে প্যাকেজের পণ্য বদল — কোন লাইনে (i = পণ্য-লাইনের ক্রম, ০ থেকে) কোন পণ্য বসেছে
+ * customJson: [{ i, productId, name, text, per, price, orig }] — না থাকলে প্যাকেজের মূল পণ্যই
+ * ফেরত: স্টক হিসাবের জন্য পণ্য-লাইনের তালিকা (বদল প্রয়োগ করা)
+ *******************************************************/
+function effectiveInvoiceLines(st, packageId, customJson) {
+  const base = (st.pkgLines[packageId] || []).slice();
+  if (!customJson) return base;
+  let arr;
+  try { arr = JSON.parse(customJson); } catch (err) { return base; }
+  if (!Array.isArray(arr)) return base;
+  arr.forEach(function (c) {
+    const k = Number(c.i);
+    if (!(k >= 0 && k < base.length)) return;
+    const r = st.byId[c.productId] || null;
+    base[k] = { r: r, unit: r ? r.unit : "", per: Number(c.per) || 1 };
+  });
+  return base;
+}
+
+/*******************************************************
+ * ইনভয়েসের items[] এ আসা custom (পণ্য বদল) যাচাই — সার্ভারেই দাম/পরিমাণ হিসাব করে
+ * item.unitPrice (প্যাকেজ-প্রতি মোট মূল্য) ও item.customJson বসায়। ভুল হলে বার্তা ফেরত দেয়
+ * item.custom: [{ i, productId }]  — i = প্যাকেজের পণ্য-লাইনের ক্রম (০ থেকে)
+ * নতুন পণ্যের লাইন-মূল্য = পণ্যের "কম্বো মূল্য" × প্যাকেজে ঐ লাইনের পরিমাণ (পিস/প্যাকেট)
+ *******************************************************/
+function applyInvoiceCustomItems(masterSS, items) {
+  const any = (items || []).some(function (it) { return Array.isArray(it.custom) && it.custom.length > 0; });
+  if (!any) { (items || []).forEach(function (it) { it.customJson = ""; }); return null; }
+
+  const products = {};
+  genericListRows(getSheet(masterSS, "Products")).forEach(function (p) { products[p["ProductID"]] = p; });
+  const pkgs = {};
+  genericListRows(getSheet(masterSS, "Packages")).forEach(function (p) { pkgs[p["PackageID"]] = p; });
+
+  for (let n = 0; n < items.length; n++) {
+    const it = items[n];
+    const custom = (Array.isArray(it.custom) ? it.custom : []).filter(function (c) { return c && c.productId; });
+    it.customJson = "";
+    if (custom.length === 0) continue;
+    const pk = pkgs[it.packageId];
+    if (!pk) return "প্যাকেজ পাওয়া যায়নি";
+
+    const slots = [];
+    for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) if (pk["পণ্য" + i + " - নাম ও পরিমাণ"]) slots.push(i);
+    let unit = Number(pk["সর্বমোট কম্বো মূল্য (সর্বমোট মূল্য)"]) || 0;
+    if (!unit) slots.forEach(function (i) { unit += Number(pk["পণ্য" + i + " - কম্বো মূল্য"]) || 0; });
+
+    const out = [], seen = {};
+    for (let c = 0; c < custom.length; c++) {
+      const k = Number(custom[c].i);
+      if (!(k >= 0 && k < slots.length) || seen[k]) return "পণ্য বদলের তথ্য ঠিক নেই";
+      seen[k] = true;
+      const p = products[custom[c].productId];
+      if (!p) return "বাছাই করা পণ্য পাওয়া যায়নি";
+      const slot = slots[k];
+      let qtyRaw = pk["পণ্য" + slot + " - সংখ্যা"];
+      let qtyNum = null, qtyUnit = "";
+      if (custom[c].qty !== undefined && custom[c].qty !== null && String(custom[c].qty).trim() !== "") {
+        // ব্যবহারকারী পরিমাণ/একক বদলেছে — নতুন পরিমাণ ধরা হবে
+        qtyNum = Number(stockToEn(custom[c].qty));
+        if (!(qtyNum > 0)) return "পরিমাণ ০ এর বেশি হতে হবে";
+        qtyUnit = String(custom[c].unit || "").trim();
+        qtyRaw = stockToEn(qtyNum) + (qtyUnit ? " " + qtyUnit : "");
+      }
+      const size = productSizeOf(p["পরিমাণ"], p["একক"]);
+      const per = packsPerPackage(qtyRaw, size);
+      const price = Math.round((Number(p["কম্বো মূল্য"]) || 0) * per * 100) / 100;
+      const orig = Number(pk["পণ্য" + slot + " - কম্বো মূল্য"]) || 0;
+      unit += price - orig;
+      const qtyTxt = qtyNum !== null ? stockToBn(qtyNum) + (qtyUnit ? " " + qtyUnit : "") : String(qtyRaw == null ? "" : qtyRaw).trim();
+      out.push({ i: k, productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), qty: qtyNum !== null ? String(qtyNum) : "", unit: qtyUnit, text: String(p["পণ্যের নাম"] || "") + (qtyTxt ? " " + qtyTxt : ""), per: per, price: price, orig: orig });
+    }
+    it.unitPrice = Math.round(unit * 100) / 100;
+    it.customJson = JSON.stringify(out);
+  }
+  return null;
 }
 
 function currentStockReport(data) {
@@ -960,7 +1052,14 @@ function orderStockInfo(data) {
         : null;   // স্টকের পণ্যের সাথে মেলেনি — সীমা নেই
     });
   });
-  return { success: true, packages: packages };
+  const prods = {};
+  st.list.forEach(function (r) {
+    prods[r.productId] = { productId: r.productId, name: r.name, avail: r.qtyIn - r.sold, unit: r.unit,
+                           combo: r.combo, poriman: r.poriman, unitRaw: r.unitRaw,
+                           packType: r.packType, packSize: r.packSize,
+                           sizeV: r.size ? r.size.v : 0, sizeU: r.size ? r.size.u : "" };
+  });
+  return { success: true, packages: packages, products: prods };
 }
 
 /*******************************************************
@@ -972,7 +1071,7 @@ function checkOrderStock(masterSS, items, excludeInvoiceNo) {
   (items || []).forEach(function (item) {
     const q = Number(item.quantity) || 0;
     if (q <= 0) return;
-    (st.pkgLines[item.packageId] || []).forEach(function (l) {
+    effectiveInvoiceLines(st, item.packageId, item.customJson).forEach(function (l) {
       if (!l.r) return;
       const k = l.r.productId;
       if (!need[k]) { need[k] = { r: l.r, unit: l.unit, qty: 0 }; order.push(k); }
