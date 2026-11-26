@@ -1138,7 +1138,7 @@
    ============================================================ */
 /* বাংলা অঙ্ক → ইংরেজি অঙ্ক; শপের পুরনো নাম → নতুন নাম (সব API উত্তরে) */
 function toEnDigits(v){ return String(v == null ? "" : v).replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d))); }
-function fixOrgName(t){ return t.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, "ফেনী মানবিক সহায়তা স্বস্তির বাজার"); }
+function fixOrgName(t){ return t.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, "ফেনী মানবিক সহায়তা স্বস্তির বাজার").replace(/ফেনী\s*মানবিক\s*সহায়তা\s*[(（]\s*স্বস্তির\s*বাজার\s*[)）]/g, "ফেনী মানবিক সহায়তা স্বস্তির বাজার"); }
 function fixCustDigits(c){
   if(!c || typeof c !== "object") return;
   ["মোবাইল নং", "NID/জন্মসনদ নং", "ওয়ার্ড নং"].forEach(k => { if(c[k] != null && c[k] !== "") c[k] = toEnDigits(c[k]); });
@@ -3179,7 +3179,7 @@ function addPkgItemRow(prefill){
 }
 
 function pkgProductOptions(sel){
-  return '<option value="">-- পণ্য --</option>' + productsCache.map(p => `<option value="${p['ProductID']}" data-name="${escAttr(p['পণ্যের নাম'])}" data-unit="${escAttr(p['একক']||'')}" ${sel === p['ProductID'] ? 'selected' : ''}>${escAttr(p['পণ্যের নাম'])}</option>`).join("");
+  return '<option value="">-- পণ্য --</option>' + productsCache.map(p => `<option value="${p['ProductID']}" data-name="${escAttr(p['পণ্যের নাম'])}" data-unit="${escAttr(p['একক']||'')}" ${sel === p['ProductID'] ? 'selected' : ''}>${escAttr(p['পণ্যের নাম'])}${p['ব্র্যান্ড'] ? " — " + escAttr(p['ব্র্যান্ড']) : ""}</option>`).join("");
 }
 function refreshPkgProductSelects(){
   document.querySelectorAll("#pkgItems select.itemProduct").forEach(sel => { const cur = sel.value; sel.innerHTML = pkgProductOptions(cur); });
@@ -3814,8 +3814,8 @@ function renderPriceTab(){
     <fieldset class="no-print">
       <legend id="priceFormLegend">পণ্যের মূল্য নির্ধারণ</legend>
       <div class="form-grid">
-        <div class="field"><label>পণ্য</label><select id="priceProd" onchange="onPriceProductChange()"><option value="">-- পণ্য সিলেক্ট করুন --</option></select></div>
-        <div class="field"><label>ব্র্যান্ড</label><input id="priceBrand" placeholder="পণ্য বাছলে নিজে বসবে"></div>
+        <div class="field"><label>পণ্যের নাম</label><select id="priceProd" onchange="onPriceNameChange()"><option value="">-- পণ্য সিলেক্ট করুন --</option></select></div>
+        <div class="field"><label>ব্র্যান্ড</label><select id="priceBrand" onchange="onPriceProductChange()"><option value="">-- আগে পণ্য সিলেক্ট করুন --</option></select></div>
         <div class="field"><label>পরিমাণ</label><input id="priceQty" placeholder="যেমন: ১" inputmode="decimal"></div>
         <div class="field"><label>একক</label><select id="priceUnit"><option value="">-- একক --</option>${PKG_UNITS.map(u => `<option>${u}</option>`).join("")}</select></div>
         <div class="field"><label>বাজার মূল্য (টাকা)</label><input id="priceBazar" type="number" min="0" step="any" oninput="updatePriceSaving()"></div>
@@ -3843,14 +3843,22 @@ async function loadPriceTab(){
   }
   await loadPriceListMap();
   const sel = document.getElementById("priceProd");
-  if(sel) sel.innerHTML = '<option value="">-- পণ্য সিলেক্ট করুন --</option>' + [...productsCache].sort((a, b) => String(a["পণ্যের নাম"]).localeCompare(String(b["পণ্যের নাম"]), "bn")).map(p => `<option value="${escAttr(p["ProductID"])}">${escAttr(p["পণ্যের নাম"])}</option>`).join("");
+  const names = [...new Set(productsCache.map(p => String(p["পণ্যের নাম"] || "")))].filter(Boolean).sort((a, b) => a.localeCompare(b, "bn"));
+  if(sel) sel.innerHTML = '<option value="">-- পণ্য সিলেক্ট করুন --</option>' + names.map(n => `<option value="${escAttr(n)}">${escAttr(n)}</option>`).join("");
   renderPriceTable();
 }
+/* পণ্যের নাম বাছলে ঐ নামের সব ব্র্যান্ড ড্রপডাউনে আসে (একই পণ্য একাধিক ব্র্যান্ডের হতে পারে) */
+function onPriceNameChange(){
+  const name = document.getElementById("priceProd").value;
+  const bsel = document.getElementById("priceBrand");
+  const list = productsCache.filter(p => String(p["পণ্যের নাম"] || "") === name);
+  bsel.innerHTML = name ? list.map(p => `<option value="${escAttr(p["ProductID"])}">${escAttr(p["ব্র্যান্ড"] || "(ব্র্যান্ড নেই)")}</option>`).join("") : '<option value="">-- আগে পণ্য সিলেক্ট করুন --</option>';
+  onPriceProductChange();
+}
 function onPriceProductChange(){
-  const pid = document.getElementById("priceProd").value;
+  const pid = document.getElementById("priceBrand").value;   // ব্র্যান্ড ড্রপডাউনের মান = ProductID
   const e = window.__priceList[pid];
   const p = productsCache.find(x => x["ProductID"] === pid);
-  document.getElementById("priceBrand").value = e ? (e.brand || (p ? (p["ব্র্যান্ড"] || "") : "")) : (p ? (p["ব্র্যান্ড"] || "") : "");
   if(e){
     document.getElementById("priceQty").value = e.qty; document.getElementById("priceUnit").value = e.unit;
     document.getElementById("priceBazar").value = e.market || ""; document.getElementById("priceCombo").value = e.combo || "";
@@ -3890,21 +3898,24 @@ function renderPriceTable(){
 }
 async function submitPriceItem(){
   const msgBox = document.getElementById("priceMsg");
-  const productId = document.getElementById("priceProd").value;
+  const productId = document.getElementById("priceBrand").value;
   const qty = document.getElementById("priceQty").value.trim(), unit = document.getElementById("priceUnit").value;
   const market = document.getElementById("priceBazar").value, combo = document.getElementById("priceCombo").value;
   if(!productId){ msgBox.textContent = "পণ্য সিলেক্ট করুন"; msgBox.className = "msg err"; return; }
   if(!(Number(toEnDigits(qty)) > 0)){ msgBox.textContent = "পরিমাণ দিন"; msgBox.className = "msg err"; return; }
   if(!(Number(combo) > 0)){ msgBox.textContent = "কম্বো মূল্য দিন"; msgBox.className = "msg err"; return; }
   markSaving("priceMsg");
-  const res = await apiCall("savePriceItem", { productId, qty, unit, market, combo, brand: document.getElementById("priceBrand").value.trim() });
+  const res = await apiCall("savePriceItem", { productId, qty, unit, market, combo });
   msgBox.textContent = res.message; msgBox.className = "msg " + (res.success ? "ok" : "err");
   if(res.success){ clearCache(); cancelPriceEdit(); await loadPriceTab(); }
 }
 function editPriceRow(productId){
   stockFormOpen = true; applyStockFormState();
   editingPriceProductId = productId;
-  document.getElementById("priceProd").value = productId;
+  const pr = productsCache.find(x => x["ProductID"] === productId);
+  document.getElementById("priceProd").value = pr ? String(pr["পণ্যের নাম"] || "") : "";
+  onPriceNameChange();
+  document.getElementById("priceBrand").value = productId;
   onPriceProductChange();
   document.getElementById("priceFormLegend").textContent = "মূল্য এডিট";
   document.getElementById("priceSubmitBtn").textContent = "আপডেট করুন";
@@ -3916,7 +3927,8 @@ function cancelPriceEdit(){
   document.getElementById("priceFormLegend").textContent = "পণ্যের মূল্য নির্ধারণ";
   document.getElementById("priceSubmitBtn").textContent = "সংরক্ষণ করুন";
   document.getElementById("priceCancelBtn").style.display = "none";
-  ["priceProd", "priceBrand", "priceQty", "priceUnit", "priceBazar", "priceCombo", "priceSashroy"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  ["priceProd", "priceQty", "priceUnit", "priceBazar", "priceCombo", "priceSashroy"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  onPriceNameChange();
 }
 async function deletePriceRow(productId){
   if(!confirm("এই পণ্যের মূল্য তালিকা থেকে বাদ দেবেন? (আগের প্যাকেজ/ইনভয়েসের দাম বদলাবে না)")) return;
@@ -4727,6 +4739,7 @@ async function loadSiManagers(){
 
 function onSiPackageChange(sel){
   sel.closest(".si-pkg-block")._custom = {};   // প্যাকেজ বদলালে আগের পণ্য-বদল মুছে যায়
+  sel.closest(".si-pkg-block")._frozen = null;
   renderSiBlock(sel.closest(".si-pkg-block"));
   updateSiTotalsPreview();
 }
@@ -4781,9 +4794,9 @@ function siProdList(){
   const sp = window.__siProdStock || {};
   if((productsCache || []).length){
     /* বিক্রয় মূল্য সার্ভারের হিসাব (প্যাকেজের লাইন-মূল্য থেকে) — না থাকলে পণ্য তালিকার কম্বো মূল্য */
-    list = productsCache.map(p => ({ productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), plQty: (sp[p["ProductID"]] || {}).plQty, plUnit: (sp[p["ProductID"]] || {}).plUnit, plCombo: Number((sp[p["ProductID"]] || {}).plCombo) || 0, combo: sp[p["ProductID"]] && sp[p["ProductID"]].combo > 0 ? sp[p["ProductID"]].combo : (Number(p["কম্বো মূল্য"]) || 0), poriman: String(p["পরিমাণ"] == null ? "" : p["পরিমাণ"]), unitRaw: String(p["একক"] || "") }));
+    list = productsCache.map(p => ({ productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), brand: String(p["ব্র্যান্ড"] || ""), plQty: (sp[p["ProductID"]] || {}).plQty, plUnit: (sp[p["ProductID"]] || {}).plUnit, plCombo: Number((sp[p["ProductID"]] || {}).plCombo) || 0, combo: sp[p["ProductID"]] && sp[p["ProductID"]].combo > 0 ? sp[p["ProductID"]].combo : (Number(p["কম্বো মূল্য"]) || 0), poriman: String(p["পরিমাণ"] == null ? "" : p["পরিমাণ"]), unitRaw: String(p["একক"] || "") }));
   } else {
-    list = Object.values(window.__siProdStock || {}).map(p => ({ productId: p.productId, name: p.name, plQty: p.plQty, plUnit: p.plUnit, plCombo: Number(p.plCombo) || 0, combo: Number(p.combo) || 0, poriman: p.poriman || "", unitRaw: p.unitRaw || "" }));
+    list = Object.values(window.__siProdStock || {}).map(p => ({ productId: p.productId, name: p.name, brand: p.brand || "", plQty: p.plQty, plUnit: p.plUnit, plCombo: Number(p.plCombo) || 0, combo: Number(p.combo) || 0, poriman: p.poriman || "", unitRaw: p.unitRaw || "" }));
   }
   return list.sort((x, y) => x.name.localeCompare(y.name, "bn"));
 }
@@ -4837,13 +4850,17 @@ function renderSiBlock(block){
   const custom = block._custom = block._custom || {};
   const editing = block.dataset.edit === "1";
   const sumItems = items.reduce((s, it) => s + (Number(it["কম্বো মূল্য"]) || 0), 0);
+  /* এডিটে খোলা ইনভয়েসের সংরক্ষিত লাইন (আগের দাম/লেখা) — প্যাকেজ/মূল্য তালিকার দাম পরে বদলালেও এটাই ধরা হয় */
+  const frozen = block._frozen && block._frozen.length === items.length ? block._frozen : null;
   let unit = Number(pkg["সর্বমোট মূল্য"]) || sumItems;
-  items.forEach((it, k) => { if(custom[k]) unit += custom[k].price - (Number(it["কম্বো মূল্য"]) || 0); });
+  if(frozen){ unit = 0; items.forEach((it, k) => { unit += custom[k] ? custom[k].price : (Number(frozen[k].price) || 0); }); }
+  else items.forEach((it, k) => { if(custom[k]) unit += custom[k].price - (Number(it["কম্বো মূল্য"]) || 0); });
   block.dataset.unit = String(siMoney(unit));
   const lines = siBlockLines(block, pid);
   tbody.innerHTML = items.map((it, k) => {
     const c = custom[k];
-    const price = c ? c.price : (Number(it["কম্বো মূল্য"]) || 0);
+    const price = c ? c.price : (frozen ? (Number(frozen[k].price) || 0) : (Number(it["কম্বো মূল্য"]) || 0));
+    const baseName = frozen ? String(frozen[k].text || "") : String(it["পণ্যের নাম ও পরিমাণ"] || "");
     const lt = siLineTotals(lines[k], qty);
     let nameCell;
     if(editing){
@@ -4854,16 +4871,16 @@ function renderSiBlock(block){
       const origId = it["ProductID"] || "";
       const selId = c ? c.productId : origId;
       const noOrigId = !origId && !c;
-      const curText = c ? c.text : String(it["পণ্যের নাম ও পরিমাণ"] || "");
+      const curText = c ? c.text : baseName;
       const noPrice = c && !(c.price > 0);
       nameCell = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <select class="siProdSel" title="পণ্য" onchange="onSiLineChange(this)" style="min-width:140px;max-width:200px;">${origId ? "" : `<option value="">-- পণ্য --</option>`}${plist.map(p => `<option value="${escAttr(p.productId)}"${selId === p.productId ? " selected" : ""}>${escAttr(p.name)}</option>`).join("")}</select>
+        <select class="siProdSel" title="পণ্য" onchange="onSiLineChange(this)" style="min-width:140px;max-width:200px;">${origId ? "" : `<option value="">-- পণ্য --</option>`}${plist.map(p => `<option value="${escAttr(p.productId)}"${selId === p.productId ? " selected" : ""}>${escAttr(p.name)}${p.brand ? " — " + escAttr(p.brand) : ""}</option>`).join("")}</select>
         <input type="number" class="siLineQty" placeholder="পরিমাণ" title="পরিমাণ" min="0" step="any" value="${escAttr(curQty)}" onchange="onSiLineChange(this)" style="width:80px;"${noOrigId ? " disabled" : ""}>
         <select class="siLineUnit" title="একক" onchange="onSiLineChange(this)"${noOrigId ? " disabled" : ""}>${units.map(u => `<option value="${escAttr(u)}"${u === curUnit ? " selected" : ""}>${escAttr(u)}</option>`).join("")}</select>
         <input class="siLineName" title="পণ্যের নাম ও পরিমাণ" value="${escAttr(curText)}" readonly style="flex:1 1 160px;min-width:150px;background:#f4f6f1;">
       </div>${noPrice ? `<div style="color:#b3261e;font-size:0.8rem;margin-top:3px;">⚠ মূল্য নির্ধারণ হয় নি — স্টক মেনুর "মূল্য তালিকা" এ দাম নির্ধারণ করুন</div>` : ""}`;
     } else {
-      nameCell = escMsgHtml(c ? c.text : String(it["পণ্যের নাম ও পরিমাণ"] || "")) + (c ? ` <span class="si-changed" title="প্যাকেজের মূল পণ্য: ${escAttr(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}">(পরিবর্তিত)</span>` : "");
+      nameCell = escMsgHtml(c ? c.text : baseName) + (c ? ` <span class="si-changed" title="প্যাকেজের মূল পণ্য: ${escAttr(String(it["পণ্যের নাম ও পরিমাণ"] || ""))}">(পরিবর্তিত)</span>` : "");
     }
     return `<tr data-k="${k}"><td>${k + 1}</td><td class="cell-left">${nameCell}</td><td>${price}</td><td>${qty}</td><td>${siMoney(price * qty)}</td><td>${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td>${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;
   }).join("");
@@ -5216,6 +5233,7 @@ async function editSalesInvoiceByNo(invoiceNo){
     row.querySelector(".siPackage").value = line["PackageID"] || "";
     row.querySelector(".siQty").value = line["সংখ্যা"] || 1;
     row._custom = {};
+    try{ const sn = JSON.parse(line["লাইন সংরক্ষণ"] || "null"); row._frozen = Array.isArray(sn) ? sn : null; }catch(e){ row._frozen = null; }
     try{ (JSON.parse(line["পণ্য পরিবর্তন"] || "[]") || []).forEach(c => { row._custom[c.i] = { productId: c.productId, qty: c.qty || "", unit: c.unit || "", per: Number(c.per) || 1, price: Number(c.price) || 0, text: c.text || c.name || "" }; }); }catch(e){}
     renderSiBlock(row);
   });
@@ -5405,12 +5423,15 @@ async function printSalesInvoiceById(invoiceNo){
     const qty = Number(e["সংখ্যা"]) || 0;
     const items = pkg ? (pkg.items || []) : [];
     const sl = (window.__siStock || {})[e["PackageID"]] || [];
+    let snapArr = null;
+    try{ const sn = JSON.parse(e["লাইন সংরক্ষণ"] || "null"); snapArr = Array.isArray(sn) ? sn : null; }catch(err){}
     let cmap = {};
     try{ (JSON.parse(e["পণ্য পরিবর্তন"] || "[]") || []).forEach(c => { cmap[c.i] = { productId: c.productId, per: Number(c.per) || 1, price: Number(c.price) || 0, text: c.text || c.name || "" }; }); }catch(err){}
     items.forEach((it, k) => {
       const cc = cmap[k];
-      const price = cc ? cc.price : (Number(it["কম্বো মূল্য"]) || 0);
-      const nm = escMsgHtml(cc ? cc.text : String(it["পণ্যের নাম ও পরিমাণ"]||""));
+      const fz = snapArr && snapArr.length === items.length ? snapArr[k] : null;   // ইনভয়েসের সংরক্ষিত লাইন
+      const price = cc ? cc.price : (fz ? (Number(fz.price) || 0) : (Number(it["কম্বো মূল্য"]) || 0));
+      const nm = escMsgHtml(cc ? cc.text : (fz ? String(fz.text || "") : String(it["পণ্যের নাম ও পরিমাণ"]||"")));
       const lt = siLineTotals(cc ? siCustomStockLine(cc) : sl[k], qty);
       orderRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td>${price}</td><td>${qty}</td><td>${money(price*qty)}</td></tr>`;
       deliveryRows += `<tr><td>${k+1}</td><td class="cell-left">${nm}</td><td class="cell-left">${lt ? escMsgHtml(lt.qtyText) : "—"}</td><td class="cell-left">${lt ? escMsgHtml(lt.packText) : "—"}</td></tr>`;

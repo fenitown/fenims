@@ -709,7 +709,9 @@ function runIdempotentFine(action, data, reqKey, cache) {
 const ORG_NAME_NEW = "ফেনী মানবিক সহায়তা স্বস্তির বাজার";
 function normalizeOrgName(str) {
   if (typeof str !== "string") return str;
-  return str.replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, ORG_NAME_NEW);
+  return str
+    .replace(/(ফেনী\s*)?মানবিক\s*সহায়তা\s*ডেইল[িী]\s*শপ/g, ORG_NAME_NEW)
+    .replace(/ফেনী\s*মানবিক\s*সহায়তা\s*[(（]\s*স্বস্তির\s*বাজার\s*[)）]/g, ORG_NAME_NEW);   // শীটে সেভ করা "(স্বস্তির বাজার)" ও একই নামে
 }
 /* লগইন পেজে দেখানোর জন্য শুধু এজেন্সির লোগো ও নাম — গোপন কিছু নয় */
 function getLoginBranding() {

@@ -137,7 +137,7 @@ function savePriceItem(data) {
   try {
     const sheet = getPriceListSheet(masterSS);
     ensureSheetColumns(sheet, ["ব্র্যান্ড"]);   // আগের শীটে না থাকলে নিজে যোগ হয়
-    const fields = { "ব্র্যান্ড": String(data.brand == null ? "" : data.brand).trim(), "পণ্যের নাম": prod["পণ্যের নাম"], "পরিমাণ": qty, "একক": String(data.unit || ""), "বাজার মূল্য": market, "কম্বো মূল্য": combo };
+    const fields = { "ব্র্যান্ড": String(prod["ব্র্যান্ড"] || ""), "পণ্যের নাম": prod["পণ্যের নাম"], "পরিমাণ": qty, "একক": String(data.unit || ""), "বাজার মূল্য": market, "কম্বো মূল্য": combo };
     const exists = genericListRows(sheet).some(function (r) { return r["ProductID"] === data.productId; });
     if (exists) {
       genericUpdateRow(sheet, "ProductID", data.productId, fields);
@@ -146,7 +146,10 @@ function savePriceItem(data) {
       fields["ProductID"] = data.productId;
       genericAddRow(sheet, fields);
     }
-    return { success: true, message: "মূল্য তালিকা সংরক্ষিত হয়েছে" };
+    // আগের ইনভয়েসের দাম ধরে রেখে (freeze), তারপর প্যাকেজের দাম নতুন মূল্যে হালনাগাদ
+    freezeLegacyInvoices(masterSS);
+    const n = propagatePriceToPackages(masterSS, data.productId, { qty: qty, unit: String(data.unit || ""), market: market, combo: combo });
+    return { success: true, message: "মূল্য তালিকা সংরক্ষিত হয়েছে" + (n ? " — " + n + " টি প্যাকেজের দাম হালনাগাদ হয়েছে" : "") };
   } finally {
     lock.releaseLock();
   }
@@ -287,7 +290,8 @@ function buildSalesInvoiceRows(invoiceNo, dealerInfo, dealerMobile, dealerThikan
       "বকেয়া": due,
       "স্ট্যাটাস": status,
       "বিক্রয়কারী": seller || "",
-      "পণ্য পরিবর্তন": lc.item.customJson || ""
+      "পণ্য পরিবর্তন": lc.item.customJson || "",
+      "লাইন সংরক্ষণ": lc.item.snapshotJson || ""
     };
   });
 
@@ -335,12 +339,12 @@ function addSalesInvoice(data) {
   const masterSS = getMasterSS();
   const sheet = getSheet(masterSS, "SalesInvoice");
   const dealersSheet = getSheet(masterSS, "Dealers");
-  ensureSheetColumns(sheet, ["বিক্রয়কারী", "পণ্য পরিবর্তন"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
+  ensureSheetColumns(sheet, ["বিক্রয়কারী", "পণ্য পরিবর্তন", "লাইন সংরক্ষণ"]);   // পুরনো শীটে না থাকলে নিজে যোগ হয়
   const dealerInfo = getDealerRow(dealersSheet, targetDealerId);
   if (!dealerInfo) return { success: false, message: "ডিলার পাওয়া যায়নি" };
 
   // প্যাকেজের পণ্য বদল (থাকলে) যাচাই করে দাম বসানো
-  const customErr = applyInvoiceCustomItems(masterSS, data.items || []);
+  const customErr = applyInvoiceCustomItems(masterSS, data.items || [], []);
   if (customErr) return { success: false, message: customErr };
   if (scopeDealerId !== null && (data.items || []).some(function (it) { return it.customJson; })) {
     return { success: false, message: "অর্ডারের পণ্য পরিবর্তন শুধু ডিপু করতে পারবে" };
@@ -383,7 +387,7 @@ function updateSalesInvoiceFull(data) {
   const sheet = getSheet(masterSS, "SalesInvoice");
   const dealersSheet = getSheet(masterSS, "Dealers");
 
-  ensureSheetColumns(sheet, ["বিক্রয়কারী", "পণ্য পরিবর্তন"]);
+  ensureSheetColumns(sheet, ["বিক্রয়কারী", "পণ্য পরিবর্তন", "লাইন সংরক্ষণ"]);
   // পুরনো স্ট্যাটাস ও মালিকানা (DealerID) যাচাই
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
@@ -406,7 +410,16 @@ function updateSalesInvoiceFull(data) {
   const targetDealerId = scopeDealerId === null ? (data.dealerId || existingDealerId) : scopeDealerId;
 
   // প্যাকেজের পণ্য বদল (থাকলে) যাচাই করে দাম বসানো
-  const customErr = applyInvoiceCustomItems(masterSS, data.items || []);
+  const oldRows = [];
+  const idxPkgOld = headers.indexOf("PackageID"), idxCusOld = headers.indexOf("পণ্য পরিবর্তন"), idxSnapOld = headers.indexOf("লাইন সংরক্ষণ");
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idxInv] !== data.invoiceNo) continue;
+    let sn = null, cu = [];
+    try { sn = JSON.parse(values[i][idxSnapOld] || "null"); } catch (e) { sn = null; }
+    try { cu = JSON.parse(values[i][idxCusOld] || "[]") || []; } catch (e) { cu = []; }
+    oldRows.push({ packageId: values[i][idxPkgOld], snapshot: sn, customArr: cu });
+  }
+  const customErr = applyInvoiceCustomItems(masterSS, data.items || [], oldRows);
   if (customErr) return { success: false, message: customErr };
   // পণ্য বদল (এডিট মোড) শুধু ডিপু করতে পারবে — ডিলার শুধু আগে থেকে থাকা বদল অপরিবর্তিত রাখতে পারবে
   if (scopeDealerId !== null) {
@@ -1062,33 +1075,47 @@ function effectiveInvoiceLines(st, packageId, customJson) {
 }
 
 /*******************************************************
- * ইনভয়েসের items[] এ আসা custom (পণ্য বদল) যাচাই — সার্ভারেই দাম/পরিমাণ হিসাব করে
- * item.unitPrice (প্যাকেজ-প্রতি মোট মূল্য) ও item.customJson বসায়। ভুল হলে বার্তা ফেরত দেয়
- * item.custom: [{ i, productId }]  — i = প্যাকেজের পণ্য-লাইনের ক্রম (০ থেকে)
- * নতুন পণ্যের লাইন-মূল্য = পণ্যের "কম্বো মূল্য" × প্যাকেজে ঐ লাইনের পরিমাণ (পিস/প্যাকেট)
+ * ইনভয়েসের প্রতিটি প্যাকেজ-লাইনের চূড়ান্ত পণ্য ও দাম হিসাব করে "সংরক্ষণ" (snapshot) তৈরি —
+ * পরে প্যাকেজ বা মূল্য তালিকার দাম বদলালেও এই ইনভয়েসের দাম/লেখা বদলাবে না
+ *
+ * item.custom: [{ i, productId, qty?, unit? }] — i = প্যাকেজের পণ্য-লাইনের ক্রম (০ থেকে)
+ * oldRows: এডিটের সময় ইনভয়েসের আগের সারি [{ packageId, snapshot, customArr }] — আগের দাম ধরে রাখতে
+ * ফলাফল (প্রতি item এ): unitPrice (প্যাকেজ-প্রতি মোট), customJson (পণ্য পরিবর্তন), snapshotJson (লাইন সংরক্ষণ)
+ * নতুন/বদলানো পণ্যের মূল্য = মূল্য তালিকার কম্বো মূল্য × (পরিমাণ ÷ তালিকার পরিমাণ); তালিকায় না থাকলে ০
+ * ব্যর্থ হলে বার্তা ফেরত দেয়, ঠিক থাকলে null
  *******************************************************/
-function applyInvoiceCustomItems(masterSS, items) {
-  const any = (items || []).some(function (it) { return Array.isArray(it.custom) && it.custom.length > 0; });
-  if (!any) { (items || []).forEach(function (it) { it.customJson = ""; }); return null; }
-
+function applyInvoiceCustomItems(masterSS, items, oldRows) {
+  items = items || [];
   const products = {};
   genericListRows(getSheet(masterSS, "Products")).forEach(function (p) { products[p["ProductID"]] = p; });
-  const stState = computeStockState(masterSS, "");   // পণ্যের বিক্রয় মূল্য (প্যাকেজ থেকে) এখানে
+  const stState = computeStockState(masterSS, "");   // মূল্য তালিকা (pl) এখানে
   const pkgs = {};
   genericListRows(getSheet(masterSS, "Packages")).forEach(function (p) { pkgs[p["PackageID"]] = p; });
+  const olds = (oldRows || []).slice();
 
   for (let n = 0; n < items.length; n++) {
     const it = items[n];
     const custom = (Array.isArray(it.custom) ? it.custom : []).filter(function (c) { return c && c.productId; });
-    it.customJson = "";
-    if (custom.length === 0) continue;
+    it.customJson = ""; it.snapshotJson = "";
     const pk = pkgs[it.packageId];
-    if (!pk) return "প্যাকেজ পাওয়া যায়নি";
+    if (!pk) { if (custom.length) return "প্যাকেজ পাওয়া যায়নি"; continue; }
 
     const slots = [];
     for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) if (pk["পণ্য" + i + " - নাম ও পরিমাণ"]) slots.push(i);
-    let unit = Number(pk["সর্বমোট কম্বো মূল্য (সর্বমোট মূল্য)"]) || 0;
-    if (!unit) slots.forEach(function (i) { unit += Number(pk["পণ্য" + i + " - কম্বো মূল্য"]) || 0; });
+
+    // এই প্যাকেজের আগের সারি (এডিটে) — আগের সংরক্ষিত দাম/লেখা ধরে রাখতে
+    let old = null;
+    for (let o = 0; o < olds.length; o++) { if (olds[o].packageId === it.packageId) { old = olds.splice(o, 1)[0]; break; } }
+    const oldSnap = old && Array.isArray(old.snapshot) && old.snapshot.length === slots.length ? old.snapshot : null;
+    const oldCustom = {};
+    ((old && old.customArr) || []).forEach(function (oc) { if (oc && oc.i !== undefined) oldCustom[oc.i] = oc; });
+
+    // শুরুর লাইন: আগের সংরক্ষণ থাকলে সেটাই, না থাকলে প্যাকেজের বর্তমান লাইন
+    const lines = slots.map(function (slot, k) {
+      if (oldSnap && oldSnap[k]) return { text: String(oldSnap[k].text || ""), price: Number(oldSnap[k].price) || 0 };
+      if (oldCustom[k]) return { text: String(oldCustom[k].text || ""), price: Number(oldCustom[k].price) || 0 };
+      return { text: String(pk["পণ্য" + slot + " - নাম ও পরিমাণ"] || ""), price: Number(pk["পণ্য" + slot + " - কম্বো মূল্য"]) || 0 };
+    });
 
     const out = [], seen = {};
     for (let c = 0; c < custom.length; c++) {
@@ -1097,36 +1124,114 @@ function applyInvoiceCustomItems(masterSS, items) {
       seen[k] = true;
       const p = products[custom[c].productId];
       if (!p) return "বাছাই করা পণ্য পাওয়া যায়নি";
+      const cq = custom[c].qty == null ? "" : String(custom[c].qty).trim(), cu = String(custom[c].unit || "").trim();
+
+      // আগের ইনভয়েসে একই বদল থাকলে আগের দামই থাকবে (মূল্য তালিকা বদলালেও)
+      const oc = oldCustom[k];
+      if (oc && oc.productId === custom[c].productId && String(oc.qty || "") === cq && String(oc.unit || "") === cu) {
+        out.push(oc); lines[k] = { text: String(oc.text || ""), price: Number(oc.price) || 0 };
+        continue;
+      }
+
       const slot = slots[k];
       let qtyRaw = pk["পণ্য" + slot + " - সংখ্যা"];
       let qtyNum = null, qtyUnit = "";
-      if (custom[c].qty !== undefined && custom[c].qty !== null && String(custom[c].qty).trim() !== "") {
-        // ব্যবহারকারী পরিমাণ/একক বদলেছে — নতুন পরিমাণ ধরা হবে
-        qtyNum = Number(stockToEn(custom[c].qty));
+      if (cq !== "") {
+        qtyNum = Number(stockToEn(cq));
         if (!(qtyNum > 0)) return "পরিমাণ ০ এর বেশি হতে হবে";
-        qtyUnit = String(custom[c].unit || "").trim();
+        qtyUnit = cu;
         qtyRaw = stockToEn(qtyNum) + (qtyUnit ? " " + qtyUnit : "");
       }
       const size = productSizeOf(p["পরিমাণ"], p["একক"]);
       const per = packsPerPackage(qtyRaw, size);
       const sr = stState.byId[p["ProductID"]];
-      let price;
+      let price = 0;   // মূল্য তালিকায় দাম নির্ধারণ নেই — অনুমান করে কোনো দাম বসানো হয় না
       if (sr && sr.pl && sr.pl.combo > 0) {
-        // মূল্য তালিকা অনুযায়ী: কম্বো মূল্য × (এই পরিমাণ ÷ তালিকার পরিমাণ)
         const qm = stockToEn(qtyRaw).trim().match(/^([\d.]+)\s*(.*)$/);
         price = Math.round(sr.pl.combo * priceRatio(sr.pl.qty, sr.pl.unit, qm ? qm[1] : "1", qm ? qm[2] : "") * 100) / 100;
-      } else {
-        price = 0;   // মূল্য তালিকায় দাম নির্ধারণ নেই — অনুমান করে কোনো দাম বসানো হয় না
       }
-      const orig = Number(pk["পণ্য" + slot + " - কম্বো মূল্য"]) || 0;
-      unit += price - orig;
       const qtyTxt = qtyNum !== null ? stockToBn(qtyNum) + (qtyUnit ? " " + qtyUnit : "") : String(qtyRaw == null ? "" : qtyRaw).trim();
-      out.push({ i: k, productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), qty: qtyNum !== null ? String(qtyNum) : "", unit: qtyUnit, text: String(p["পণ্যের নাম"] || "") + (qtyTxt ? " " + qtyTxt : ""), per: per, price: price, orig: orig });
+      const entry = { i: k, productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), qty: qtyNum !== null ? String(qtyNum) : "", unit: qtyUnit, text: String(p["পণ্যের নাম"] || "") + (qtyTxt ? " " + qtyTxt : ""), per: per, price: price, orig: lines[k].price };
+      out.push(entry);
+      lines[k] = { text: entry.text, price: price };
     }
-    it.unitPrice = Math.round(unit * 100) / 100;
-    it.customJson = JSON.stringify(out);
+    if (slots.length) {
+      let unit = 0;
+      lines.forEach(function (l) { unit += l.price; });
+      it.unitPrice = Math.round(unit * 100) / 100;
+    }
+    it.customJson = out.length ? JSON.stringify(out) : "";
+    it.snapshotJson = JSON.stringify(lines);
   }
   return null;
+}
+
+/* আগে তৈরি হওয়া ইনভয়েস (যেগুলোতে "লাইন সংরক্ষণ" নেই) এর বর্তমান দাম/লেখা সংরক্ষণ করে ফেলা —
+   এরপর প্যাকেজের দাম বদলালেও পুরনো ইনভয়েস অপরিবর্তিত থাকবে */
+function freezeLegacyInvoices(masterSS) {
+  const sheet = getSheet(masterSS, "SalesInvoice");
+  ensureSheetColumns(sheet, ["পণ্য পরিবর্তন", "লাইন সংরক্ষণ"]);
+  const last = sheet.getLastRow();
+  if (last < 2) return;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const iPkg = headers.indexOf("PackageID"), iCus = headers.indexOf("পণ্য পরিবর্তন"), iSnap = headers.indexOf("লাইন সংরক্ষণ");
+  const n = last - 1;
+  const pkgCol = sheet.getRange(2, iPkg + 1, n, 1).getValues();
+  const cusCol = sheet.getRange(2, iCus + 1, n, 1).getValues();
+  const snapCol = sheet.getRange(2, iSnap + 1, n, 1).getValues();
+  const pkgs = {};
+  genericListRows(getSheet(masterSS, "Packages")).forEach(function (p) { pkgs[p["PackageID"]] = p; });
+  let changed = false;
+  for (let r = 0; r < n; r++) {
+    if (snapCol[r][0]) continue;
+    const pk = pkgs[pkgCol[r][0]];
+    if (!pk) continue;
+    const lines = [];
+    for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
+      if (pk["পণ্য" + i + " - নাম ও পরিমাণ"]) lines.push({ text: String(pk["পণ্য" + i + " - নাম ও পরিমাণ"]), price: Number(pk["পণ্য" + i + " - কম্বো মূল্য"]) || 0 });
+    }
+    try {
+      (JSON.parse(cusCol[r][0] || "[]") || []).forEach(function (c) { if (lines[c.i]) lines[c.i] = { text: String(c.text || ""), price: Number(c.price) || 0 }; });
+    } catch (e) { /* বাদ */ }
+    snapCol[r][0] = JSON.stringify(lines);
+    changed = true;
+  }
+  if (changed) sheet.getRange(2, iSnap + 1, n, 1).setValues(snapCol);
+}
+
+/* মূল্য তালিকায় কোনো পণ্যের দাম বসলে/বদলালে সব প্যাকেজের ঐ পণ্যের লাইনের বাজার/কম্বো মূল্য ও সর্বমোট নতুন করে হিসাব */
+function propagatePriceToPackages(masterSS, productId, entry) {
+  if (!entry || !(entry.combo > 0)) return 0;
+  const sheet = getPackagesSheet(masterSS);
+  let updated = 0;
+  genericListRows(sheet).forEach(function (pk) {
+    let hit = false;
+    const fields = {};
+    let totB = 0, totC = 0;
+    for (let i = 1; i <= MAX_PACKAGE_ITEMS; i++) {
+      if (!pk["পণ্য" + i + " - নাম ও পরিমাণ"]) continue;
+      let b = Number(pk["পণ্য" + i + " - বাজার মূল্য"]) || 0, c = Number(pk["পণ্য" + i + " - কম্বো মূল্য"]) || 0;
+      if (pk["পণ্য" + i + " - ProductID"] === productId) {
+        const qm = stockToEn(pk["পণ্য" + i + " - সংখ্যা"]).trim().match(/^([\d.]+)\s*(.*)$/);
+        if (qm) {
+          const ratio = priceRatio(entry.qty, entry.unit, qm[1], qm[2]);
+          b = Math.round(entry.market * ratio * 100) / 100;
+          c = Math.round(entry.combo * ratio * 100) / 100;
+          fields["পণ্য" + i + " - বাজার মূল্য"] = b; fields["পণ্য" + i + " - কম্বো মূল্য"] = c; fields["পণ্য" + i + " - সাশ্রয়"] = Math.round((b - c) * 100) / 100;
+          hit = true;
+        }
+      }
+      totB += b; totC += c;
+    }
+    if (!hit) return;
+    fields["সর্বমোট বাজার মূল্য"] = Math.round(totB * 100) / 100;
+    fields["সর্বমোট কম্বো মূল্য (সর্বমোট মূল্য)"] = Math.round(totC * 100) / 100;
+    fields["সর্বমোট সাশ্রয়"] = Math.round((totB - totC) * 100) / 100;
+    genericUpdateRow(sheet, "PackageID", pk["PackageID"], fields);
+    updated++;
+  });
+  if (updated) invalidatePackageCache();
+  return updated;
 }
 
 function currentStockReport(data) {
@@ -1166,7 +1271,7 @@ function orderStockInfo(data) {
   const prods = {};
   st.list.forEach(function (r) {
     prods[r.productId] = { productId: r.productId, name: r.name, avail: r.qtyIn - r.sold, unit: r.unit,
-                           combo: r.combo, poriman: r.poriman, unitRaw: r.unitRaw,
+                           brand: r.brand, combo: r.combo, poriman: r.poriman, unitRaw: r.unitRaw,
                            plQty: r.pl ? r.pl.qty : "", plUnit: r.pl ? r.pl.unit : "", plCombo: r.pl ? r.pl.combo : 0, plMarket: r.pl ? r.pl.market : 0,
                            packType: r.packType, packSize: r.packSize,
                            sizeV: r.size ? r.size.v : 0, sizeU: r.size ? r.size.u : "" };
