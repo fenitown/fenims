@@ -4532,7 +4532,7 @@ function addSiItemRow(){
       <select class="siPackage" onchange="onSiPackageChange(this)"><option value="">-- প্যাকেজ সিলেক্ট করুন --</option>${packages.map(p => `<option value="${p['PackageID']}">${p['নাম']}</option>`).join("")}</select>
       <div class="si-qty-wrap"><label>প্যাকেজ সংখ্যা</label><input type="number" min="1" value="1" class="siQty" oninput="onSiQtyChange(this)"></div>
       ${isFirst ? `<div class="si-qty-wrap" style="width:170px;"><label>বিক্রয়কারী</label><select id="siSeller">${siSellerOptions("")}</select></div>` : ""}
-      <button type="button" class="btn secondary small si-edit-btn" onclick="toggleSiProdEdit(this)" title="এই প্যাকেজের পণ্য বদলান — দাম নিজে থেকে বদলাবে">✎ পণ্য এডিট</button>
+      ${state.dealerId === "AGENCY" ? `<button type="button" class="btn secondary small si-edit-btn" onclick="toggleSiProdEdit(this)" title="এই প্যাকেজের পণ্য বদলান — দাম নিজে থেকে বদলাবে">✎ পণ্য এডিট</button>` : ""}
       ${isFirst ? "" : `<button type="button" class="btn secondary small" onclick="this.closest('.si-pkg-block').remove(); updateSiTotalsPreview();">✕</button>`}
     </div>
     <div class="table-wrap"><table class="si-prod-table"><thead><tr><th>ক্রম</th><th class="cell-left">পণ্যের নাম</th><th>মূল্য</th><th>সংখ্যা</th><th>মোট</th><th>মোট পরিমাণ</th><th>প্যাকিং পরিমাণ</th></tr></thead><tbody></tbody><tfoot></tfoot></table></div>`;
@@ -4602,19 +4602,28 @@ function siBlockLines(block, pid){
   }
   return out;
 }
+/* এডিট মোডের পণ্য তালিকা — পণ্য তালিকা (Products) থেকে; না পেলে সার্ভারের স্টক-তথ্যের পণ্য তালিকা থেকে */
+function siProdList(){
+  let list;
+  if((productsCache || []).length){
+    list = productsCache.map(p => ({ productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), combo: Number(p["কম্বো মূল্য"]) || 0, poriman: String(p["পরিমাণ"] == null ? "" : p["পরিমাণ"]), unitRaw: String(p["একক"] || "") }));
+  } else {
+    list = Object.values(window.__siProdStock || {}).map(p => ({ productId: p.productId, name: p.name, combo: Number(p.combo) || 0, poriman: p.poriman || "", unitRaw: p.unitRaw || "" }));
+  }
+  return list.sort((x, y) => x.name.localeCompare(y.name, "bn"));
+}
+function siProdInfo(pid){ return siProdList().find(p => p.productId === pid) || null; }
 async function toggleSiProdEdit(btn){
   const block = btn.closest(".si-pkg-block");
   const on = block.dataset.edit !== "1";
-  if(on && Object.keys(window.__siProdStock || {}).length === 0){
+  if(on){
     btn.disabled = true;
-    await loadSiStock(window.__siEditingInvoiceNo || "");   // পণ্য তালিকা না এসে থাকলে আবার আনা
-    if(Object.keys(window.__siProdStock || {}).length === 0 && (productsCache || []).length){
-      // সার্ভার থেকে না এলে (পুরনো ব্যাকএন্ড) পণ্য তালিকা থেকে বানানো — স্টকের সীমা এ ক্ষেত্রে সার্ভার সংরক্ষণের সময় যাচাই করবে
-      window.__siProdStock = {};
-      productsCache.forEach(p => { window.__siProdStock[p["ProductID"]] = { productId: p["ProductID"], name: String(p["পণ্যের নাম"] || ""), avail: 1e12, unit: String(p["একক"] || "পিস"), combo: Number(p["কম্বো মূল্য"]) || 0, poriman: String(p["পরিমাণ"] == null ? "" : p["পরিমাণ"]), unitRaw: String(p["একক"] || ""), packType: "", packSize: 0, sizeV: 0, sizeU: "" }; });
+    if((productsCache || []).length === 0){
+      try{ const pr = await cachedApiCall("listProducts", {}, 20000); if(pr.success) productsCache = pr.products || []; }catch(e){}
     }
+    if(Object.keys(window.__siProdStock || {}).length === 0) await loadSiStock(window.__siEditingInvoiceNo || "");
     btn.disabled = false;
-    if(Object.keys(window.__siProdStock || {}).length === 0){ alert("পণ্য তালিকা আনা যায়নি। Apps Script-এ নতুন Stock.gs Deploy করা আছে কিনা দেখুন (অ্যাপের নিচের ব্যাকএন্ড ভার্সন যাচাই করুন), তারপর পেজ রিফ্রেশ করুন।"); return; }
+    if(siProdList().length === 0){ alert("পণ্য তালিকা আনা যায়নি। পেজ রিফ্রেশ করে আবার চেষ্টা করুন।"); return; }
   }
   block.dataset.edit = on ? "1" : "0";
   btn.textContent = on ? "✔ এডিট শেষ" : "✎ পণ্য এডিট";
@@ -4629,7 +4638,6 @@ function onSiLineChange(el){
   const it = pkg && (pkg.items || [])[k];
   if(!it) return;
   block._custom = block._custom || {};
-  const prods = window.__siProdStock || {};
   const orig = siSplitQty(it["পণ্যের সংখ্যা"]);
   const origQty = orig.qty || "1";
   let pid = tr.querySelector(".siProdSel").value || it["ProductID"] || "";
@@ -4637,7 +4645,7 @@ function onSiLineChange(el){
   const unit = tr.querySelector(".siLineUnit").value;
   const sameProduct = !tr.querySelector(".siProdSel").value || pid === it["ProductID"];
   const sameQty = Number(qty) === Number(origQty) && unit === orig.unit;
-  const p = prods[pid];
+  const p = siProdInfo(pid);
   if(!p || (sameProduct && sameQty) || !(Number(qty) > 0)) delete block._custom[k];
   else block._custom[k] = siBuildCustom(p, qty, unit);
   renderSiBlock(block);
@@ -4667,7 +4675,7 @@ function renderSiBlock(block){
       const orig = siSplitQty(it["পণ্যের সংখ্যা"]);
       const curQty = c ? c.qty : (orig.qty || "1"), curUnit = c ? c.unit : orig.unit;
       const units = PKG_UNITS.slice(); if(curUnit && units.indexOf(curUnit) === -1) units.push(curUnit);
-      const plist = Object.values(window.__siProdStock || {}).sort((x, y) => String(x.name).localeCompare(String(y.name), "bn"));
+      const plist = siProdList();
       const origId = it["ProductID"] || "";
       const selId = c ? c.productId : origId;
       const noOrigId = !origId && !c;

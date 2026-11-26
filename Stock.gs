@@ -260,6 +260,9 @@ function addSalesInvoice(data) {
   // প্যাকেজের পণ্য বদল (থাকলে) যাচাই করে দাম বসানো
   const customErr = applyInvoiceCustomItems(masterSS, data.items || []);
   if (customErr) return { success: false, message: customErr };
+  if (scopeDealerId !== null && (data.items || []).some(function (it) { return it.customJson; })) {
+    return { success: false, message: "অর্ডারের পণ্য পরিবর্তন শুধু ডিপু করতে পারবে" };
+  }
 
   // স্টকের বেশি অর্ডার করা যাবে না
   const stockErr = checkOrderStock(masterSS, data.items || [], "");
@@ -323,6 +326,16 @@ function updateSalesInvoiceFull(data) {
   // প্যাকেজের পণ্য বদল (থাকলে) যাচাই করে দাম বসানো
   const customErr = applyInvoiceCustomItems(masterSS, data.items || []);
   if (customErr) return { success: false, message: customErr };
+  // পণ্য বদল (এডিট মোড) শুধু ডিপু করতে পারবে — ডিলার শুধু আগে থেকে থাকা বদল অপরিবর্তিত রাখতে পারবে
+  if (scopeDealerId !== null) {
+    const idxCustom = headers.indexOf("পণ্য পরিবর্তন");
+    const okKeys = {};
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idxInv] === data.invoiceNo) okKeys[values[i][headers.indexOf("PackageID")] + "|" + (idxCustom === -1 ? "" : String(values[i][idxCustom] || ""))] = true;
+    }
+    const bad = (data.items || []).some(function (it) { return it.customJson && !okKeys[it.packageId + "|" + it.customJson]; });
+    if (bad) return { success: false, message: "অর্ডারের পণ্য পরিবর্তন শুধু ডিপু করতে পারবে" };
+  }
 
   // স্টকের বেশি অর্ডার করা যাবে না (এই ইনভয়েসের নিজের পুরনো সংখ্যা বাদ দিয়ে হিসাব)
   const stockErr = checkOrderStock(masterSS, data.items || [], data.invoiceNo);
