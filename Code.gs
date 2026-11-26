@@ -94,6 +94,10 @@ const MASTER_SHEETS_DEF = {
   "Expense": [
     "EntryID", "ভাউচার নং", "তারিখ", "ক্রম", "বিবরণ", "টাকা", "সর্বমোট", "পরিশোধ", "বকেয়া"
   ],
+  // মূল্য তালিকা — প্রতিটি পণ্যের বাজার মূল্য ও কম্বো মূল্য (নির্দিষ্ট পরিমাণ/এককের জন্য); প্যাকেজ ও অর্ডার ইনভয়েসে দাম এখান থেকে বসে
+  "PriceList": [
+    "PriceID", "ProductID", "পণ্যের নাম", "পরিমাণ", "একক", "বাজার মূল্য", "কম্বো মূল্য", "ব্র্যান্ড"
+  ],
   // স্টক: পণ্য তালিকা
   "Products": [
     "ProductID", "পণ্যের নাম", "ব্র্যান্ড", "বাজার মূল্য", "কম্বো মূল্য", "সাশ্রয়ী"
@@ -945,6 +949,15 @@ function runAction(action, data) {
         break;
       case "listProducts":
         result = listProducts(data);
+        break;
+      case "listPriceList":
+        result = listPriceList(data);
+        break;
+      case "savePriceItem":
+        result = savePriceItem(data);
+        break;
+      case "deletePriceItem":
+        result = deletePriceItem(data);
         break;
       case "updateProduct":
         result = updateProduct(data);

@@ -78,6 +78,88 @@ function invalidateProductCache() {
 }
 
 /*=========================================================
+ *  মূল্য তালিকা (PriceList) — পণ্যের বাজার মূল্য ও কম্বো মূল্য নির্ধারণ
+ *  একটি পণ্যের একটি সারি: "পরিমাণ + একক" এর জন্য মূল্য (যেমন চাউল, ১ কেজি, কম্বো ৫০)।
+ *  প্যাকেজ ফরম ও অর্ডার ইনভয়েসে পণ্য/পরিমাণ বাছলে দাম = মূল্য × (পরিমাণ ÷ তালিকার পরিমাণ)
+ *=======================================================*/
+function getPriceListSheet(masterSS) {
+  let sheet = masterSS.getSheetByName("PriceList");
+  if (!sheet) {
+    sheet = masterSS.insertSheet("PriceList");
+    const h = MASTER_SHEETS_DEF["PriceList"];
+    sheet.getRange(1, 1, 1, h.length).setValues([h]);
+    sheet.getRange(1, 1, 1, h.length).setFontWeight("bold");
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/* মূল্য তালিকার মূল্য-অনুপাত: "qty unit" কে তালিকার "baseQty baseUnit" দিয়ে ভাগ (কেজি↔গ্রাম, লিটার↔মি.লি রূপান্তরসহ) */
+function priceRatio(baseQty, baseUnit, qty, unit) {
+  const a = parseSizeText(stockToEn(qty) + " " + (unit || ""));
+  const b = parseSizeText(stockToEn(baseQty) + " " + (baseUnit || ""));
+  if (a && b && a.u === b.u && b.v > 0) return a.v / b.v;
+  const bq = Number(stockToEn(baseQty)) || 0, q = Number(stockToEn(qty)) || 0;
+  return bq > 0 ? q / bq : 1;
+}
+
+function priceListMap(masterSS) {
+  const map = {};
+  genericListRows(getPriceListSheet(masterSS)).forEach(function (r) {
+    map[r["ProductID"]] = {
+      qty: String(r["পরিমাণ"] == null ? "" : r["পরিমাণ"]), unit: String(r["একক"] || ""),
+      market: Number(r["বাজার মূল্য"]) || 0, combo: Number(r["কম্বো মূল্য"]) || 0, brand: String(r["ব্র্যান্ড"] || "")
+    };
+  });
+  return map;
+}
+
+function listPriceList(data) {
+  const perm = checkAgencyPermission(data.token);
+  if (!perm.ok) return { success: false, message: perm.message };
+  return { success: true, items: genericListRows(getPriceListSheet(getMasterSS())) };
+}
+
+/* data: { token, productId, qty, unit, market, combo } — পণ্য আগে থেকে তালিকায় থাকলে আপডেট, না থাকলে নতুন */
+function savePriceItem(data) {
+  const perm = checkAgencyPermission(data.token);
+  if (!perm.ok) return { success: false, message: perm.message };
+  const masterSS = getMasterSS();
+  const prod = genericListRows(getSheet(masterSS, "Products")).filter(function (p) { return p["ProductID"] === data.productId; })[0];
+  if (!prod) return { success: false, message: "পণ্য পাওয়া যায়নি" };
+  const qty = String(data.qty == null ? "" : data.qty).trim();
+  if (!(Number(stockToEn(qty)) > 0)) return { success: false, message: "পরিমাণ দিন (০ এর বেশি)" };
+  const combo = Number(data.combo) || 0, market = Number(data.market) || 0;
+  if (combo <= 0) return { success: false, message: "কম্বো মূল্য দিন" };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sheet = getPriceListSheet(masterSS);
+    ensureSheetColumns(sheet, ["ব্র্যান্ড"]);   // আগের শীটে না থাকলে নিজে যোগ হয়
+    const fields = { "ব্র্যান্ড": String(data.brand == null ? "" : data.brand).trim(), "পণ্যের নাম": prod["পণ্যের নাম"], "পরিমাণ": qty, "একক": String(data.unit || ""), "বাজার মূল্য": market, "কম্বো মূল্য": combo };
+    const exists = genericListRows(sheet).some(function (r) { return r["ProductID"] === data.productId; });
+    if (exists) {
+      genericUpdateRow(sheet, "ProductID", data.productId, fields);
+    } else {
+      fields["PriceID"] = generateId(sheet, "PL");
+      fields["ProductID"] = data.productId;
+      genericAddRow(sheet, fields);
+    }
+    return { success: true, message: "মূল্য তালিকা সংরক্ষিত হয়েছে" };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deletePriceItem(data) {
+  const perm = checkAgencyPermission(data.token);
+  if (!perm.ok) return { success: false, message: perm.message };
+  const ok = genericDeleteRow(getPriceListSheet(getMasterSS()), "ProductID", data.productId);
+  return { success: ok, message: ok ? "মূল্য তালিকা থেকে বাদ দেওয়া হয়েছে" : "পাওয়া যায়নি" };
+}
+
+/*=========================================================
  *  স্টক ইন ভাউচার (StockInVoucher) — এক ভাউচারে একাধিক পণ্য
  *=======================================================*/
 function addStockVoucher(data) {
@@ -934,13 +1016,20 @@ function computeStockState(masterSS, excludeInvoiceNo) {
         });
       }
       if (!best) unmatched[String(text)] = true;
+      const perHere = best ? packsPerPackage(pk["পণ্য" + i + " - সংখ্যা"], best.size) : 1;
       lines.push({
         r: best,
         unit: best ? best.unit : stockUnitFromText(text),
-        per: best ? packsPerPackage(pk["পণ্য" + i + " - সংখ্যা"], best.size) : 1
+        per: perHere
       });
     }
     pkgLines[pk["PackageID"]] = lines;
+  });
+  // মূল্য তালিকা (PriceList) থেকে দাম
+  const plMap = priceListMap(masterSS);
+  list.forEach(function (r) {
+    const e = plMap[r.productId];
+    r.pl = e || null;
   });
 
   genericListRows(getSheet(masterSS, "SalesInvoice")).forEach(function (e) {
@@ -984,6 +1073,7 @@ function applyInvoiceCustomItems(masterSS, items) {
 
   const products = {};
   genericListRows(getSheet(masterSS, "Products")).forEach(function (p) { products[p["ProductID"]] = p; });
+  const stState = computeStockState(masterSS, "");   // পণ্যের বিক্রয় মূল্য (প্যাকেজ থেকে) এখানে
   const pkgs = {};
   genericListRows(getSheet(masterSS, "Packages")).forEach(function (p) { pkgs[p["PackageID"]] = p; });
 
@@ -1019,7 +1109,15 @@ function applyInvoiceCustomItems(masterSS, items) {
       }
       const size = productSizeOf(p["পরিমাণ"], p["একক"]);
       const per = packsPerPackage(qtyRaw, size);
-      const price = Math.round((Number(p["কম্বো মূল্য"]) || 0) * per * 100) / 100;
+      const sr = stState.byId[p["ProductID"]];
+      let price;
+      if (sr && sr.pl && sr.pl.combo > 0) {
+        // মূল্য তালিকা অনুযায়ী: কম্বো মূল্য × (এই পরিমাণ ÷ তালিকার পরিমাণ)
+        const qm = stockToEn(qtyRaw).trim().match(/^([\d.]+)\s*(.*)$/);
+        price = Math.round(sr.pl.combo * priceRatio(sr.pl.qty, sr.pl.unit, qm ? qm[1] : "1", qm ? qm[2] : "") * 100) / 100;
+      } else {
+        price = 0;   // মূল্য তালিকায় দাম নির্ধারণ নেই — অনুমান করে কোনো দাম বসানো হয় না
+      }
       const orig = Number(pk["পণ্য" + slot + " - কম্বো মূল্য"]) || 0;
       unit += price - orig;
       const qtyTxt = qtyNum !== null ? stockToBn(qtyNum) + (qtyUnit ? " " + qtyUnit : "") : String(qtyRaw == null ? "" : qtyRaw).trim();
@@ -1069,6 +1167,7 @@ function orderStockInfo(data) {
   st.list.forEach(function (r) {
     prods[r.productId] = { productId: r.productId, name: r.name, avail: r.qtyIn - r.sold, unit: r.unit,
                            combo: r.combo, poriman: r.poriman, unitRaw: r.unitRaw,
+                           plQty: r.pl ? r.pl.qty : "", plUnit: r.pl ? r.pl.unit : "", plCombo: r.pl ? r.pl.combo : 0, plMarket: r.pl ? r.pl.market : 0,
                            packType: r.packType, packSize: r.packSize,
                            sizeV: r.size ? r.size.v : 0, sizeU: r.size ? r.size.u : "" };
   });
